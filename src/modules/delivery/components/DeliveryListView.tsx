@@ -33,6 +33,10 @@ type Props = {
   searchQuery: string;
   onSearchQueryChange: (q: string) => void;
   nextShipmentId: string | null;
+  internalRouteId: string | null;
+  flexBatchId: string | null;
+  onPressInternalRoute?: () => void;
+  onPressFlexMap?: () => void;
   onRefresh: () => void;
   onPressScan: () => void;
   onPressShipment: (shipmentId: string) => void;
@@ -47,6 +51,10 @@ export function DeliveryListView({
   searchQuery,
   onSearchQueryChange,
   nextShipmentId,
+  internalRouteId,
+  flexBatchId,
+  onPressInternalRoute,
+  onPressFlexMap,
   onRefresh,
   onPressScan,
   onPressShipment,
@@ -56,6 +64,10 @@ export function DeliveryListView({
 
   const scanDisabled = loading || refreshing;
   const searchDisabled = showInitialLoader;
+
+  const showMapLinks =
+    (internalRouteId != null && onPressInternalRoute != null) ||
+    (flexBatchId != null && onPressFlexMap != null);
 
   const listChrome = useMemo(
     () => (
@@ -77,6 +89,30 @@ export function DeliveryListView({
             </Text>
           </Pressable>
         </View>
+        {showMapLinks && (
+          <View style={styles.mapLinks}>
+            {internalRouteId != null && onPressInternalRoute != null && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={scanDisabled}
+                onPress={onPressInternalRoute}
+                style={({ pressed }) => [styles.mapLinkBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.mapLinkLabel}>Mapa ruta</Text>
+              </Pressable>
+            )}
+            {flexBatchId != null && onPressFlexMap != null && (
+              <Pressable
+                accessibilityRole="button"
+                disabled={scanDisabled}
+                onPress={onPressFlexMap}
+                style={({ pressed }) => [styles.mapLinkBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.mapLinkLabel}>Mapa flex</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         <View style={styles.searchWrap}>
           <TextInput
             style={[styles.searchInput, searchDisabled && styles.chromeDisabled]}
@@ -93,11 +129,16 @@ export function DeliveryListView({
       </View>
     ),
     [
+      flexBatchId,
+      internalRouteId,
+      onPressFlexMap,
+      onPressInternalRoute,
       onPressScan,
       onSearchQueryChange,
       scanDisabled,
       searchDisabled,
       searchQuery,
+      showMapLinks,
       styles,
       theme.colors.muted,
     ],
@@ -234,6 +275,24 @@ function createStyles(t: AppTheme) {
     toolbar: {
       paddingTop: spacing.sm,
       paddingBottom: spacing.sm,
+    },
+    mapLinks: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    mapLinkBtn: {
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: borderSubtle,
+    },
+    mapLinkLabel: {
+      ...typography.captionStrong,
+      color: colors.primary,
     },
     searchWrap: {
       marginBottom: spacing.sm,

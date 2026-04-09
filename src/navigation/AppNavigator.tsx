@@ -9,6 +9,7 @@ import { BodegaStack } from '@navigation/BodegaStack';
 import { SettingsScreen, settingsTabBarIcon } from '@modules/settings/SettingsScreen';
 import { ColectaStack } from '@navigation/ColectaStack';
 import { DeliveryStack } from '@navigation/DeliveryStack';
+import { DriverLocationPermissionGate } from '@core/location/DriverLocationPermissionGate';
 import { useAuthStore } from '@store/useAuthStore';
 import { borderSubtle, useTheme } from '@theme';
 
@@ -91,6 +92,7 @@ export function AppNavigator() {
     return (
       <>
         <StatusBar style="light" />
+        <DriverLocationPermissionGate />
         <Tab.Navigator screenOptions={tabScreenOptions}>
           <Tab.Screen
             name="Colecta"

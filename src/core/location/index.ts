@@ -1,3 +1,26 @@
+export { DriverLocationPermissionGate } from './DriverLocationPermissionGate';
+export { DriverTrackingBootstrap } from './DriverTrackingBootstrap';
+export { postDriverLocationBatch } from './driverLocationApi';
+export {
+  countUnsyncedPending,
+  deletePendingByIds,
+  insertPendingLocation,
+  selectPendingBatchForSync,
+} from './driverLocationDb';
+export { ingestDriverLocationObject, sampleFromLocationObject } from './driverLocationIngest';
+export {
+  startDriverLocationSyncWorker,
+  stopDriverLocationSyncWorker,
+  syncDriverLocationQueueOnce,
+} from './driverLocationSyncWorker';
+export { BACKGROUND_LOCATION_TASK } from './driverLocationTaskRegister';
+export type { PendingLocation } from './driverLocationTypes';
+export {
+  getDriverLocationBlockedReason,
+  startDriverLocationTracking,
+  stopDriverLocationTracking,
+  subscribeDriverLocationBlocked,
+} from './driverLocationTracking';
 export {
   getGpsActiveShipmentId,
   setGpsActiveShipmentId,

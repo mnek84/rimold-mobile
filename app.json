@@ -48,16 +48,22 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location on the map and near-destination alerts."
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location on the map and near-destination alerts.",
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to share your location with dispatch while you deliver, including when the app is in the background.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
+      "expo-task-manager",
       [
         "expo-image-picker",
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to choose a delivery photo."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sqlite"
     ]
   }
 }

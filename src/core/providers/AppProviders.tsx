@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastHost } from '@components/ToastHost';
 import { queryClient } from '@core/query/queryClient';
+import { DriverTrackingBootstrap } from '@core/location/DriverTrackingBootstrap';
 import { SyncBootstrap } from '@core/sync';
 import { ThemeProvider } from '@theme';
 
@@ -17,6 +18,7 @@ export function AppProviders({ children }: PropsWithChildren) {
           <View style={{ flex: 1 }}>
             <NavigationContainer>
               <SyncBootstrap />
+              <DriverTrackingBootstrap />
               {children}
             </NavigationContainer>
             <ToastHost />

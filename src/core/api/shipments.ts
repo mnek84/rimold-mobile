@@ -7,11 +7,38 @@ export type TodayShipmentRow = {
   tracking_id: string;
   address: string;
   status: string;
+  execution_type: string;
+  route_id: string | null;
+  flex_batch_id: string | null;
 };
 
+function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
+  if (raw === null || typeof raw !== 'object') {
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== 'string' || typeof r.tracking_id !== 'string') {
+    return null;
+  }
+  const routeRaw = r.route_id;
+  const flexRaw = r.flex_batch_id;
+  return {
+    id: r.id,
+    tracking_id: r.tracking_id,
+    address: typeof r.address === 'string' ? r.address : '',
+    status: typeof r.status === 'string' ? r.status : '',
+    execution_type: typeof r.execution_type === 'string' ? r.execution_type : 'internal',
+    route_id: typeof routeRaw === 'string' ? routeRaw : null,
+    flex_batch_id: typeof flexRaw === 'string' ? flexRaw : null,
+  };
+}
+
 export async function fetchShipmentsToday(): Promise<TodayShipmentRow[]> {
-  const { data } = await apiClient.get<TodayShipmentRow[]>('/shipments/today');
-  return Array.isArray(data) ? data : [];
+  const { data } = await apiClient.get<unknown>('/shipments/today');
+  if (!Array.isArray(data)) {
+    return [];
+  }
+  return data.map(normalizeTodayShipmentRow).filter((row): row is TodayShipmentRow => row !== null);
 }
 
 export type AssignShipmentResponse = {

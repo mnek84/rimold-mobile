@@ -16,6 +16,8 @@ type Props = NativeStackScreenProps<DeliveryStackParamList, 'DeliveryList'>;
 export function DeliveryListScreen({ navigation }: Props) {
   const list = useDeliveryList();
   const [scanOpen, setScanOpen] = useState(false);
+  const internalRouteId = list.internalRouteId;
+  const flexBatchId = list.flexBatchId;
 
   const onPressShipment = useCallback(
     (shipmentId: string) => {
@@ -35,6 +37,14 @@ export function DeliveryListScreen({ navigation }: Props) {
         searchQuery={list.searchQuery}
         onSearchQueryChange={list.setSearchQuery}
         nextShipmentId={list.nextShipmentId}
+        internalRouteId={internalRouteId}
+        flexBatchId={flexBatchId}
+        onPressInternalRoute={
+          internalRouteId != null ? () => navigation.navigate('InternalRoute', { routeId: internalRouteId }) : undefined
+        }
+        onPressFlexMap={
+          flexBatchId != null ? () => navigation.navigate('FlexBatchMap', { batchId: flexBatchId }) : undefined
+        }
         onRefresh={list.onRefresh}
         onPressScan={() => setScanOpen(true)}
         onPressShipment={onPressShipment}

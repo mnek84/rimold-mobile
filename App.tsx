@@ -1,3 +1,5 @@
+import '@core/location/driverLocationTaskRegister';
+
 import { StatusBar } from 'expo-status-bar';
 
 import { AppProviders } from '@core/providers/AppProviders';

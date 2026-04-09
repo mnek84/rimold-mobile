@@ -55,6 +55,24 @@ export function useDeliveryList() {
 
   const nextShipmentId = useMemo(() => pickNextShipmentId(shipments), [shipments]);
 
+  const internalRouteId = useMemo(() => {
+    for (const r of shipments) {
+      if (typeof r.route_id === 'string' && r.route_id !== '' && r.execution_type !== 'flex') {
+        return r.route_id;
+      }
+    }
+    return null;
+  }, [shipments]);
+
+  const flexBatchId = useMemo(() => {
+    for (const r of shipments) {
+      if (typeof r.flex_batch_id === 'string' && r.flex_batch_id !== '') {
+        return r.flex_batch_id;
+      }
+    }
+    return null;
+  }, [shipments]);
+
   const filteredShipments = useMemo(() => {
     if (searchQuery.trim() === '') {
       return shipments;
@@ -77,6 +95,8 @@ export function useDeliveryList() {
     setSearchQuery,
     sections,
     nextShipmentId,
+    internalRouteId,
+    flexBatchId,
     onRefresh,
     reloadSilent,
     showInitialLoader,
