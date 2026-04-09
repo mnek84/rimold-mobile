@@ -42,6 +42,16 @@ export async function fetchWarehouseCages(): Promise<WarehouseCageListItem[]> {
   return parsePaginatedCages(data);
 }
 
+export async function resolveWarehouseCageQr(raw: string): Promise<{ id: string; name: string }> {
+  const { data } = await apiClient.post<{ id: string; name: string }>('/app/warehouse/cages/resolve-qr', {
+    raw: raw.trim(),
+  });
+  if (data == null || typeof data.id !== 'string' || typeof data.name !== 'string') {
+    throw new Error('Respuesta inválida al resolver la jaula.');
+  }
+  return data;
+}
+
 export async function fetchWarehouseCageDetail(id: string): Promise<WarehouseCageDetail> {
   const { data } = await apiClient.get<WarehouseCageDetail>(`/app/warehouse/cages/${id}`);
   return data;
@@ -55,10 +65,13 @@ export async function scanPackageIntoCage(cageId: string, tracking: string): Pro
   return data;
 }
 
-export async function closeCageAssignDriver(cageId: string, driverId: string): Promise<unknown[]> {
-  const { data } = await apiClient.post<unknown[]>(`/app/warehouse/cages/${cageId}/close`, {
-    driver_id: driverId,
-  });
+/** Cierra la jaula. `driverId` solo se envía si viene definido (el backend hoy no lo usa; reservado). */
+export async function closeWarehouseCage(cageId: string, driverId?: string | null): Promise<unknown[]> {
+  const payload =
+    driverId != null && driverId !== ''
+      ? { driver_id: driverId }
+      : {};
+  const { data } = await apiClient.post<unknown[]>(`/app/warehouse/cages/${cageId}/close`, payload);
   return Array.isArray(data) ? data : [];
 }
 

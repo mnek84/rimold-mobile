@@ -1,13 +1,27 @@
+import { Ionicons } from '@expo/vector-icons';
+import { CommonActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { QrScanner } from '@components/QrScanner';
 import { Button, ScreenContainer } from '@components/ui';
 import {
-  closeCageAssignDriver,
+  closeWarehouseCage,
   fetchDriversForAssignment,
   fetchWarehouseCageDetail,
   scanPackageIntoCage,
@@ -43,11 +57,12 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const qc = useQueryClient();
 
-  const [trackingDraft, setTrackingDraft] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scanErrors, setScanErrors] = useState<ScanErrorRow[]>([]);
   const [closeOpen, setCloseOpen] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const [driverSearch, setDriverSearch] = useState('');
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ['warehouse', 'cages', 'detail', cageId],
@@ -63,7 +78,6 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   const scanMutation = useMutation({
     mutationFn: (tracking: string) => scanPackageIntoCage(cageId, tracking),
     onSuccess: async () => {
-      setTrackingDraft('');
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages'] });
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages', 'detail', cageId] });
     },
@@ -81,27 +95,48 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   });
 
   const closeMutation = useMutation({
-    mutationFn: (driverId: string) => closeCageAssignDriver(cageId, driverId),
+    mutationFn: (driverId: string | null) => closeWarehouseCage(cageId, driverId),
     onSuccess: async (assigned) => {
       setCloseOpen(false);
       setSelectedDriverId(null);
+      setCloseError(null);
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages'] });
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages', 'detail', cageId] });
       setScanErrors([]);
-      navigation.navigate('CageList');
-      // assigned count is implicit — user sees list refresh
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'CageList', params: {} }],
+        }),
+      );
       void assigned;
+    },
+    onError: (e: unknown) => {
+      setCloseError(axiosMessage(e, 'No se pudo cerrar la jaula.'));
     },
   });
 
   const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
   const okCount = shipments.length;
 
-  const onScanSubmit = useCallback(() => {
-    const t = normalizeShipmentScanToLookupKey(trackingDraft);
-    if (t === '' || scanMutation.isPending) return;
-    scanMutation.mutate(t);
-  }, [trackingDraft, scanMutation]);
+  const drivers = driversQuery.data ?? [];
+  const filteredDrivers = useMemo(() => {
+    const q = driverSearch.trim().toLowerCase();
+    if (q === '') return drivers;
+    return drivers.filter((d) => d.name.toLowerCase().includes(q));
+  }, [drivers, driverSearch]);
+
+  useEffect(() => {
+    if (!closeOpen) return;
+    setDriverSearch('');
+  }, [closeOpen]);
+
+  useEffect(() => {
+    if (selectedDriverId === null) return;
+    if (!filteredDrivers.some((d) => d.id === selectedDriverId)) {
+      setSelectedDriverId(null);
+    }
+  }, [filteredDrivers, selectedDriverId]);
 
   const onQrScanned = useCallback(
     (raw: string) => {
@@ -115,8 +150,20 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
 
   const onConfirmClose = useCallback(() => {
     if (selectedDriverId === null || closeMutation.isPending) return;
+    setCloseError(null);
     closeMutation.mutate(selectedDriverId);
   }, [selectedDriverId, closeMutation]);
+
+  const onOpenCloseModal = useCallback(() => {
+    setCloseError(null);
+    setCloseOpen(true);
+  }, []);
+
+  const onRequestCloseModal = useCallback(() => {
+    Keyboard.dismiss();
+    setCloseOpen(false);
+    setCloseError(null);
+  }, []);
 
   const renderDriver = useCallback(
     ({ item }: { item: DriverForAssignment }) => {
@@ -149,25 +196,21 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>Escanear paquete</Text>
-      <View style={styles.scanRow}>
-        <TextInput
-          value={trackingDraft}
-          onChangeText={setTrackingDraft}
-          placeholder="Tracking o código"
-          placeholderTextColor={theme.colors.muted}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          onSubmitEditing={onScanSubmit}
-        />
-        <Button onPress={onScanSubmit} disabled={scanMutation.isPending || trackingDraft.trim() === ''} loading={scanMutation.isPending}>
-          Agregar
-        </Button>
-      </View>
-      <Pressable style={styles.camBtn} onPress={() => setScannerOpen(true)}>
-        <Text style={styles.camBtnLabel}>Escanear con cámara (QR)</Text>
+      <Text style={styles.sectionLabel}>Agregar paquete</Text>
+      <Pressable
+        style={[styles.qrPrimaryBtn, scanMutation.isPending && styles.qrPrimaryBtnDisabled]}
+        onPress={() => setScannerOpen(true)}
+        disabled={scanMutation.isPending}
+      >
+        <Ionicons name="qr-code-outline" size={32} color="#fff" style={styles.qrPrimaryIcon} />
+        <View style={styles.qrPrimaryTextWrap}>
+          <Text style={styles.qrPrimaryTitle}>Escanear QR</Text>
+          <Text style={styles.qrPrimarySub}>Apuntá al código del paquete</Text>
+        </View>
       </Pressable>
+      {scanMutation.isPending ? (
+        <Text style={styles.scanPendingLabel}>Registrando paquete…</Text>
+      ) : null}
 
       {scanErrors.length > 0 ? (
         <View style={styles.errorsBlock}>
@@ -219,9 +262,21 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
       )}
 
       <View style={styles.footer}>
-        <Button onPress={() => setCloseOpen(true)} disabled={detailQuery.isLoading}>
-          Cerrar jaula y asignar conductor
+        <Button
+          onPress={() => {
+            if (okCount === 0) {
+              setCloseError(null);
+              closeMutation.mutate(null);
+            } else {
+              onOpenCloseModal();
+            }
+          }}
+          disabled={detailQuery.isLoading || closeMutation.isPending}
+          loading={closeMutation.isPending}
+        >
+          {okCount === 0 ? 'Cerrar jaula' : 'Cerrar jaula y asignar conductor'}
         </Button>
+        {closeError !== null && !closeOpen ? <Text style={styles.footerCloseErr}>{closeError}</Text> : null}
       </View>
 
       <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
@@ -234,41 +289,71 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         </View>
       </Modal>
 
-      <Modal visible={closeOpen} animationType="fade" transparent onRequestClose={() => setCloseOpen(false)}>
-        <View style={styles.closeOverlay}>
-          <View style={styles.closeSheet}>
-            <Text style={styles.closeTitle}>¿Qué conductor retira la jaula?</Text>
-            <Text style={styles.closeHint}>
-              Se asignarán todos los paquetes listados arriba a ese conductor ({okCount} paquete
-              {okCount === 1 ? '' : 's'}).
-            </Text>
-            {driversQuery.isLoading ? (
-              <ActivityIndicator color={theme.colors.primary} style={styles.loader} />
-            ) : (
-              <FlatList
-                data={driversQuery.data ?? []}
-                keyExtractor={(d) => d.id}
-                renderItem={renderDriver}
-                style={styles.driverList}
-                ListEmptyComponent={
-                  <Text style={styles.emptyList}>No hay conductores para tu negocio.</Text>
-                }
-              />
-            )}
-            <View style={styles.closeActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setCloseOpen(false)}>
-                <Text style={styles.cancelBtnLabel}>Cancelar</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.confirmBtn, (selectedDriverId === null || closeMutation.isPending) && styles.confirmDisabled]}
-                onPress={onConfirmClose}
-                disabled={selectedDriverId === null || closeMutation.isPending}
-              >
-                <Text style={styles.confirmBtnLabel}>{closeMutation.isPending ? 'Asignando…' : 'Confirmar'}</Text>
-              </Pressable>
+      <Modal visible={closeOpen} animationType="fade" transparent onRequestClose={onRequestCloseModal}>
+        <KeyboardAvoidingView
+          style={styles.closeKeyboardRoot}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+        >
+          <View style={styles.closeOverlay}>
+            <Pressable style={styles.closeBackdrop} onPress={onRequestCloseModal} />
+            <View style={styles.closeSheet}>
+              <Text style={styles.closeTitle}>¿Qué conductor retira la jaula?</Text>
+              <Text style={styles.closeHint}>
+                Se liberan {okCount} paquete{okCount === 1 ? '' : 's'} para ruta; elegí quién los retira.
+              </Text>
+              {closeError !== null ? <Text style={styles.closeApiErr}>{closeError}</Text> : null}
+              <View style={styles.closeActions}>
+                <Pressable style={styles.cancelBtn} onPress={onRequestCloseModal}>
+                  <Text style={styles.cancelBtnLabel}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.confirmBtn,
+                    (selectedDriverId === null || closeMutation.isPending) && styles.confirmDisabled,
+                  ]}
+                  onPress={onConfirmClose}
+                  disabled={selectedDriverId === null || closeMutation.isPending}
+                >
+                  <Text style={styles.confirmBtnLabel}>{closeMutation.isPending ? 'Cerrando…' : 'Confirmar'}</Text>
+                </Pressable>
+              </View>
+              {driversQuery.isLoading ? (
+                <ActivityIndicator color={theme.colors.primary} style={styles.loader} />
+              ) : (
+                <>
+                  <TextInput
+                    value={driverSearch}
+                    onChangeText={setDriverSearch}
+                    placeholder="Buscar por nombre…"
+                    placeholderTextColor={theme.colors.muted}
+                    style={styles.driverSearchInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="search"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                  <FlatList
+                    data={filteredDrivers}
+                    keyExtractor={(d) => d.id}
+                    renderItem={renderDriver}
+                    style={styles.driverList}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    nestedScrollEnabled
+                    ListEmptyComponent={
+                      <Text style={styles.emptyList}>
+                        {drivers.length === 0
+                          ? 'No hay conductores para tu negocio.'
+                          : 'Ningún conductor coincide con la búsqueda.'}
+                      </Text>
+                    }
+                  />
+                </>
+              )}
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScreenContainer>
   );
@@ -320,30 +405,39 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       marginBottom: spacing.sm,
     },
-    scanRow: {
+    qrPrimaryBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
-      marginBottom: spacing.sm,
-    },
-    input: {
-      flex: 1,
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: borderSubtle,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
-    },
-    camBtn: {
-      alignSelf: 'flex-start',
+      gap: spacing.md,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.primary,
       marginBottom: spacing.md,
     },
-    camBtnLabel: {
-      ...typography.captionStrong,
-      color: colors.primary,
+    qrPrimaryBtnDisabled: {
+      opacity: 0.65,
+    },
+    qrPrimaryIcon: {
+      opacity: 0.95,
+    },
+    qrPrimaryTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    qrPrimaryTitle: {
+      ...typography.subtitle,
+      color: '#fff',
+    },
+    qrPrimarySub: {
+      ...typography.caption,
+      color: '#ffffffcc',
+      marginTop: 4,
+    },
+    scanPendingLabel: {
+      ...typography.caption,
+      color: colors.muted,
+      marginBottom: spacing.md,
     },
     errorsBlock: {
       marginBottom: spacing.md,
@@ -421,6 +515,12 @@ function createStyles(t: AppTheme) {
       marginTop: 'auto',
       paddingTop: spacing.md,
     },
+    footerCloseErr: {
+      ...typography.caption,
+      color: colors.danger,
+      marginTop: spacing.sm,
+      textAlign: 'center',
+    },
     modalWrap: {
       flex: 1,
       backgroundColor: colors.background,
@@ -445,17 +545,29 @@ function createStyles(t: AppTheme) {
       ...typography.bodyStrong,
       color: colors.primary,
     },
+    closeKeyboardRoot: {
+      flex: 1,
+    },
     closeOverlay: {
       flex: 1,
       backgroundColor: '#000a',
       justifyContent: 'center',
       padding: spacing.lg,
     },
+    closeBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+    },
     closeSheet: {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusLg,
       padding: spacing.lg,
-      maxHeight: '80%',
+      maxHeight: '88%',
+      zIndex: 1,
+    },
+    closeApiErr: {
+      ...typography.caption,
+      color: colors.danger,
+      marginBottom: spacing.sm,
     },
     closeTitle: {
       ...typography.subtitle,
@@ -467,8 +579,20 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
       marginBottom: spacing.md,
     },
+    driverSearchInput: {
+      ...typography.body,
+      color: colors.text,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: borderSubtle,
+      borderRadius: spacing.radiusMd,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + 2,
+      marginBottom: spacing.sm,
+    },
     driverList: {
-      maxHeight: 240,
+      flexGrow: 0,
+      maxHeight: 260,
     },
     driverRow: {
       paddingVertical: spacing.md,
@@ -487,7 +611,7 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       gap: spacing.md,
-      marginTop: spacing.md,
+      marginBottom: spacing.md,
     },
     cancelBtn: {
       paddingVertical: spacing.sm,

@@ -25,6 +25,10 @@ function entregasTabBarIcon({ color, size }: { color: string; size: number }) {
   return <Ionicons name="car-outline" size={size} color={color} />;
 }
 
+function bodegaTabBarIcon({ color, size }: { color: string; size: number }) {
+  return <Ionicons name="file-tray-stacked-outline" size={size} color={color} />;
+}
+
 export function AppNavigator() {
   const theme = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -133,6 +137,7 @@ export function AppNavigator() {
           options={{
             headerShown: false,
             title: 'Depósito',
+            tabBarIcon: bodegaTabBarIcon,
           }}
         />
         <Tab.Screen
