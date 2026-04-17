@@ -2,12 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
+import { useDeliveryStore } from '@store/useDeliveryStore';
 
-import {
-  groupShipmentsForSections,
-  matchesShipmentSearch,
-  pickNextShipmentId,
-} from '../deliveryStatus';
+import { groupShipmentsForSections, pickNextShipmentId } from '../deliveryStatus';
 
 export type DeliveryListSection = { title: string; data: TodayShipmentRow[] };
 
@@ -16,7 +13,7 @@ export function useDeliveryList() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const setDeliveryData = useDeliveryStore((s) => s.setDeliveryData);
 
   const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent') => {
     if (mode === 'initial') {
@@ -30,6 +27,10 @@ export function useDeliveryList() {
     try {
       const rows = await fetchShipmentsToday();
       setShipments(rows);
+      const routeId =
+        rows.find((r) => typeof r.route_id === 'string' && r.route_id !== '' && r.execution_type !== 'flex')
+          ?.route_id ?? null;
+      setDeliveryData(rows.length, routeId);
     } catch (e) {
       setShipments([]);
       if (mode !== 'silent') {
@@ -39,7 +40,7 @@ export function useDeliveryList() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [setDeliveryData]);
 
   useEffect(() => {
     void load('initial');
@@ -73,16 +74,9 @@ export function useDeliveryList() {
     return null;
   }, [shipments]);
 
-  const filteredShipments = useMemo(() => {
-    if (searchQuery.trim() === '') {
-      return shipments;
-    }
-    return shipments.filter((r) => matchesShipmentSearch(r, searchQuery));
-  }, [shipments, searchQuery]);
-
   const sections = useMemo<DeliveryListSection[]>(
-    () => groupShipmentsForSections(filteredShipments),
-    [filteredShipments],
+    () => groupShipmentsForSections(shipments),
+    [shipments],
   );
 
   const showInitialLoader = loading && shipments.length === 0;
@@ -91,11 +85,8 @@ export function useDeliveryList() {
     loading,
     refreshing,
     error,
-    searchQuery,
-    setSearchQuery,
     sections,
     nextShipmentId,
-    internalRouteId,
     flexBatchId,
     onRefresh,
     reloadSilent,

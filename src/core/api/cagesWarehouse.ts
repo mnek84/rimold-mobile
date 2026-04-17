@@ -65,7 +65,7 @@ export async function scanPackageIntoCage(cageId: string, tracking: string): Pro
   return data;
 }
 
-/** Cierra la jaula. `driverId` solo se envía si viene definido (el backend hoy no lo usa; reservado). */
+/** Cierra la jaula. Si `driverId` está definido, asigna ese conductor a todos los envíos liberados. */
 export async function closeWarehouseCage(cageId: string, driverId?: string | null): Promise<unknown[]> {
   const payload =
     driverId != null && driverId !== ''

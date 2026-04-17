@@ -4,6 +4,7 @@ import type { RouteProp } from '@react-navigation/native';
 export type MainTabParamList = {
   Colecta: undefined;
   Entregas: undefined;
+  RutaMapa: undefined;
   Bodega: undefined;
   Ajustes: undefined;
 };

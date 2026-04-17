@@ -7,7 +7,6 @@ import {
   SectionList,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
@@ -16,26 +15,42 @@ import type { TodayShipmentRow } from '@core/api/shipments';
 import { borderSubtle, useTheme, type AppTheme } from '@theme';
 
 import {
-  formatShipmentStatusLabel,
+  formatDriverShipmentStatusLabel,
+  shipmentDriverPhaseIndex,
   shipmentListBadgeColors,
   shipmentListBadgeKind,
+  type ShipmentListBadgeKind,
 } from '../deliveryStatus';
 import type { DeliveryListSection } from '../hooks/useDeliveryList';
 import { DeliveryListSkeleton } from './DeliveryListSkeleton';
 
+const PHASE_BAR_KEYS = ['p0', 'p1', 'p2', 'p3'] as const;
+
+function phaseBarSegmentStyle(
+  theme: AppTheme,
+  kind: ShipmentListBadgeKind,
+  phase: number,
+  index: number,
+): { backgroundColor: string } {
+  const { colors } = theme;
+  const empty = `${colors.muted}24`;
+  if (kind === 'delivered') return { backgroundColor: `${colors.success}66` };
+  if (kind === 'failed') {
+    return { backgroundColor: index < 3 ? `${colors.muted}38` : `${colors.danger}70` };
+  }
+  if (index < phase) return { backgroundColor: `${colors.success}50` };
+  if (index === phase) return { backgroundColor: colors.primary };
+  return { backgroundColor: empty };
+}
+
 type Props = {
   sections: DeliveryListSection[];
-  /** True while any shipments fetch is in flight (initial or refresh). */
   loading: boolean;
   showInitialLoader: boolean;
   refreshing: boolean;
   error: string | null;
-  searchQuery: string;
-  onSearchQueryChange: (q: string) => void;
   nextShipmentId: string | null;
-  internalRouteId: string | null;
   flexBatchId: string | null;
-  onPressInternalRoute?: () => void;
   onPressFlexMap?: () => void;
   onRefresh: () => void;
   onPressScan: () => void;
@@ -48,12 +63,8 @@ export function DeliveryListView({
   showInitialLoader,
   refreshing,
   error,
-  searchQuery,
-  onSearchQueryChange,
   nextShipmentId,
-  internalRouteId,
   flexBatchId,
-  onPressInternalRoute,
   onPressFlexMap,
   onRefresh,
   onPressScan,
@@ -63,84 +74,60 @@ export function DeliveryListView({
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const scanDisabled = loading || refreshing;
-  const searchDisabled = showInitialLoader;
-
-  const showMapLinks =
-    (internalRouteId != null && onPressInternalRoute != null) ||
-    (flexBatchId != null && onPressFlexMap != null);
+  const totalShipments = sections.reduce((acc, s) => acc + s.data.length, 0);
+  const showFlexMap = flexBatchId != null && onPressFlexMap != null;
 
   const listChrome = useMemo(
     () => (
       <View style={styles.listHeader}>
-        <View style={styles.toolbar}>
+        {totalShipments > 0 && (
+          <Text style={styles.countLabel}>
+            {totalShipments} {totalShipments === 1 ? 'envío' : 'envíos'} de hoy
+          </Text>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Escanear paquete"
+          accessibilityState={{ disabled: scanDisabled }}
+          disabled={scanDisabled}
+          style={({ pressed }) => [
+            styles.btnScan,
+            scanDisabled && styles.btnScanDisabled,
+            pressed && !scanDisabled && styles.btnPressed,
+          ]}
+          onPress={onPressScan}
+        >
+          <Ionicons
+            name="scan-outline"
+            size={20}
+            color={scanDisabled ? theme.colors.muted : '#ffffff'}
+            style={styles.scanIcon}
+          />
+          <Text style={[styles.btnScanLabel, scanDisabled && styles.btnScanLabelDisabled]}>
+            Escanear paquete
+          </Text>
+        </Pressable>
+        {showFlexMap && (
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: scanDisabled }}
-            disabled={scanDisabled}
-            style={({ pressed }) => [
-              styles.btnScan,
-              scanDisabled && styles.chromeDisabled,
-              pressed && !scanDisabled && styles.btnPressed,
-            ]}
-            onPress={onPressScan}
+            onPress={onPressFlexMap}
+            style={({ pressed }) => [styles.flexMapBtn, pressed && styles.btnPressed]}
           >
-            <Text style={[styles.btnScanLabel, scanDisabled && styles.chromeLabelDisabled]}>
-              Scan package
-            </Text>
+            <Ionicons name="map-outline" size={15} color={theme.colors.primary} />
+            <Text style={styles.flexMapLabel}>Mapa flex</Text>
           </Pressable>
-        </View>
-        {showMapLinks && (
-          <View style={styles.mapLinks}>
-            {internalRouteId != null && onPressInternalRoute != null && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={scanDisabled}
-                onPress={onPressInternalRoute}
-                style={({ pressed }) => [styles.mapLinkBtn, pressed && styles.btnPressed]}
-              >
-                <Text style={styles.mapLinkLabel}>Mapa ruta</Text>
-              </Pressable>
-            )}
-            {flexBatchId != null && onPressFlexMap != null && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={scanDisabled}
-                onPress={onPressFlexMap}
-                style={({ pressed }) => [styles.mapLinkBtn, pressed && styles.btnPressed]}
-              >
-                <Text style={styles.mapLinkLabel}>Mapa flex</Text>
-              </Pressable>
-            )}
-          </View>
         )}
-        <View style={styles.searchWrap}>
-          <TextInput
-            style={[styles.searchInput, searchDisabled && styles.chromeDisabled]}
-            value={searchQuery}
-            onChangeText={onSearchQueryChange}
-            placeholder="Buscar por seguimiento o dirección…"
-            placeholderTextColor={theme.colors.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-            editable={!searchDisabled}
-          />
-        </View>
       </View>
     ),
     [
-      flexBatchId,
-      internalRouteId,
-      onPressFlexMap,
-      onPressInternalRoute,
-      onPressScan,
-      onSearchQueryChange,
       scanDisabled,
-      searchDisabled,
-      searchQuery,
-      showMapLinks,
+      showFlexMap,
+      onPressScan,
+      onPressFlexMap,
+      totalShipments,
       styles,
       theme.colors.muted,
+      theme.colors.primary,
     ],
   );
 
@@ -148,18 +135,24 @@ export function DeliveryListView({
     const isNext = item.id === nextShipmentId;
     const badgeKind = shipmentListBadgeKind(item.status);
     const badgeColors = shipmentListBadgeColors(theme, badgeKind);
+    const statusLabel = formatDriverShipmentStatusLabel(item.status);
+    const phase = shipmentDriverPhaseIndex(item.status);
+
     return (
       <Card
         padding="none"
         onPress={() => onPressShipment(item.id)}
         style={[styles.shipmentCard, isNext && styles.shipmentCardNext]}
+        accessibilityLabel={`Envío ${item.tracking_id}. ${statusLabel}.`}
+        accessibilityHint="Abre el detalle del envío"
       >
         <View style={styles.shipmentCardClip}>
-          {isNext ? (
-            <View style={styles.nextBadge}>
-              <Text style={styles.nextBadgeText}>Siguiente</Text>
+          {isNext && (
+            <View style={styles.nextBanner}>
+              <Ionicons name="navigate" size={13} color="#ffffff" />
+              <Text style={styles.nextBannerText}>Siguiente entrega</Text>
             </View>
-          ) : null}
+          )}
           <View style={styles.shipmentBody}>
             <View style={styles.titleRow}>
               <Text style={styles.trackingTitle} numberOfLines={1}>
@@ -172,11 +165,22 @@ export function DeliveryListView({
                 ]}
               >
                 <Text style={[styles.statusBadgeText, { color: badgeColors.text }]} numberOfLines={1}>
-                  {formatShipmentStatusLabel(item.status)}
+                  {statusLabel}
                 </Text>
               </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.colors.muted} />
             </View>
-            <Text style={styles.addressSecondary} numberOfLines={2}>
+
+            <View style={styles.phaseBar} importantForAccessibility="no-hide-descendants">
+              {PHASE_BAR_KEYS.map((key, i) => (
+                <View
+                  key={key}
+                  style={[styles.phaseSegment, phaseBarSegmentStyle(theme, badgeKind, phase, i)]}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.addressText} numberOfLines={2}>
               {item.address.trim() !== '' ? item.address : 'Sin dirección'}
             </Text>
           </View>
@@ -194,36 +198,15 @@ export function DeliveryListView({
     </View>
   );
 
-  const listEmpty = useMemo(() => {
-    const searching = searchQuery.trim() !== '';
-    return (
-      <View
-        style={styles.emptyState}
-        accessibilityLabel={
-          searching
-            ? 'Ningún envío coincide con la búsqueda.'
-            : 'No hay envíos asignados. Escaneá un paquete para comenzar.'
-        }
-      >
-        {searching ? (
-          <>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="search-outline" size={40} color={theme.colors.muted} />
-            </View>
-            <Text style={styles.emptyTitle}>Ningún envío coincide con la búsqueda.</Text>
-          </>
-        ) : (
-          <>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="cube-outline" size={48} color={theme.colors.muted} />
-            </View>
-            <Text style={styles.emptyTitle}>No hay envíos asignados</Text>
-            <Text style={styles.emptyHint}>Escaneá un paquete para comenzar</Text>
-          </>
-        )}
+  const listEmpty = (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons name="cube-outline" size={48} color={theme.colors.muted} />
       </View>
-    );
-  }, [searchQuery, styles, theme.colors.muted]);
+      <Text style={styles.emptyTitle}>Sin envíos asignados</Text>
+      <Text style={styles.emptyHint}>Escaneá un paquete para comenzar</Text>
+    </View>
+  );
 
   return (
     <View style={styles.root}>
@@ -243,7 +226,7 @@ export function DeliveryListView({
           ItemSeparatorComponent={renderItemSeparator}
           stickySectionHeadersEnabled={false}
           ListHeaderComponent={listChrome}
-          extraData={{ nextShipmentId, searchQuery, loading, refreshing }}
+          extraData={{ nextShipmentId, loading, refreshing }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -270,19 +253,59 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.background,
     },
     listHeader: {
-      paddingBottom: spacing.sm,
-    },
-    toolbar: {
       paddingTop: spacing.sm,
-      paddingBottom: spacing.sm,
-    },
-    mapLinks: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      paddingBottom: spacing.md,
       gap: spacing.sm,
-      marginBottom: spacing.sm,
     },
-    mapLinkBtn: {
+    countLabel: {
+      ...typography.captionStrong,
+      color: colors.muted,
+      letterSpacing: 0.4,
+      paddingBottom: spacing.xs,
+    },
+    btnScan: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 56,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.primary,
+      gap: spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4,
+          shadowRadius: 8,
+        },
+        android: { elevation: 4 },
+        default: {},
+      }),
+    },
+    btnScanDisabled: {
+      backgroundColor: colors.surface,
+      ...Platform.select({
+        ios: { shadowOpacity: 0 },
+        android: { elevation: 0 },
+        default: {},
+      }),
+    },
+    scanIcon: {
+      marginRight: 2,
+    },
+    btnScanLabel: {
+      ...typography.bodyStrong,
+      fontSize: 17,
+      color: '#ffffff',
+    },
+    btnScanLabelDisabled: {
+      color: colors.muted,
+    },
+    flexMapBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: spacing.xs,
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       borderRadius: spacing.radiusLg,
@@ -290,36 +313,9 @@ function createStyles(t: AppTheme) {
       borderWidth: 1,
       borderColor: borderSubtle,
     },
-    mapLinkLabel: {
+    flexMapLabel: {
       ...typography.captionStrong,
       color: colors.primary,
-    },
-    searchWrap: {
-      marginBottom: spacing.sm,
-    },
-    searchInput: {
-      borderWidth: 1,
-      borderColor: borderSubtle,
-      borderRadius: spacing.radiusLg,
-      paddingHorizontal: spacing.md + 4,
-      paddingVertical: spacing.md,
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.surface,
-    },
-    btnScan: {
-      paddingVertical: spacing.md,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: borderSubtle,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 48,
-    },
-    btnScanLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
     },
     btnPressed: {
       opacity: motion.pressOpacitySoft,
@@ -337,12 +333,6 @@ function createStyles(t: AppTheme) {
     },
     skeletonColumn: {
       flex: 1,
-    },
-    chromeDisabled: {
-      opacity: 0.48,
-    },
-    chromeLabelDisabled: {
-      color: colors.muted,
     },
     listContent: {
       paddingBottom: spacing.xxl,
@@ -365,7 +355,6 @@ function createStyles(t: AppTheme) {
     sectionRule: {
       height: 1,
       backgroundColor: borderSubtle,
-      opacity: 0.9,
     },
     emptyState: {
       alignItems: 'center',
@@ -409,30 +398,25 @@ function createStyles(t: AppTheme) {
         ios: {
           shadowColor: colors.primary,
           shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.35,
+          shadowOpacity: 0.3,
           shadowRadius: 10,
         },
-        android: {
-          elevation: 5,
-        },
+        android: { elevation: 5 },
         default: {},
       }),
     },
-    nextBadge: {
+    nextBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
       backgroundColor: colors.primary,
-      paddingVertical: 6,
+      paddingVertical: spacing.xs + 2,
       paddingHorizontal: spacing.md,
     },
-    nextBadgeText: {
+    nextBannerText: {
       ...typography.captionStrong,
-      color: colors.background,
-      letterSpacing: 0.5,
-    },
-    itemSeparator: {
-      paddingTop: spacing.md,
-      marginBottom: spacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: borderSubtle,
+      color: '#ffffff',
+      letterSpacing: 0.3,
     },
     shipmentBody: {
       paddingHorizontal: spacing.lg,
@@ -450,23 +434,36 @@ function createStyles(t: AppTheme) {
       minWidth: 0,
       ...typography.subtitle,
       color: colors.text,
+      letterSpacing: -0.2,
     },
-    addressSecondary: {
+    phaseBar: {
+      flexDirection: 'row',
+      gap: 4,
+      marginBottom: spacing.sm,
+    },
+    phaseSegment: {
+      flex: 1,
+      height: 6,
+      borderRadius: 3,
+    },
+    addressText: {
       ...typography.body,
       color: colors.muted,
     },
     statusBadge: {
       flexShrink: 0,
-      maxWidth: '46%',
+      maxWidth: '40%',
       paddingHorizontal: spacing.sm + 2,
-      paddingVertical: spacing.xs + 2,
+      paddingVertical: spacing.xs + 1,
       borderRadius: spacing.radiusMd,
       borderWidth: StyleSheet.hairlineWidth,
     },
     statusBadgeText: {
       ...typography.captionStrong,
-      textTransform: 'capitalize',
       textAlign: 'center',
+    },
+    itemSeparator: {
+      height: spacing.sm,
     },
   });
 }

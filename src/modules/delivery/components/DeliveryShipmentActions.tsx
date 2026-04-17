@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -13,35 +14,66 @@ type Props = {
 
 type ActionVariant = 'primary' | 'secondary' | 'success' | 'danger';
 
-function actionLook(
-  t: AppTheme,
-  variant: ActionVariant,
-): { backgroundColor: string; borderColor: string; labelColor: string } {
+const ACTION_ICONS: Record<DriverActionKey, keyof typeof Ionicons.glyphMap> = {
+  en_camino: 'navigate',
+  cerca: 'location',
+  entregado: 'checkmark-circle',
+  fallido: 'close-circle',
+};
+
+type ActionLook = {
+  backgroundColor: string;
+  iconColor: string;
+  labelColor: string;
+  sublabelColor: string;
+  shadowColor: string;
+};
+
+function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): ActionLook {
   const { colors } = t;
+
+  if (!enabled) {
+    return {
+      backgroundColor: colors.surface,
+      iconColor: colors.muted,
+      labelColor: colors.muted,
+      sublabelColor: 'transparent',
+      shadowColor: 'transparent',
+    };
+  }
+
   switch (variant) {
     case 'primary':
       return {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-        labelColor: '#f8fafc',
+        backgroundColor: '#1e40af',
+        iconColor: '#93c5fd',
+        labelColor: '#ffffff',
+        sublabelColor: '#bfdbfe',
+        shadowColor: '#1d4ed8',
       };
     case 'secondary':
       return {
-        backgroundColor: colors.surface,
-        borderColor: colors.muted,
-        labelColor: colors.text,
+        backgroundColor: '#164e63',
+        iconColor: '#67e8f9',
+        labelColor: '#ffffff',
+        sublabelColor: '#a5f3fc',
+        shadowColor: '#0891b2',
       };
     case 'success':
       return {
-        backgroundColor: colors.success,
-        borderColor: colors.success,
-        labelColor: colors.background,
+        backgroundColor: '#14532d',
+        iconColor: '#86efac',
+        labelColor: '#ffffff',
+        sublabelColor: '#bbf7d0',
+        shadowColor: '#16a34a',
       };
     case 'danger':
       return {
-        backgroundColor: colors.danger,
-        borderColor: colors.danger,
+        backgroundColor: '#7f1d1d',
+        iconColor: '#fca5a5',
         labelColor: '#ffffff',
+        sublabelColor: '#fecaca',
+        shadowColor: '#dc2626',
       };
   }
 }
@@ -52,44 +84,62 @@ export function DeliveryShipmentActions({ effectiveStatusCode, onAction }: Props
 
   return (
     <View>
-      <Text style={styles.actionsHeading}>Acciones</Text>
+      <Text style={styles.sectionLabel}>ACCIONES DEL ENVÍO</Text>
       <View style={styles.buttonStack}>
-      {DELIVERY_DETAIL_ACTIONS.map((action) => {
-        const enabled = isDriverActionEnabled(action.key, effectiveStatusCode);
-        const look = actionLook(theme, action.variant);
-        return (
-          <Pressable
-            key={action.key}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !enabled }}
-            disabled={!enabled}
-            hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
-            android_ripple={
-              enabled ? { color: 'rgba(255, 255, 255, 0.2)', foreground: false } : undefined
-            }
-            style={({ pressed }) => [
-              styles.actionBtn,
-              {
-                backgroundColor: look.backgroundColor,
-                borderColor: look.borderColor,
-              },
-              !enabled && styles.actionBtnDisabled,
-              enabled && pressed && styles.actionBtnPressed,
-            ]}
-            onPress={() => onAction(action.key)}
-          >
-            <Text
-              style={[
-                styles.actionBtnLabel,
-                { color: look.labelColor },
-                !enabled && styles.actionBtnLabelDisabled,
+        {DELIVERY_DETAIL_ACTIONS.map((action) => {
+          const enabled = isDriverActionEnabled(action.key, effectiveStatusCode);
+          const look = actionLook(theme, action.variant, enabled);
+          const iconName = ACTION_ICONS[action.key];
+
+          return (
+            <Pressable
+              key={action.key}
+              accessibilityRole="button"
+              accessibilityLabel={`${action.label}: ${action.sublabel}`}
+              accessibilityState={{ disabled: !enabled }}
+              disabled={!enabled}
+              android_ripple={
+                enabled ? { color: 'rgba(255,255,255,0.12)', foreground: true } : undefined
+              }
+              style={({ pressed }) => [
+                styles.actionBtn,
+                { backgroundColor: look.backgroundColor },
+                enabled && {
+                  ...Platform.select({
+                    ios: {
+                      shadowColor: look.shadowColor,
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.45,
+                      shadowRadius: 8,
+                    },
+                    android: { elevation: 5 },
+                    default: {},
+                  }),
+                },
+                !enabled && styles.actionBtnDisabled,
+                enabled && pressed && styles.actionBtnPressed,
               ]}
+              onPress={() => onAction(action.key)}
             >
-              {action.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <View style={styles.iconWrap}>
+                <Ionicons name={iconName} size={28} color={look.iconColor} />
+              </View>
+              <View style={styles.textBlock}>
+                <Text style={[styles.actionLabel, { color: look.labelColor }]}>
+                  {action.label}
+                </Text>
+                {enabled ? (
+                  <Text style={[styles.actionSublabel, { color: look.sublabelColor }]}>
+                    {action.sublabel}
+                  </Text>
+                ) : null}
+              </View>
+              {enabled ? (
+                <Ionicons name="chevron-forward" size={18} color={look.iconColor} style={styles.chevron} />
+              ) : null}
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -98,49 +148,51 @@ export function DeliveryShipmentActions({ effectiveStatusCode, onAction }: Props
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
-    actionsHeading: {
-      ...typography.subtitle,
-      color: colors.text,
+    sectionLabel: {
+      ...typography.captionStrong,
+      color: colors.muted,
+      letterSpacing: 1,
       marginBottom: spacing.md,
     },
     buttonStack: {
-      gap: spacing.lg,
+      gap: spacing.sm,
     },
     actionBtn: {
-      width: '100%',
-      minHeight: 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      minHeight: 68,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusCard,
-      borderWidth: 2,
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 2,
-        },
-        default: {},
-      }),
+      borderRadius: spacing.radiusLg,
+      overflow: 'hidden',
     },
     actionBtnDisabled: {
-      opacity: 0.4,
+      opacity: 0.28,
     },
     actionBtnPressed: {
       opacity: motion.pressOpacityStrong,
       transform: [{ scale: motion.pressScale }],
     },
-    actionBtnLabel: {
-      ...typography.bodyStrong,
-      textAlign: 'center',
+    iconWrap: {
+      width: 40,
+      alignItems: 'center',
+      marginRight: spacing.md,
     },
-    actionBtnLabelDisabled: {
-      color: colors.muted,
+    textBlock: {
+      flex: 1,
+      gap: 2,
+    },
+    actionLabel: {
+      fontSize: 17,
+      fontWeight: '700' as const,
+      lineHeight: 22,
+    },
+    actionSublabel: {
+      ...typography.caption,
+    },
+    chevron: {
+      marginLeft: spacing.sm,
+      opacity: 0.7,
     },
   });
 }

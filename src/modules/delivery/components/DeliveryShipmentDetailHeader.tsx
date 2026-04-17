@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '@components/ui';
 import {
-  formatShipmentStatusLabel,
+  formatDriverShipmentStatusLabel,
   shipmentListBadgeColors,
   shipmentListBadgeKind,
 } from '../deliveryStatus';
@@ -23,7 +23,7 @@ function showStatusBadge(statusLabel: string): boolean {
 export function DeliveryShipmentDetailHeader({ trackingLabel, addressText, statusCode }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const statusLabel = formatShipmentStatusLabel(statusCode ?? '');
+  const statusLabel = formatDriverShipmentStatusLabel(statusCode ?? '');
   const badgeVisible = showStatusBadge(statusLabel);
   const badgeKind = shipmentListBadgeKind(statusCode ?? '');
   const badgeColors = shipmentListBadgeColors(theme, badgeKind);
@@ -88,7 +88,6 @@ function createStyles(t: AppTheme) {
     },
     statusBadgeText: {
       ...typography.captionStrong,
-      textTransform: 'capitalize',
       textAlign: 'center',
     },
   });

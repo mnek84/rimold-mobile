@@ -21,7 +21,7 @@ type State = {
   warehouseId: string;
   warehouseName: string;
   items: ColectaSessionItem[];
-  /** True after COLLECTION_STARTED was enqueued for this {@link collectionId}. */
+  /** True after COLLECTION_STARTED was enqueued (primer paquete escaneado en esta sesión). */
   collectionStartedEmitted: boolean;
   /** New session UUID and empty items (call when starting a different client/depósito). */
   startNewSession: (selection: ColectaSelection) => void;

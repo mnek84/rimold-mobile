@@ -4,7 +4,7 @@ import type { AppTheme } from '@theme';
 export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados';
 
 const ENTREGADOS = new Set(['delivered', 'returned']);
-const EN_RUTA = new Set(['out_for_delivery']);
+const EN_RUTA = new Set(['out_for_delivery', 'in_transit']);
 
 /** Bucket for list grouping (Spanish UI labels). */
 export function statusDeliveryGroup(status: string): DeliveryGroup {
@@ -30,9 +30,12 @@ const GROUP_LABEL: Record<DeliveryGroup, string> = {
 const PENDING_PRIORITY: Record<string, number> = {
   assigned: 60,
   in_depot: 50,
+  pending_route: 48,
   in_cage: 40,
+  collected: 35,
   picked: 30,
   created: 20,
+  missing_zone: 15,
   failed: 10,
   cancelled: 5,
 };
@@ -74,6 +77,69 @@ export function groupShipmentsForSections(
   })).filter((s) => s.data.length > 0);
 }
 
+export function formatShipmentStatusLabel(code: string): string {
+  const t = code.trim();
+  if (t === '') {
+    return '—';
+  }
+  return t.replace(/_/g, ' ');
+}
+
+/** Spanish labels for driver list, headers, and search (alineado al flujo en camino / cerca). */
+const DRIVER_STATUS_LABEL_ES: Record<string, string> = {
+  missing_zone: 'Falta zona',
+  created: 'Ingresado',
+  picked: 'Retirado',
+  collected: 'Recolectado',
+  in_depot: 'Cerca',
+  in_cage: 'En jaula',
+  pending_route: 'Pendiente de ruta',
+  assigned: 'Asignado',
+  out_for_delivery: 'En camino',
+  delivered: 'Entregado',
+  failed: 'Falla',
+  returned: 'Devuelto',
+  cancelled: 'Cancelado',
+  in_transit: 'En camino',
+};
+
+export function formatDriverShipmentStatusLabel(code: string): string {
+  const s = code.trim().toLowerCase();
+  if (s === '') {
+    return '—';
+  }
+  return DRIVER_STATUS_LABEL_ES[s] ?? formatShipmentStatusLabel(code);
+}
+
+/**
+ * Fase operativa API (0–3): asignación/bodega → in_depot → out_for_delivery → terminal.
+ * La barra de lista sigue este orden cronológico; el timeline muestra los mismos hitos con títulos de conductor.
+ */
+export function shipmentDriverPhaseIndex(statusCode: string | null | undefined): number {
+  const s = (statusCode ?? '').trim().toLowerCase();
+  if (
+    ['created', 'picked', 'in_cage', 'assigned', 'pending_route', 'missing_zone', 'collected'].includes(s)
+  ) {
+    return 0;
+  }
+  if (s === 'in_depot') {
+    return 1;
+  }
+  if (s === 'out_for_delivery' || s === 'in_transit') {
+    return 2;
+  }
+  if (['delivered', 'returned', 'failed', 'cancelled'].includes(s)) {
+    return 3;
+  }
+  return 0;
+}
+
+function formatStatusLabelForSearch(status: string): string {
+  const es = formatDriverShipmentStatusLabel(status).toLowerCase();
+  const raw = status.replace(/_/g, ' ').toLowerCase();
+  return `${es} ${raw}`;
+}
+
 export function matchesShipmentSearch(row: TodayShipmentRow, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (q === '') {
@@ -85,18 +151,6 @@ export function matchesShipmentSearch(row: TodayShipmentRow, query: string): boo
     row.address.toLowerCase().includes(q) ||
     statusLabel.includes(q)
   );
-}
-
-function formatStatusLabelForSearch(status: string): string {
-  return status.replace(/_/g, ' ').toLowerCase();
-}
-
-export function formatShipmentStatusLabel(code: string): string {
-  const t = code.trim();
-  if (t === '') {
-    return '—';
-  }
-  return t.replace(/_/g, ' ');
 }
 
 /** Visual bucket for list badges (maps API `status` to UI colors). */
@@ -168,13 +222,24 @@ export function isDriverActionEnabled(
 
   switch (action) {
     case 'en_camino':
-      return ['assigned', 'created', 'picked', 'in_cage'].includes(s);
+      return ['assigned', 'created', 'picked', 'in_cage', 'pending_route', 'collected'].includes(s);
     case 'cerca':
       return s === 'in_depot';
     case 'entregado':
-      return s === 'out_for_delivery';
+      return s === 'out_for_delivery' || s === 'in_transit';
     case 'fallido':
-      return ['assigned', 'created', 'picked', 'in_cage', 'in_depot', 'out_for_delivery'].includes(s);
+      return [
+        'assigned',
+        'created',
+        'picked',
+        'in_cage',
+        'in_depot',
+        'out_for_delivery',
+        'in_transit',
+        'pending_route',
+        'collected',
+        'missing_zone',
+      ].includes(s);
     default:
       return false;
   }
@@ -187,7 +252,8 @@ export type TimelineStepUi = {
 };
 
 /**
- * Four-step driver timeline: preparación → depósito → destino → cierre.
+ * Avance del envío (orden pantalla): Asignado → En camino → Cerca → Entregado / Falla.
+ * API: fase 0 bodega/asignación, 1 in_depot (acción “cerca”), 2 out_for_delivery (camino al destino), 3 cierre.
  */
 export function buildShipmentTimeline(statusCode: string | null | undefined): TimelineStepUi[] {
   const s = (statusCode ?? '').trim().toLowerCase();
@@ -198,37 +264,53 @@ export function buildShipmentTimeline(statusCode: string | null | undefined): Ti
       : s === 'returned'
         ? 'Devuelto'
         : s === 'failed'
-          ? 'Fallido'
+          ? 'Falla'
           : s === 'cancelled'
             ? 'Cancelado'
-            : 'Cierre';
+            : 'Entregado';
 
-  const titles = ['Preparación', 'En depósito', 'Rumbo al destino', lastTitle] as const;
+  const apiPhase = shipmentDriverPhaseIndex(statusCode);
 
-  let currentIdx = 0;
-  if (['created', 'picked', 'in_cage', 'assigned'].includes(s)) {
-    currentIdx = 0;
-  } else if (s === 'in_depot') {
-    currentIdx = 1;
-  } else if (s === 'out_for_delivery') {
-    currentIdx = 2;
-  } else if (['delivered', 'returned', 'failed', 'cancelled'].includes(s)) {
-    currentIdx = 3;
-  }
+  const titles = ['Asignado a tu ruta', 'En camino', 'Cerca', lastTitle] as const;
 
-  return titles.map((title, idx) => {
-    let state: TimelineStepUi['state'];
-    if (idx < currentIdx) {
-      state = 'done';
-    } else if (idx > currentIdx) {
-      state = 'upcoming';
-    } else if (s === 'failed' || s === 'cancelled') {
-      state = 'error';
-    } else if (s === 'delivered' || s === 'returned') {
-      state = 'done';
-    } else {
-      state = 'current';
+  const stepState = (stepIdx: number): TimelineStepUi['state'] => {
+    if (stepIdx === 3) {
+      if (apiPhase < 3) {
+        return 'upcoming';
+      }
+      if (s === 'failed' || s === 'cancelled') {
+        return 'error';
+      }
+      return 'done';
     }
-    return { key: `tl${idx}`, title, state };
-  });
+    if (stepIdx === 0) {
+      return apiPhase === 0 ? 'current' : 'done';
+    }
+    if (stepIdx === 1) {
+      if (apiPhase === 0) {
+        return 'upcoming';
+      }
+      if (apiPhase === 1) {
+        return 'done';
+      }
+      if (apiPhase === 2) {
+        return 'current';
+      }
+      return 'done';
+    }
+    // step 2 — Cerca (in_depot)
+    if (apiPhase <= 0) {
+      return 'upcoming';
+    }
+    if (apiPhase === 1) {
+      return 'current';
+    }
+    return 'done';
+  };
+
+  return titles.map((title, idx) => ({
+    key: `tl${idx}`,
+    title,
+    state: stepState(idx),
+  }));
 }

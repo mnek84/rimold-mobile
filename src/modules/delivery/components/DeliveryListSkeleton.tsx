@@ -17,6 +17,11 @@ export function DeliveryListSkeleton() {
             <View style={styles.lineTitle} />
             <View style={styles.pill} />
           </View>
+          <View style={styles.phaseBar}>
+            {Array.from({ length: 4 }, (_, j) => (
+              <View key={j} style={styles.phaseSeg} />
+            ))}
+          </View>
           <View style={styles.lineAddress} />
           <View style={[styles.lineAddress, styles.lineAddressShort]} />
         </View>
@@ -57,6 +62,17 @@ function createStyles(t: AppTheme) {
       width: 72,
       height: 22,
       borderRadius: spacing.radiusMd,
+      backgroundColor: lineBg,
+    },
+    phaseBar: {
+      flexDirection: 'row',
+      gap: 5,
+      marginBottom: spacing.md,
+    },
+    phaseSeg: {
+      flex: 1,
+      height: 5,
+      borderRadius: 3,
       backgroundColor: lineBg,
     },
     lineAddress: {

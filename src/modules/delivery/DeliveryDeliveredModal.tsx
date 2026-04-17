@@ -1,4 +1,4 @@
-import * as ImagePicker from 'expo-image-picker';
+import { pickAndCompressPhoto } from '@core/media/compressPhoto';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -59,33 +59,12 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
   }, [visible]);
 
   const takePhoto = useCallback(async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) {
-        Alert.alert('Permisos', 'Se necesita cámara o galería para adjuntar una foto.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.75,
-        base64: true,
-      });
-      if (result.canceled || !result.assets[0]?.base64) return;
-      const mime = result.assets[0].mimeType?.includes('png') ? 'png' : 'jpeg';
-      setPhotoDataUrl(`data:image/${mime};base64,${result.assets[0].base64}`);
-      return;
+    const dataUrl = await pickAndCompressPhoto(
+      'Se necesita cámara o galería para adjuntar una foto.',
+    );
+    if (dataUrl != null) {
+      setPhotoDataUrl(dataUrl);
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.75,
-      base64: true,
-    });
-    if (result.canceled || !result.assets[0]?.base64) return;
-    const mime = result.assets[0].mimeType?.includes('png') ? 'png' : 'jpeg';
-    setPhotoDataUrl(`data:image/${mime};base64,${result.assets[0].base64}`);
   }, []);
 
   const clearPhoto = useCallback(() => setPhotoDataUrl(null), []);

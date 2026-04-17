@@ -75,7 +75,6 @@ export function ColectaScanScreen({ navigation, route }: Props) {
 
   const collectionId = useColectaSessionStore((s) => s.collectionId);
   const items = useColectaSessionStore((s) => s.items);
-  const collectionStartedEmitted = useColectaSessionStore((s) => s.collectionStartedEmitted);
   const sessionClientId = useColectaSessionStore((s) => s.clientId);
   const sessionWarehouseId = useColectaSessionStore((s) => s.warehouseId);
   const addScannedItem = useColectaSessionStore((s) => s.addScannedItem);
@@ -168,40 +167,6 @@ export function ColectaScanScreen({ navigation, route }: Props) {
     storeHydrated,
   ]);
 
-  useEffect(() => {
-    if (!storeHydrated || collectionId == null || clientId === '' || warehouseId === '') return;
-    if (collectionStartedEmitted) return;
-    let cancelled = false;
-    void (async () => {
-      await enqueueEvent({
-        type: EventType.COLLECTION_STARTED,
-        payload: {
-          collectionId,
-          businessId: clientId,
-          warehouseId,
-          businessName: clientName,
-          warehouseName,
-        },
-      });
-      if (!cancelled) {
-        markCollectionStartedEmitted();
-        scheduleProcessQueueIfOnline();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    storeHydrated,
-    clientId,
-    warehouseId,
-    collectionId,
-    clientName,
-    warehouseName,
-    collectionStartedEmitted,
-    markCollectionStartedEmitted,
-  ]);
-
   /** Feedback multisensorial al escanear exitosamente: vibración + flash verde + rebote contador. */
   const triggerScanFeedback = useCallback(
     (trackingId: string, source: ColectaScanSource) => {
@@ -241,14 +206,40 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       if (already) return;
       if (enqueuedTrackingRef.current.has(trackingId)) return;
       enqueuedTrackingRef.current.add(trackingId);
-      addScannedItem(trackingId, source);
-      triggerScanFeedback(trackingId, source);
-      void enqueueEvent({
-        type: EventType.COLLECTION_ITEM_ADDED,
-        payload: { collectionId, trackingId, raw: trackingId },
-      }).then(() => scheduleProcessQueueIfOnline());
+      void (async () => {
+        const sess = useColectaSessionStore.getState();
+        if (!sess.collectionStartedEmitted) {
+          await enqueueEvent({
+            type: EventType.COLLECTION_STARTED,
+            payload: {
+              collectionId,
+              businessId: clientId,
+              warehouseId,
+              businessName: clientName,
+              warehouseName,
+            },
+          });
+          markCollectionStartedEmitted();
+        }
+        addScannedItem(trackingId, source);
+        triggerScanFeedback(trackingId, source);
+        await enqueueEvent({
+          type: EventType.COLLECTION_ITEM_ADDED,
+          payload: { collectionId, trackingId, raw: trackingId },
+        });
+        scheduleProcessQueueIfOnline();
+      })();
     },
-    [clientId, warehouseId, collectionId, addScannedItem, triggerScanFeedback],
+    [
+      clientId,
+      warehouseId,
+      collectionId,
+      clientName,
+      warehouseName,
+      addScannedItem,
+      triggerScanFeedback,
+      markCollectionStartedEmitted,
+    ],
   );
 
   const onFinalize = useCallback(() => {
@@ -268,11 +259,13 @@ export function ColectaScanScreen({ navigation, route }: Props) {
           onPress: () => {
             void (async () => {
               const ids = useColectaSessionStore.getState().items.map((i) => i.trackingId);
-              await enqueueEvent({
-                type: EventType.COLLECTION_FINISHED,
-                payload: { collectionId, items: ids },
-              });
-              scheduleProcessQueueIfOnline();
+              if (ids.length > 0) {
+                await enqueueEvent({
+                  type: EventType.COLLECTION_FINISHED,
+                  payload: { collectionId, items: ids },
+                });
+                scheduleProcessQueueIfOnline();
+              }
               clearColectaSession();
               clearColectaSelection();
               navigation.replace('ClientSelection');

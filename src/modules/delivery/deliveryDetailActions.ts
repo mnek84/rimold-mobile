@@ -5,12 +5,13 @@ import type { DriverActionKey } from './deliveryStatus';
 export const DELIVERY_DETAIL_ACTIONS: {
   key: DriverActionKey;
   label: string;
+  sublabel: string;
   variant: 'primary' | 'secondary' | 'success' | 'danger';
 }[] = [
-  { key: 'en_camino', label: 'En camino', variant: 'primary' },
-  { key: 'cerca', label: 'Cerca', variant: 'secondary' },
-  { key: 'entregado', label: 'Entregado', variant: 'success' },
-  { key: 'fallido', label: 'Fallido', variant: 'danger' },
+  { key: 'en_camino', label: 'En camino', sublabel: 'Salí a entregar', variant: 'primary' },
+  { key: 'cerca', label: 'Cerca', sublabel: 'Estoy llegando al destino', variant: 'secondary' },
+  { key: 'entregado', label: 'Entregado', sublabel: 'El paquete fue entregado', variant: 'success' },
+  { key: 'fallido', label: 'Fallido', sublabel: 'No se pudo entregar', variant: 'danger' },
 ];
 
 export const DELIVERY_ACTION_EVENT_MAP: Record<

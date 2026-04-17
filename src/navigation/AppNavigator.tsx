@@ -5,6 +5,7 @@ import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { LoginScreen } from '@modules/auth/LoginScreen';
+import { RouteMapTabScreen } from '@modules/delivery/RouteMapTabScreen';
 import { BodegaStack } from '@navigation/BodegaStack';
 import { SettingsScreen, settingsTabBarIcon } from '@modules/settings/SettingsScreen';
 import { ColectaStack } from '@navigation/ColectaStack';
@@ -23,6 +24,10 @@ function colectaTabBarIcon({ color, size }: { color: string; size: number }) {
 
 function entregasTabBarIcon({ color, size }: { color: string; size: number }) {
   return <Ionicons name="car-outline" size={size} color={color} />;
+}
+
+function rutaMapaTabBarIcon({ color, size }: { color: string; size: number }) {
+  return <Ionicons name="map-outline" size={size} color={color} />;
 }
 
 function bodegaTabBarIcon({ color, size }: { color: string; size: number }) {
@@ -93,6 +98,7 @@ export function AppNavigator() {
   }
 
   if (user.role === 'DRIVER') {
+
     return (
       <>
         <StatusBar style="light" />
@@ -112,6 +118,14 @@ export function AppNavigator() {
             options={{
               headerShown: false,
               tabBarIcon: entregasTabBarIcon,
+            }}
+          />
+          <Tab.Screen
+            name="RutaMapa"
+            component={RouteMapTabScreen}
+            options={{
+              title: 'Ruta',
+              tabBarIcon: rutaMapaTabBarIcon,
             }}
           />
           <Tab.Screen
