@@ -34,6 +34,7 @@ import {
 } from '@modules/colecta/colectaSessionStore';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
 import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useAuthStore } from '@store/useAuthStore';
 
 type Props = NativeStackScreenProps<ColectaStackParamList, 'ColectaScan'>;
 
@@ -69,6 +70,8 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   const clientName = route.params?.clientName ?? '';
   const warehouseId = route.params?.warehouseId ?? '';
   const warehouseName = route.params?.warehouseName ?? '';
+
+  const authUser = useAuthStore((s) => s.user);
 
   const setColectaSelection = useColectaSelectionStore((s) => s.setSelection);
   const clearColectaSelection = useColectaSelectionStore((s) => s.clearSelection);
@@ -217,6 +220,8 @@ export function ColectaScanScreen({ navigation, route }: Props) {
               warehouseId,
               businessName: clientName,
               warehouseName,
+              ...(authUser?.id ? { driverUserId: authUser.id } : {}),
+              ...(authUser?.name?.trim() ? { driverName: authUser.name.trim() } : {}),
             },
           });
           markCollectionStartedEmitted();
@@ -239,6 +244,8 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       addScannedItem,
       triggerScanFeedback,
       markCollectionStartedEmitted,
+      authUser?.id,
+      authUser?.name,
     ],
   );
 

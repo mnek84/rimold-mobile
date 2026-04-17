@@ -29,6 +29,8 @@ type CollectionPayload = {
   warehouseId?: string;
   businessName?: string;
   warehouseName?: string;
+  driverUserId?: string;
+  driverName?: string;
 };
 
 /** PNG signature: data URL for Laravel POD / S3. */
@@ -118,6 +120,8 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       if (p.warehouseId != null && p.warehouseId !== '') body.warehouseId = p.warehouseId;
       if (p.businessName != null && p.businessName !== '') body.businessName = p.businessName;
       if (p.warehouseName != null && p.warehouseName !== '') body.warehouseName = p.warehouseName;
+      if (p.driverUserId != null && p.driverUserId !== '') body.driverUserId = p.driverUserId;
+      if (p.driverName != null && p.driverName !== '') body.driverName = p.driverName;
       await postDomainEvent(eventId, 'collection', collectionId, type, body);
       return;
     }
