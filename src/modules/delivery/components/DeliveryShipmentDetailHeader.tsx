@@ -13,6 +13,7 @@ type Props = {
   trackingLabel: string;
   addressText: string;
   statusCode: string | null;
+  deliveryVisitCount: number;
 };
 
 function showStatusBadge(statusLabel: string): boolean {
@@ -20,7 +21,12 @@ function showStatusBadge(statusLabel: string): boolean {
   return t !== '' && t !== '—';
 }
 
-export function DeliveryShipmentDetailHeader({ trackingLabel, addressText, statusCode }: Props) {
+export function DeliveryShipmentDetailHeader({
+  trackingLabel,
+  addressText,
+  statusCode,
+  deliveryVisitCount,
+}: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const statusLabel = formatDriverShipmentStatusLabel(statusCode ?? '');
@@ -50,6 +56,11 @@ export function DeliveryShipmentDetailHeader({ trackingLabel, addressText, statu
       <Text style={styles.address} numberOfLines={4}>
         {addressText.trim() !== '' ? addressText : 'Sin dirección'}
       </Text>
+      {deliveryVisitCount > 0 ? (
+        <Text style={styles.visitLine} numberOfLines={1}>
+          Visita de reparto: {deliveryVisitCount}
+        </Text>
+      ) : null}
     </Card>
   );
 }
@@ -76,6 +87,12 @@ function createStyles(t: AppTheme) {
     address: {
       ...typography.body,
       color: colors.muted,
+    },
+    visitLine: {
+      ...typography.captionStrong,
+      color: colors.text,
+      marginTop: spacing.sm,
+      opacity: 0.9,
     },
     statusBadge: {
       flexShrink: 0,

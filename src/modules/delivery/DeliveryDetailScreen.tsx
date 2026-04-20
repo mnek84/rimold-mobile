@@ -43,6 +43,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               trackingLabel={detail.trackingLabel}
               addressText={detail.addressText}
               statusCode={detail.effectiveStatusCode}
+              deliveryVisitCount={detail.deliveryVisitCount}
             />
             <View style={shell.headerDivider} />
             <DeliveryShipmentTimeline steps={detail.timelineSteps} />

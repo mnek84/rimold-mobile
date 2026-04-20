@@ -1,6 +1,7 @@
 import { pickAndCompressPhoto } from '@core/media/compressPhoto';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -19,14 +20,7 @@ import { showToast } from '@core/feedback/toastStore';
 import { enqueueEvent, EventType } from '@core/sync';
 import { borderSubtle, useTheme, type AppTheme } from '@theme';
 
-const FAILURE_REASON_OPTIONS = [
-  { value: 'No había nadie', label: 'No había nadie' },
-  { value: 'Dirección incorrecta', label: 'Dirección incorrecta' },
-  { value: 'Zona peligrosa', label: 'Zona peligrosa' },
-  { value: 'Otro', label: 'Otro' },
-] as const;
-
-type FailureReasonValue = (typeof FAILURE_REASON_OPTIONS)[number]['value'];
+import { useDeliveryFailureReasonsQuery } from '@modules/delivery/hooks/useDeliveryFailureReasonsQuery';
 
 type Props = {
   visible: boolean;
@@ -39,17 +33,32 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const [reason, setReason] = useState<FailureReasonValue>('No había nadie');
+  const reasonsQuery = useDeliveryFailureReasonsQuery(visible);
+  const options = reasonsQuery.data;
+
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      setReason('No había nadie');
-      setNote('');
-      setPhotoDataUrl(null);
+    if (!visible) {
+      return;
     }
+    setNote('');
+    setPhotoDataUrl(null);
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible || options == null || options.length === 0) {
+      return;
+    }
+    setSelectedCode((prev) => {
+      if (prev != null && options.some((r) => r.code === prev)) {
+        return prev;
+      }
+      return options[0]?.code ?? null;
+    });
+  }, [visible, options]);
 
   const takePhoto = useCallback(async () => {
     const dataUrl = await pickAndCompressPhoto(
@@ -71,10 +80,22 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
       Alert.alert('Foto obligatoria', 'Adjuntá una foto del intento de entrega.');
       return;
     }
+    const list = options ?? [];
+    const opt = list.find((r) => r.code === selectedCode);
+    if (opt == null) {
+      Alert.alert(
+        'Motivo requerido',
+        reasonsQuery.isError
+          ? 'No se pudieron cargar los motivos. Revisá la conexión e intentá de nuevo.'
+          : 'Elegí un motivo de la lista.',
+      );
+      return;
+    }
 
     const payload: Record<string, string> = {
       shipmentId: sid,
-      failed_reason: reason,
+      failed_reason: opt.label,
+      failed_reason_code: opt.code,
       photo: photoDataUrl,
     };
     const noteTrim = note.trim();
@@ -93,7 +114,16 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
       .catch(() => {
         showToast(TOAST_DELIVERY.sendError);
       });
-  }, [note, onClose, onQueued, photoDataUrl, reason, shipmentId]);
+  }, [
+    note,
+    onClose,
+    onQueued,
+    options,
+    photoDataUrl,
+    reasonsQuery.isError,
+    selectedCode,
+    shipmentId,
+  ]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -119,26 +149,41 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
             keyboardShouldPersistTaps="handled"
           >
             <Text style={styles.sectionTitle}>Motivo</Text>
-            <View style={styles.reasonList}>
-              {FAILURE_REASON_OPTIONS.map((opt) => {
-                const selected = reason === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => setReason(opt.value)}
-                    style={({ pressed }) => [
-                      styles.reasonRow,
-                      selected && styles.reasonRowSelected,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={[styles.reasonLabel, selected && styles.reasonLabelSelected]}>
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {reasonsQuery.isLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={theme.colors.primary} />
+                <Text style={styles.loadingHint}>Cargando motivos…</Text>
+              </View>
+            ) : reasonsQuery.isError ? (
+              <Text style={styles.errorHint}>
+                No se pudieron cargar los motivos. Cerrá y volvé a abrir, o revisá la conexión.
+              </Text>
+            ) : (options?.length ?? 0) === 0 ? (
+              <Text style={styles.errorHint}>
+                No hay motivos activos. Pedí a operaciones que carguen el catálogo.
+              </Text>
+            ) : (
+              <View style={styles.reasonList}>
+                {(options ?? []).map((opt) => {
+                  const selected = selectedCode === opt.code;
+                  return (
+                    <Pressable
+                      key={opt.code}
+                      onPress={() => setSelectedCode(opt.code)}
+                      style={({ pressed }) => [
+                        styles.reasonRow,
+                        selected && styles.reasonRowSelected,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={[styles.reasonLabel, selected && styles.reasonLabelSelected]}>
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
 
             <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Nota (opcional)</Text>
             <TextInput
@@ -246,6 +291,21 @@ function createStyles(t: AppTheme) {
     hint: {
       ...typography.body,
       color: colors.muted,
+      marginBottom: spacing.sm,
+    },
+    loadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.lg,
+    },
+    loadingHint: {
+      ...typography.body,
+      color: colors.muted,
+    },
+    errorHint: {
+      ...typography.body,
+      color: colors.danger,
       marginBottom: spacing.sm,
     },
     reasonList: {

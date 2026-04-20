@@ -183,6 +183,11 @@ export function DeliveryListView({
             <Text style={styles.addressText} numberOfLines={2}>
               {item.address.trim() !== '' ? item.address : 'Sin dirección'}
             </Text>
+            {item.delivery_visit_count > 0 ? (
+              <Text style={styles.visitHint} numberOfLines={1}>
+                Visita de reparto: {item.delivery_visit_count}
+              </Text>
+            ) : null}
           </View>
         </View>
       </Card>
@@ -449,6 +454,12 @@ function createStyles(t: AppTheme) {
     addressText: {
       ...typography.body,
       color: colors.muted,
+    },
+    visitHint: {
+      ...typography.caption,
+      color: colors.text,
+      marginTop: spacing.xs,
+      opacity: 0.85,
     },
     statusBadge: {
       flexShrink: 0,

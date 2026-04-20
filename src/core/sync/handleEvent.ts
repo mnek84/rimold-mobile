@@ -71,6 +71,7 @@ type GpsLocationQueuedPayload = {
 type ShipmentEventPayload = {
   shipmentId?: string;
   failed_reason?: string;
+  failed_reason_code?: string;
   failure_reason?: string;
   dni?: string;
   receiver_name?: string;
@@ -159,6 +160,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       }
       const body: Record<string, unknown> = {};
       if (p.failed_reason != null) body.failed_reason = p.failed_reason;
+      if (p.failed_reason_code != null) body.failed_reason_code = p.failed_reason_code;
       if (p.failure_reason != null) body.failure_reason = p.failure_reason;
 
       if (type === EventType.SHIPMENT_DELIVERED) {

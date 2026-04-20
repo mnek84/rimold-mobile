@@ -112,6 +112,12 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
       : '—';
 
   const addressText = formatShipmentAddress(shipment?.destination);
+
+  const deliveryVisitCount =
+    shipment?.delivery_visit_count != null && Number.isFinite(Number(shipment.delivery_visit_count))
+      ? Math.max(0, Math.floor(Number(shipment.delivery_visit_count)))
+      : 0;
+
   const headerTitle =
     shipment?.tracking != null && shipment.tracking.trim() !== ''
       ? shipment.tracking.trim()
@@ -126,6 +132,7 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
     timelineSteps,
     trackingLabel,
     addressText,
+    deliveryVisitCount,
     headerTitle,
     handleStatusAction,
     deliveredModal: {

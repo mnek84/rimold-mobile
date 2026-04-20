@@ -10,6 +10,8 @@ export type TodayShipmentRow = {
   execution_type: string;
   route_id: string | null;
   flex_batch_id: string | null;
+  /** Salidas a reparto (intentos de visita). */
+  delivery_visit_count: number;
 };
 
 function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
@@ -22,6 +24,12 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
   }
   const routeRaw = r.route_id;
   const flexRaw = r.flex_batch_id;
+  const visitRaw = r.delivery_visit_count;
+  const delivery_visit_count =
+    typeof visitRaw === 'number' && Number.isFinite(visitRaw)
+      ? Math.max(0, Math.floor(visitRaw))
+      : 0;
+
   return {
     id: r.id,
     tracking_id: r.tracking_id,
@@ -30,6 +38,7 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
     execution_type: typeof r.execution_type === 'string' ? r.execution_type : 'internal',
     route_id: typeof routeRaw === 'string' ? routeRaw : null,
     flex_batch_id: typeof flexRaw === 'string' ? flexRaw : null,
+    delivery_visit_count,
   };
 }
 
@@ -159,6 +168,7 @@ export type ShipmentDetailJson = {
   id: string;
   tracking?: string | null;
   status_code?: string | null;
+  delivery_visit_count?: number | null;
   destination?: ShipmentDestinationJson | null;
 };
 
