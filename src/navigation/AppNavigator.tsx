@@ -11,6 +11,7 @@ import { SettingsScreen, settingsTabBarIcon } from '@modules/settings/SettingsSc
 import { ColectaStack } from '@navigation/ColectaStack';
 import { DeliveryStack } from '@navigation/DeliveryStack';
 import { DriverLocationPermissionGate } from '@core/location/DriverLocationPermissionGate';
+import { hasRole } from '@core/auth/types';
 import { useAuthStore } from '@store/useAuthStore';
 import { borderSubtle, useTheme } from '@theme';
 
@@ -97,13 +98,15 @@ export function AppNavigator() {
     );
   }
 
-  if (user.role === 'DRIVER') {
+  const canSeeDriverTabs = hasRole(user, 'DRIVER');
+  const canSeeWarehouseTabs = hasRole(user, 'WAREHOUSE');
 
-    return (
-      <>
-        <StatusBar style="light" />
-        <DriverLocationPermissionGate />
-        <Tab.Navigator screenOptions={tabScreenOptions}>
+  return (
+    <>
+      <StatusBar style="light" />
+      {canSeeDriverTabs ? <DriverLocationPermissionGate /> : null}
+      <Tab.Navigator screenOptions={tabScreenOptions}>
+        {canSeeDriverTabs ? (
           <Tab.Screen
             name="Colecta"
             component={ColectaStack}
@@ -112,6 +115,8 @@ export function AppNavigator() {
               tabBarIcon: colectaTabBarIcon,
             }}
           />
+        ) : null}
+        {canSeeDriverTabs ? (
           <Tab.Screen
             name="Entregas"
             component={DeliveryStack}
@@ -120,6 +125,8 @@ export function AppNavigator() {
               tabBarIcon: entregasTabBarIcon,
             }}
           />
+        ) : null}
+        {canSeeDriverTabs ? (
           <Tab.Screen
             name="RutaMapa"
             component={RouteMapTabScreen}
@@ -128,32 +135,18 @@ export function AppNavigator() {
               tabBarIcon: rutaMapaTabBarIcon,
             }}
           />
+        ) : null}
+        {canSeeWarehouseTabs ? (
           <Tab.Screen
-            name="Ajustes"
-            component={SettingsScreen}
+            name="Bodega"
+            component={BodegaStack}
             options={{
-              title: 'Ajustes',
-              tabBarIcon: settingsTabBarIcon,
+              headerShown: false,
+              title: 'Depósito',
+              tabBarIcon: bodegaTabBarIcon,
             }}
           />
-        </Tab.Navigator>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <StatusBar style="light" />
-      <Tab.Navigator screenOptions={tabScreenOptions}>
-        <Tab.Screen
-          name="Bodega"
-          component={BodegaStack}
-          options={{
-            headerShown: false,
-            title: 'Depósito',
-            tabBarIcon: bodegaTabBarIcon,
-          }}
-        />
+        ) : null}
         <Tab.Screen
           name="Ajustes"
           component={SettingsScreen}

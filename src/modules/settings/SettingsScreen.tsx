@@ -6,7 +6,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, ScreenContainer } from '@components/ui';
 import { refreshSessionUser } from '@core/api/auth';
-import type { AuthRole } from '@core/auth/types';
+import { getUserRoles, type AuthRole } from '@core/auth/types';
 import { queryClient } from '@core/query/queryClient';
 import { processQueue, useSyncStatusStore } from '@core/sync';
 import type { MainTabParamList } from '@navigation/types';
@@ -26,6 +26,10 @@ function roleLabel(role: AuthRole): string {
     default:
       return role;
   }
+}
+
+function rolesLabel(roles: AuthRole[]): string {
+  return roles.map((role) => roleLabel(role)).join(' + ');
 }
 
 function SectionHeader({
@@ -138,7 +142,7 @@ export function SettingsScreen(_props: Props) {
           <Text style={styles.fieldLabel}>Nombre</Text>
           <Text style={styles.fieldValue}>{displayName}</Text>
           <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Rol</Text>
-          <Text style={styles.fieldValueSecondary}>{roleLabel(user.role)}</Text>
+          <Text style={styles.fieldValueSecondary}>{rolesLabel(getUserRoles(user))}</Text>
         </View>
       </Card>
 

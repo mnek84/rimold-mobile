@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
+import { hasRole } from '@core/auth/types';
 import { useAuthStore } from '@store/useAuthStore';
 
 import { startDriverLocationTracking, stopDriverLocationTracking } from './driverLocationTracking';
@@ -11,9 +12,10 @@ import { startDriverLocationTracking, stopDriverLocationTracking } from './drive
 export function DriverTrackingBootstrap() {
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasDriverRole = hasRole(user, 'DRIVER');
 
   useEffect(() => {
-    if (isAuthenticated && user?.role === 'DRIVER') {
+    if (isAuthenticated && hasDriverRole) {
       void startDriverLocationTracking();
     } else {
       void stopDriverLocationTracking();
@@ -21,13 +23,13 @@ export function DriverTrackingBootstrap() {
     return () => {
       void stopDriverLocationTracking();
     };
-  }, [isAuthenticated, user?.role]);
+  }, [isAuthenticated, hasDriverRole]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active' && useAuthStore.getState().isAuthenticated) {
         const u = useAuthStore.getState().user;
-        if (u?.role === 'DRIVER') {
+        if (hasRole(u, 'DRIVER')) {
           void startDriverLocationTracking();
         }
       }

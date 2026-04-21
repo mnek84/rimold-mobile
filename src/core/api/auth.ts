@@ -20,12 +20,37 @@ function pickDisplayName(raw: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function mapRolesToAuthRole(roles: string[]): AuthRole {
+function mapRolesToAuthRoles(roles: string[]): AuthRole[] {
   const lower = roles.map((r) => r.toLowerCase());
+  const mapped = new Set<AuthRole>();
+
   if (lower.includes('warehouse_operator') || lower.includes('warehouse')) {
-    return 'WAREHOUSE';
+    mapped.add('WAREHOUSE');
   }
-  return 'DRIVER';
+  if (lower.includes('driver')) {
+    mapped.add('DRIVER');
+  }
+
+  // Backward-compatible fallback: legacy payloads without explicit driver role.
+  if (mapped.size === 0) {
+    mapped.add('DRIVER');
+  }
+
+  return [...mapped];
+}
+
+function pickPrimaryRole(roles: AuthRole[]): AuthRole {
+  if (roles.includes('DRIVER')) return 'DRIVER';
+  return 'WAREHOUSE';
+}
+
+function buildUser(id: string, roles: AuthRole[], name?: string): AuthUser {
+  const base: AuthUser = {
+    id,
+    role: pickPrimaryRole(roles),
+    roles,
+  };
+  return name !== undefined ? { ...base, name } : base;
 }
 
 function normalizeUser(raw: unknown): AuthUser | null {
@@ -37,23 +62,23 @@ function normalizeUser(raw: unknown): AuthUser | null {
   if (o.type === 'employee') {
     const name = pickDisplayName(o);
     const roles = o.roles;
-    const role: AuthRole =
+    const normalizedRoles: AuthRole[] =
       Array.isArray(roles) && roles.length > 0 && roles.every((r) => typeof r === 'string')
-        ? mapRolesToAuthRole(roles)
-        : 'DRIVER';
-    return name !== undefined ? { id: String(id), role, name } : { id: String(id), role };
+        ? mapRolesToAuthRoles(roles)
+        : ['DRIVER'];
+    return buildUser(String(id), normalizedRoles, name);
   }
 
   if (o.role === 'DRIVER' || o.role === 'WAREHOUSE') {
     const name = pickDisplayName(o);
-    return name !== undefined ? { id: String(id), role: o.role, name } : { id: String(id), role: o.role };
+    return buildUser(String(id), [o.role], name);
   }
 
   const roles = o.roles;
   if (Array.isArray(roles) && roles.every((r) => typeof r === 'string')) {
     const name = pickDisplayName(o);
-    const base = { id: String(id), role: mapRolesToAuthRole(roles) };
-    return name !== undefined ? { ...base, name } : base;
+    const normalizedRoles = mapRolesToAuthRoles(roles);
+    return buildUser(String(id), normalizedRoles, name);
   }
 
   return null;
