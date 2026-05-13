@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { isValidLatLng, toFiniteNumber } from '@core/geo/coordinates';
 
 import { apiClient } from './client';
@@ -55,13 +57,116 @@ export type AssignShipmentResponse = {
   tracking_id: string;
   status: string;
   already_assigned: boolean;
+  reassigned: boolean;
 };
 
-export async function assignShipmentByTracking(trackingId: string): Promise<AssignShipmentResponse> {
-  const { data } = await apiClient.post<AssignShipmentResponse>('/shipments/assign', {
-    tracking_id: trackingId.trim(),
+/** Structured reasons emitted by the backend on a 4xx scan attempt. */
+export type AssignScanReason =
+  | 'not_found'
+  | 'requires_confirmation'
+  | 'not_collected_yet'
+  | 'flex_not_supported'
+  | 'already_delivered'
+  | 'already_failed'
+  | 'already_returned'
+  | 'already_cancelled';
+
+export type AssignScanCurrentDriver = {
+  id: string;
+  name: string | null;
+};
+
+/** Typed error thrown by {@link assignShipmentByTracking} for known 4xx outcomes. */
+export class AssignScanError extends Error {
+  readonly status: number;
+
+  readonly reason: AssignScanReason | string;
+
+  readonly currentStatus: string | null;
+
+  readonly currentDriver: AssignScanCurrentDriver | null;
+
+  constructor(params: {
+    status: number;
+    reason: AssignScanReason | string;
+    message: string;
+    currentStatus?: string | null;
+    currentDriver?: AssignScanCurrentDriver | null;
+  }) {
+    super(params.message);
+    this.name = 'AssignScanError';
+    this.status = params.status;
+    this.reason = params.reason;
+    this.currentStatus = params.currentStatus ?? null;
+    this.currentDriver = params.currentDriver ?? null;
+  }
+}
+
+export type AssignShipmentByTrackingArgs = {
+  trackingId: string;
+  forceReassign?: boolean;
+};
+
+function parseAssignScanError(error: unknown): AssignScanError | null {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+  const status = error.response?.status;
+  if (typeof status !== 'number' || status < 400 || status >= 500) {
+    return null;
+  }
+  const body = error.response?.data;
+  const obj = body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+
+  const reason = typeof obj.reason === 'string' ? obj.reason : null;
+  if (reason === null) {
+    return null;
+  }
+
+  const currentStatus = typeof obj.current_status === 'string' ? obj.current_status : null;
+
+  let currentDriver: AssignScanCurrentDriver | null = null;
+  const driverRaw = obj.current_driver;
+  if (driverRaw !== null && typeof driverRaw === 'object') {
+    const d = driverRaw as Record<string, unknown>;
+    if (typeof d.id === 'string') {
+      currentDriver = {
+        id: d.id,
+        name: typeof d.name === 'string' ? d.name : null,
+      };
+    }
+  }
+
+  const message = typeof obj.message === 'string' && obj.message.length > 0 ? obj.message : reason;
+
+  return new AssignScanError({
+    status,
+    reason,
+    message,
+    currentStatus,
+    currentDriver,
   });
-  return data;
+}
+
+export async function assignShipmentByTracking(
+  args: AssignShipmentByTrackingArgs | string,
+): Promise<AssignShipmentResponse> {
+  const trackingId = typeof args === 'string' ? args : args.trackingId;
+  const forceReassign = typeof args === 'string' ? false : args.forceReassign === true;
+
+  try {
+    const { data } = await apiClient.post<AssignShipmentResponse>('/shipments/assign', {
+      tracking_id: trackingId.trim(),
+      force_reassign: forceReassign,
+    });
+    return data;
+  } catch (e) {
+    const scanError = parseAssignScanError(e);
+    if (scanError !== null) {
+      throw scanError;
+    }
+    throw e;
+  }
 }
 
 export type ShipmentNavigationStop = {
