@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
 import { useAuthStore } from '@store/useAuthStore';
 
@@ -38,3 +38,38 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+/**
+ * Mobile JWTs are issued without an `exp` claim, so they never expire on their own.
+ * The session is only invalidated by:
+ *  - the user logging out (handled in the UI), or
+ *  - the server reporting the credentials are no longer valid:
+ *    - any 401 (token blacklisted, revoked, signature invalid, user deleted, etc.)
+ *    - 403 specifically on `/auth/me`, which is how the backend signals an inactive account.
+ *
+ * Transient failures (timeouts, 5xx, offline) are NOT treated as a logout signal: the
+ * session is preserved so the app continues to work and retries succeed once the network
+ * is back.
+ */
+function shouldClearSessionOnError(status: number | undefined, url: string | undefined): boolean {
+  if (status === 401) return true;
+  if (status === 403 && typeof url === 'string' && url.includes('/auth/me')) return true;
+  return false;
+}
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (isAxiosError(error)) {
+      const status = error.response?.status;
+      const url = error.config?.url;
+      if (shouldClearSessionOnError(status, url)) {
+        const { isAuthenticated, clearSession } = useAuthStore.getState();
+        if (isAuthenticated) {
+          clearSession();
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
+);

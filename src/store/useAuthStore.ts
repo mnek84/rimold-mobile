@@ -39,19 +39,41 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   restoreSession: async () => {
+    let saved: { token: string; user: AuthUser } | null = null;
     try {
-      const saved = await getJSON<{ token: string; user: AuthUser }>(SESSION_KEY);
-      if (saved?.token) {
-        // Poner el token en el store para que el interceptor de axios lo use
-        set({ token: saved.token });
-        const user = await refreshSessionUser();
-        set({ token: saved.token, user, isAuthenticated: true, isLoading: false });
-        return;
-      }
+      saved = await getJSON<{ token: string; user: AuthUser }>(SESSION_KEY);
     } catch {
-      // Token inválido o expirado — limpiar storage y pedir login
-      void removeItem(SESSION_KEY);
+      // Storage ilegible — caer al flujo de login.
     }
+
+    if (saved?.token != null && saved.token !== '' && saved.user != null) {
+      // Restauración optimista: el token móvil no expira por tiempo, así que mostramos la app
+      // inmediatamente con la última sesión guardada. La validación contra /auth/me se hace en
+      // background; el interceptor del apiClient se encarga de limpiar la sesión si el servidor
+      // devuelve 401 (token revocado/usuario eliminado) o 403 (cuenta inactiva). Errores de red
+      // o 5xx no descartan la sesión: la app sigue funcionando hasta que el operario cierre
+      // sesión manualmente o el servidor confirme que la cuenta ya no es válida.
+      set({
+        token: saved.token,
+        user: saved.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+
+      try {
+        const user = await refreshSessionUser();
+        const state = useAuthStore.getState();
+        if (state.isAuthenticated && state.token === saved.token) {
+          set({ user });
+          void setJSON(SESSION_KEY, { token: saved.token, user });
+        }
+      } catch {
+        // 401/403 ya fueron manejados por el interceptor del apiClient (clearSession).
+        // Cualquier otro error (red, timeout, 5xx) se ignora para preservar la sesión.
+      }
+      return;
+    }
+
     set({ token: null, user: null, isAuthenticated: false, isLoading: false });
   },
 }));
