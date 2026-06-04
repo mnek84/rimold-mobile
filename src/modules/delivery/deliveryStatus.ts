@@ -4,7 +4,9 @@ import type { AppTheme } from '@theme';
 export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados';
 
 const ENTREGADOS = new Set(['delivered', 'returned']);
-const EN_RUTA = new Set(['out_for_delivery', 'in_transit']);
+// `in_depot` is reused on the driver side as "Cerca" (near destination); it sits
+// between `out_for_delivery` and the final state, so it lists as "En ruta".
+const EN_RUTA = new Set(['out_for_delivery', 'in_transit', 'in_depot']);
 
 /** Bucket for list grouping (Spanish UI labels). */
 export function statusDeliveryGroup(status: string): DeliveryGroup {
@@ -29,7 +31,6 @@ const GROUP_LABEL: Record<DeliveryGroup, string> = {
 /** Higher = closer to delivery attempt (for “next” pick within pendientes). */
 const PENDING_PRIORITY: Record<string, number> = {
   assigned: 60,
-  in_depot: 50,
   pending_route: 48,
   in_cage: 40,
   collected: 35,
@@ -112,8 +113,11 @@ export function formatDriverShipmentStatusLabel(code: string): string {
 }
 
 /**
- * Fase operativa API (0–3): asignación/bodega → in_depot → out_for_delivery → terminal.
- * La barra de lista sigue este orden cronológico; el timeline muestra los mismos hitos con títulos de conductor.
+ * Driver-side phase (0–3) used to drive the timeline + action enablement:
+ *   0 = pre-delivery (assigned, picked, in_cage, …)
+ *   1 = "En camino" (out_for_delivery / integration in_transit) — driver left
+ *   2 = "Cerca"     (in_depot reused as near-destination)        — driver arriving
+ *   3 = terminal    (delivered, returned, failed, cancelled)
  */
 export function shipmentDriverPhaseIndex(statusCode: string | null | undefined): number {
   const s = (statusCode ?? '').trim().toLowerCase();
@@ -122,10 +126,10 @@ export function shipmentDriverPhaseIndex(statusCode: string | null | undefined):
   ) {
     return 0;
   }
-  if (s === 'in_depot') {
+  if (s === 'out_for_delivery' || s === 'in_transit') {
     return 1;
   }
-  if (s === 'out_for_delivery' || s === 'in_transit') {
+  if (s === 'in_depot') {
     return 2;
   }
   if (['delivered', 'returned', 'failed', 'cancelled'].includes(s)) {
@@ -164,7 +168,9 @@ export function shipmentListBadgeKind(status: string): ShipmentListBadgeKind {
   if (s === 'failed' || s === 'cancelled') {
     return 'failed';
   }
-  if (s === 'out_for_delivery' || s === 'in_transit') {
+  // `in_depot` is reused on the driver side as "Cerca" (near destination),
+  // which is part of the in-transit phase from the driver's POV.
+  if (s === 'out_for_delivery' || s === 'in_transit' || s === 'in_depot') {
     return 'in_transit';
   }
   return 'pending';
@@ -224,9 +230,12 @@ export function isDriverActionEnabled(
     case 'en_camino':
       return ['assigned', 'created', 'picked', 'in_cage', 'pending_route', 'collected'].includes(s);
     case 'cerca':
-      return s === 'in_depot';
-    case 'entregado':
       return s === 'out_for_delivery' || s === 'in_transit';
+    case 'entregado':
+      // Delivery is allowed both from "En camino" (out_for_delivery) and from
+      // "Cerca" (in_depot) so the driver does not have to wait for the
+      // geofence to flip the state.
+      return s === 'out_for_delivery' || s === 'in_transit' || s === 'in_depot';
     case 'fallido':
       return [
         'assigned',
@@ -253,7 +262,11 @@ export type TimelineStepUi = {
 
 /**
  * Avance del envío (orden pantalla): Asignado → En camino → Cerca → Entregado / Falla.
- * API: fase 0 bodega/asignación, 1 in_depot (acción “cerca”), 2 out_for_delivery (camino al destino), 3 cierre.
+ * Cada paso corresponde 1:1 con la fase del conductor (ver shipmentDriverPhaseIndex):
+ *   step 0 = Asignado (phase 0)
+ *   step 1 = En camino (phase 1, out_for_delivery)
+ *   step 2 = Cerca     (phase 2, in_depot)
+ *   step 3 = terminal  (phase 3)
  */
 export function buildShipmentTimeline(statusCode: string | null | undefined): TimelineStepUi[] {
   const s = (statusCode ?? '').trim().toLowerCase();
@@ -278,31 +291,12 @@ export function buildShipmentTimeline(statusCode: string | null | undefined): Ti
       if (apiPhase < 3) {
         return 'upcoming';
       }
-      if (s === 'failed' || s === 'cancelled') {
-        return 'error';
-      }
-      return 'done';
+      return s === 'failed' || s === 'cancelled' ? 'error' : 'done';
     }
-    if (stepIdx === 0) {
-      return apiPhase === 0 ? 'current' : 'done';
-    }
-    if (stepIdx === 1) {
-      if (apiPhase === 0) {
-        return 'upcoming';
-      }
-      if (apiPhase === 1) {
-        return 'done';
-      }
-      if (apiPhase === 2) {
-        return 'current';
-      }
-      return 'done';
-    }
-    // step 2 — Cerca (in_depot)
-    if (apiPhase <= 0) {
+    if (apiPhase < stepIdx) {
       return 'upcoming';
     }
-    if (apiPhase === 1) {
+    if (apiPhase === stepIdx) {
       return 'current';
     }
     return 'done';
