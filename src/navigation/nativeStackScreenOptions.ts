@@ -1,19 +1,26 @@
 import type { NativeStackNavigationOptions } from '@react-navigation/native-stack';
+import { useMemo } from 'react';
 
-import { theme } from '@theme';
+import { useTheme } from '@theme';
 
-/** Headers alineados con superficie oscura de la app (evita barra superior blanca por defecto). */
-export const driverNativeStackScreenOptions: NativeStackNavigationOptions = {
-  headerTitleAlign: 'center',
-  headerStyle: {
-    backgroundColor: theme.colors.surface,
-  },
-  headerShadowVisible: false,
-  headerTintColor: theme.colors.primary,
-  headerTitleStyle: {
-    ...theme.typography.bodyStrong,
-    color: theme.colors.text,
-  },
-  animation: 'slide_from_right',
-  animationDuration: theme.motion.stackTransitionMs,
-};
+/** Headers alineados con la superficie activa (claro u oscuro segun el sistema). */
+export function useDriverNativeStackScreenOptions(): NativeStackNavigationOptions {
+  const theme = useTheme();
+  return useMemo<NativeStackNavigationOptions>(
+    () => ({
+      headerTitleAlign: 'center',
+      headerStyle: {
+        backgroundColor: theme.colors.surface,
+      },
+      headerShadowVisible: false,
+      headerTintColor: theme.colors.primary,
+      headerTitleStyle: {
+        ...theme.typography.bodyStrong,
+        color: theme.colors.text,
+      },
+      animation: 'slide_from_right',
+      animationDuration: theme.motion.stackTransitionMs,
+    }),
+    [theme],
+  );
+}

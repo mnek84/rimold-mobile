@@ -15,7 +15,7 @@ import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
 import { isValidLatLng } from '@core/geo/coordinates';
 import type { DeliveryStackParamList } from '@navigation/deliveryStackTypes';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = NativeStackScreenProps<DeliveryStackParamList, 'FlexBatchMap'>;
 
@@ -261,7 +261,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: spacing.md,
@@ -273,7 +273,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     bannerTitle: {
       ...typography.bodyStrong,
@@ -312,7 +312,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       marginRight: spacing.sm,
     },
     chipRank: {
@@ -339,7 +339,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       marginBottom: spacing.sm,
     },
     shipRowSelected: {

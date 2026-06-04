@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 const ROW_COUNT = 5;
 
@@ -42,7 +42,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusCard,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       padding: spacing.lg,
       marginBottom: spacing.md,
     },

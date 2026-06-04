@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 export type QrScannerProps = {
   /** Called once per successful scan after cooldown (receives raw QR string). */
@@ -103,7 +103,7 @@ function createScannerStyles(t: AppTheme) {
       paddingHorizontal: spacing.xl,
       borderRadius: spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     buttonPressed: {
       opacity: motion.pressOpacitySoft,

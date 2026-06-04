@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import SignatureCanvas, { type SignatureViewRef } from 'react-native-signature-canvas';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 export type SignaturePadHandle = {
   clear: () => void;
@@ -35,8 +35,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, Props>(function Signa
   const theme = useTheme();
   const styles = useMemo(() => createPadStyles(theme), [theme]);
   const webStyleStr = useMemo(
-    () => webStyle(borderSubtle, theme.spacing.radiusMd),
-    [theme.spacing.radiusMd],
+    () => webStyle(theme.colors.border, theme.spacing.radiusMd),
+    [theme.colors.border, theme.spacing.radiusMd],
   );
   const canvasRef = useRef<SignatureViewRef>(null);
 

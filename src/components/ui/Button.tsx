@@ -10,7 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -37,7 +37,7 @@ function variantStyles(theme: AppTheme, variant: Variant): VariantStyle {
       return {
         container: {
           backgroundColor: colors.surface,
-          borderColor: borderSubtle,
+          borderColor: colors.border,
         },
         labelColor: colors.text,
         spinnerColor: colors.text,
@@ -46,7 +46,7 @@ function variantStyles(theme: AppTheme, variant: Variant): VariantStyle {
       return {
         container: {
           backgroundColor: 'transparent',
-          borderColor: borderSubtle,
+          borderColor: colors.border,
         },
         labelColor: colors.text,
         spinnerColor: colors.text,

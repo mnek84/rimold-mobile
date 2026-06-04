@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '@components/ui';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 import type { TimelineStepUi } from '../deliveryStatus';
 
@@ -131,7 +131,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.success,
     },
     timelineLineMuted: {
-      backgroundColor: borderSubtle,
+      backgroundColor: colors.border,
     },
     timelineStepTitle: {
       flex: 1,

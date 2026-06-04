@@ -18,7 +18,7 @@ import { queryClient } from '@core/query/queryClient';
 import { processQueue, useSyncStatusStore } from '@core/sync';
 import type { MainTabParamList } from '@navigation/types';
 import { useAuthStore } from '@store/useAuthStore';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Ajustes'>;
 
@@ -339,7 +339,7 @@ function createStyles(t: AppTheme) {
     },
     rowDivider: {
       height: StyleSheet.hairlineWidth,
-      backgroundColor: borderSubtle,
+      backgroundColor: colors.border,
       marginVertical: spacing.xs,
     },
     rowLabel: {

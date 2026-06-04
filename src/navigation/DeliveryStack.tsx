@@ -5,16 +5,17 @@ import { DeliveryListScreen } from '@modules/delivery/DeliveryListScreen';
 import { FlexBatchMapScreen } from '@modules/delivery/FlexBatchMapScreen';
 import { InternalRouteScreen } from '@modules/delivery/InternalRouteScreen';
 
-import { driverNativeStackScreenOptions } from './nativeStackScreenOptions';
+import { useDriverNativeStackScreenOptions } from './nativeStackScreenOptions';
 import type { DeliveryStackParamList } from './deliveryStackTypes';
 
 const Stack = createNativeStackNavigator<DeliveryStackParamList>();
 
 export function DeliveryStack() {
+  const screenOptions = useDriverNativeStackScreenOptions();
   return (
     <Stack.Navigator
       initialRouteName="DeliveryList"
-      screenOptions={driverNativeStackScreenOptions}
+      screenOptions={screenOptions}
     >
       <Stack.Screen name="DeliveryList" component={DeliveryListScreen} options={{ title: 'Entregas' }} />
       <Stack.Screen

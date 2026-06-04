@@ -5,7 +5,7 @@ import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import type { ShipmentNavigationStop } from '@core/api/shipments';
 import { decodeEncodedPolyline } from '@core/geo/decodePolyline';
 import { isValidLatLng } from '@core/geo/coordinates';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = {
   stops: ShipmentNavigationStop[];
@@ -170,7 +170,7 @@ function createMapStyles(t: AppTheme) {
       borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       padding: spacing.lg,

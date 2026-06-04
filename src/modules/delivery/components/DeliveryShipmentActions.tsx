@@ -45,35 +45,35 @@ function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): Acti
   switch (variant) {
     case 'primary':
       return {
-        backgroundColor: '#1e40af',
-        iconColor: '#93c5fd',
-        labelColor: '#ffffff',
-        sublabelColor: '#bfdbfe',
-        shadowColor: '#1d4ed8',
+        backgroundColor: colors.primary,
+        iconColor: colors.primaryOn,
+        labelColor: colors.primaryOn,
+        sublabelColor: colors.primaryOn,
+        shadowColor: colors.primary,
       };
     case 'secondary':
       return {
-        backgroundColor: '#164e63',
-        iconColor: '#67e8f9',
-        labelColor: '#ffffff',
-        sublabelColor: '#a5f3fc',
-        shadowColor: '#0891b2',
+        backgroundColor: colors.surfaceMuted,
+        iconColor: colors.text,
+        labelColor: colors.text,
+        sublabelColor: colors.muted,
+        shadowColor: colors.text,
       };
     case 'success':
       return {
-        backgroundColor: '#14532d',
-        iconColor: '#86efac',
-        labelColor: '#ffffff',
-        sublabelColor: '#bbf7d0',
-        shadowColor: '#16a34a',
+        backgroundColor: colors.success,
+        iconColor: colors.successOn,
+        labelColor: colors.successOn,
+        sublabelColor: colors.successOn,
+        shadowColor: colors.success,
       };
     case 'danger':
       return {
-        backgroundColor: '#7f1d1d',
-        iconColor: '#fca5a5',
-        labelColor: '#ffffff',
-        sublabelColor: '#fecaca',
-        shadowColor: '#dc2626',
+        backgroundColor: colors.danger,
+        iconColor: colors.dangerOn,
+        labelColor: colors.dangerOn,
+        sublabelColor: colors.dangerOn,
+        shadowColor: colors.danger,
       };
   }
 }

@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@components/ui';
 import type { DeliveryStackParamList } from '@navigation/deliveryStackTypes';
-import { borderSubtle, useTheme } from '@theme';
+import { useTheme } from '@theme';
 
 import { DeliveryShipmentActions } from './components/DeliveryShipmentActions';
 import { DeliveryShipmentDetailHeader } from './components/DeliveryShipmentDetailHeader';
@@ -81,7 +81,7 @@ function createShellStyles(t: ReturnType<typeof useTheme>) {
     },
     headerDivider: {
       height: StyleSheet.hairlineWidth,
-      backgroundColor: borderSubtle,
+      backgroundColor: colors.border,
       marginTop: spacing.xl,
       marginBottom: spacing.lg,
     },
@@ -89,7 +89,7 @@ function createShellStyles(t: ReturnType<typeof useTheme>) {
       marginTop: spacing.xl,
       paddingTop: spacing.xl,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: borderSubtle,
+      borderTopColor: colors.border,
     },
     errorBanner: {
       padding: spacing.md,

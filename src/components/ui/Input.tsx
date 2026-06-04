@@ -9,7 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 export type InputProps = TextInputProps & {
   label?: string;
@@ -60,7 +60,7 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusLg,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,

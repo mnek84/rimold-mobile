@@ -12,7 +12,7 @@ import {
 
 import { Card } from '@components/ui';
 import type { TodayShipmentRow } from '@core/api/shipments';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 import {
   formatDriverShipmentStatusLabel,
@@ -100,7 +100,7 @@ export function DeliveryListView({
           <Ionicons
             name="scan-outline"
             size={20}
-            color={scanDisabled ? theme.colors.muted : '#ffffff'}
+            color={scanDisabled ? theme.colors.muted : theme.colors.primaryOn}
             style={styles.scanIcon}
           />
           <Text style={[styles.btnScanLabel, scanDisabled && styles.btnScanLabelDisabled]}>
@@ -149,7 +149,7 @@ export function DeliveryListView({
         <View style={styles.shipmentCardClip}>
           {isNext && (
             <View style={styles.nextBanner}>
-              <Ionicons name="navigate" size={13} color="#ffffff" />
+              <Ionicons name="navigate" size={13} color={theme.colors.primaryOn} />
               <Text style={styles.nextBannerText}>Siguiente entrega</Text>
             </View>
           )}
@@ -301,7 +301,7 @@ function createStyles(t: AppTheme) {
     btnScanLabel: {
       ...typography.bodyStrong,
       fontSize: 17,
-      color: '#ffffff',
+      color: colors.primaryOn,
     },
     btnScanLabelDisabled: {
       color: colors.muted,
@@ -316,7 +316,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     flexMapLabel: {
       ...typography.captionStrong,
@@ -359,7 +359,7 @@ function createStyles(t: AppTheme) {
     },
     sectionRule: {
       height: 1,
-      backgroundColor: borderSubtle,
+      backgroundColor: colors.border,
     },
     emptyState: {
       alignItems: 'center',
@@ -375,7 +375,7 @@ function createStyles(t: AppTheme) {
       borderRadius: 48,
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: spacing.lg,
@@ -420,7 +420,7 @@ function createStyles(t: AppTheme) {
     },
     nextBannerText: {
       ...typography.captionStrong,
-      color: '#ffffff',
+      color: colors.primaryOn,
       letterSpacing: 0.3,
     },
     shipmentBody: {

@@ -197,8 +197,8 @@ export function shipmentListBadgeColors(
       };
     default:
       return {
-        bg: 'rgba(148, 163, 184, 0.18)',
-        border: 'rgba(148, 163, 184, 0.35)',
+        bg: colors.surfaceMuted,
+        border: colors.border,
         text: colors.muted,
       };
   }

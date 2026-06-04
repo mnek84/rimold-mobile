@@ -1,5 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +17,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Card, Input, ScreenContainer } from '@components/ui';
 import { fetchClientsPage } from '@core/api/clients';
+import { calculateDistance } from '@core/geo/calculateDistance';
 import { isValidLatLng } from '@core/geo/coordinates';
 import { useUserLocation } from '@hooks/useUserLocation';
 import type { ColectaClient } from '@modules/colecta/types';
@@ -27,7 +29,7 @@ import {
 import { formatWarehouseDistanceLabel } from '@modules/colecta/formatWarehouseDistanceLabel';
 import { sortClientsWarehousesByUserDistance } from '@modules/colecta/sortWarehousesByUserDistance';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 import type { ColectaWarehouse } from './types';
 
@@ -47,6 +49,14 @@ const MAX_STAGGER_INDEX = 22;
 const STAGGER_MS = 34;
 const CLIENTS_PER_PAGE = 25;
 const SEARCH_DEBOUNCE_MS = 350;
+/** Cuantos depositos sugeridos mostrar arriba del listado completo. */
+const SUGGESTED_LIMIT = 3;
+
+type SuggestedRow = {
+  client: ColectaClient;
+  warehouse: ColectaWarehouse;
+  distanceKm: number;
+};
 
 function useDebouncedValue<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -134,6 +144,39 @@ export function ClientSelectionScreen({ navigation }: Props) {
     }
     return m;
   }, [clients, sortByDistance]);
+
+  /**
+   * Top-N depositos mas cercanos al chofer, planos (sin agrupar por cliente).
+   * Solo aparecen cuando hay GPS real y no hay busqueda activa por texto.
+   */
+  const suggested = useMemo<SuggestedRow[]>(() => {
+    if (!sortByDistance || debouncedSearch.trim() !== '') {
+      return [];
+    }
+    const candidates: SuggestedRow[] = [];
+    for (const client of clients) {
+      for (const warehouse of client.warehouses) {
+        const km = calculateDistance(
+          userLat,
+          userLng,
+          warehouse.latitude,
+          warehouse.longitude,
+        );
+        if (km === null) {
+          continue;
+        }
+        candidates.push({ client, warehouse, distanceKm: km });
+      }
+    }
+    candidates.sort((a, b) => a.distanceKm - b.distanceKm);
+    return candidates.slice(0, SUGGESTED_LIMIT);
+  }, [clients, debouncedSearch, sortByDistance, userLat, userLng]);
+
+  /** IDs de los warehouses ya mostrados en sugeridos, para evitar enfasis duplicado abajo. */
+  const suggestedWarehouseIds = useMemo(
+    () => new Set(suggested.map((row) => row.warehouse.id)),
+    [suggested],
+  );
 
   const sections = useMemo((): ClientSection[] => {
     return clients.map((client, sectionIndex) => ({
@@ -260,7 +303,9 @@ export function ClientSelectionScreen({ navigation }: Props) {
       }
 
       const { client, warehouse } = item;
-      const isClosest = closestWarehouseIdByClientId.get(client.id) === warehouse.id;
+      const isSuggestedAbove = suggestedWarehouseIds.has(warehouse.id);
+      const isClosest =
+        !isSuggestedAbove && closestWarehouseIdByClientId.get(client.id) === warehouse.id;
       const showDistanceRow = sortByDistance;
       const distanceText = showDistanceRow
         ? formatWarehouseDistanceLabel(warehouse, userLat, userLng)
@@ -316,6 +361,7 @@ export function ClientSelectionScreen({ navigation }: Props) {
       onSelectWarehouse,
       sortByDistance,
       styles,
+      suggestedWarehouseIds,
       userLat,
       userLng,
     ],
@@ -327,6 +373,84 @@ export function ClientSelectionScreen({ navigation }: Props) {
     }
     return item.warehouse.id;
   }, []);
+
+  const renderSuggestedCard = useCallback(
+    (row: SuggestedRow, index: number) => {
+      const distanceText = formatWarehouseDistanceLabel(row.warehouse, userLat, userLng);
+      const card = (
+        <Card
+          padding="md"
+          onPress={() => onSelectWarehouse(row.client, row.warehouse)}
+          style={styles.suggestedCard}
+        >
+          <Text style={styles.suggestedClientLabel} numberOfLines={1}>
+            {row.client.name}
+          </Text>
+          <Text style={styles.suggestedWarehouseName} numberOfLines={1}>
+            {row.warehouse.name}
+          </Text>
+          {row.warehouse.address != null && row.warehouse.address.trim() !== '' ? (
+            <Text style={styles.warehouseAddress} numberOfLines={2}>
+              {row.warehouse.address}
+            </Text>
+          ) : null}
+          <View style={styles.distanceRow}>
+            <Text style={styles.distanceLabel}>Distancia</Text>
+            <Text style={styles.distanceValue}>{distanceText}</Text>
+          </View>
+        </Card>
+      );
+
+      if (Platform.OS === 'web') {
+        return <View key={`${animEpoch}-suggested-${row.warehouse.id}`}>{card}</View>;
+      }
+
+      return (
+        <Animated.View
+          key={`${animEpoch}-suggested-${row.warehouse.id}`}
+          entering={FadeInDown.duration(260).delay(index * STAGGER_MS)}
+        >
+          {card}
+        </Animated.View>
+      );
+    },
+    [animEpoch, onSelectWarehouse, styles, userLat, userLng],
+  );
+
+  const listHeader = useMemo(() => {
+    const showSuggested = suggested.length > 0;
+    const showAllDivider = showSuggested && sections.length > 0;
+    if (!showSuggested && !showAllDivider) {
+      return null;
+    }
+    return (
+      <View>
+        {showSuggested ? (
+          <View style={styles.suggestedBlock}>
+            <View style={styles.suggestedHeader}>
+              <Ionicons name="navigate" size={14} color={theme.colors.primary} />
+              <Text style={styles.suggestedHeaderTitle}>Sugeridos cercanos</Text>
+            </View>
+            <Text style={styles.suggestedHeaderHint}>
+              Los depósitos más próximos a tu ubicación
+            </Text>
+            {suggested.map((row, idx) => renderSuggestedCard(row, idx))}
+          </View>
+        ) : null}
+        {showAllDivider ? (
+          <View style={styles.allClientsHeader}>
+            <Text style={styles.allClientsTitle}>Todos los clientes</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  }, [
+    renderSuggestedCard,
+    sections.length,
+    styles,
+    suggested,
+    theme.colors.primary,
+  ]);
 
   return (
     <ScreenContainer contentContainerStyle={styles.screenBody}>
@@ -362,6 +486,7 @@ export function ClientSelectionScreen({ navigation }: Props) {
           keyExtractor={keyExtractor}
           renderSectionHeader={renderSectionHeader}
           renderItem={renderItem}
+          ListHeaderComponent={listHeader}
           style={styles.list}
           contentContainerStyle={sections.length === 0 ? styles.listEmpty : styles.listContent}
           stickySectionHeadersEnabled={false}
@@ -432,12 +557,59 @@ function createStyles(t: AppTheme) {
       paddingTop: spacing.lg,
       paddingBottom: spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: borderSubtle,
+      borderBottomColor: colors.border,
       marginBottom: spacing.sm,
     },
     sectionTitle: {
       ...typography.subtitle,
       color: colors.text,
+    },
+    suggestedBlock: {
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.md,
+    },
+    suggestedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    suggestedHeaderTitle: {
+      ...typography.captionStrong,
+      color: colors.primary,
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
+    },
+    suggestedHeaderHint: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: 2,
+      marginBottom: spacing.md,
+    },
+    suggestedCard: {
+      marginBottom: spacing.md,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+    },
+    suggestedClientLabel: {
+      ...typography.captionStrong,
+      color: colors.primary,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      marginBottom: spacing.xs,
+    },
+    suggestedWarehouseName: {
+      ...typography.subtitle,
+      color: colors.text,
+    },
+    allClientsHeader: {
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xs,
+    },
+    allClientsTitle: {
+      ...typography.captionStrong,
+      color: colors.muted,
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
     },
     warehouseCard: {
       marginBottom: spacing.md,
@@ -445,11 +617,13 @@ function createStyles(t: AppTheme) {
     warehouseCardClosest: {
       borderWidth: 1.5,
       borderColor: colors.primary,
-      backgroundColor: 'rgba(37, 99, 235, 0.08)',
+      backgroundColor: colors.surfaceMuted,
     },
     closestBadge: {
       alignSelf: 'flex-start',
-      backgroundColor: 'rgba(37, 99, 235, 0.22)',
+      backgroundColor: colors.surfaceMuted,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.primary,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
       borderRadius: spacing.radiusSm,
@@ -476,7 +650,7 @@ function createStyles(t: AppTheme) {
       marginTop: spacing.md,
       paddingTop: spacing.md,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: borderSubtle,
+      borderTopColor: colors.border,
     },
     distanceLabel: {
       ...typography.caption,

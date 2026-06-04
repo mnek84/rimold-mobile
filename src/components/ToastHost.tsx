@@ -3,7 +3,7 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useToastStore } from '@core/feedback/toastStore';
-import { borderSubtle, useTheme } from '@theme';
+import { useTheme } from '@theme';
 
 /**
  * Renders brief toasts above the tab bar. Mount once under {@link ThemeProvider}.
@@ -52,7 +52,7 @@ export function ToastHost() {
             transform: [{ translateY }],
             backgroundColor: colors.surface,
             borderRadius: spacing.radiusMd,
-            borderColor: borderSubtle,
+            borderColor: colors.border,
             paddingVertical: spacing.sm + 2,
             paddingHorizontal: spacing.md + 4,
           },

@@ -1,7 +1,7 @@
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,8 +22,10 @@ import {
   scanPackageIntoCage,
   type WarehouseCageListItem,
 } from '@core/api/cagesWarehouse';
+import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
+import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
 import type { BodegaStackNav, BodegaStackRoute } from '@navigation/bodegaStackTypes';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 function axiosMessage(e: unknown, fallback: string): string {
   if (isAxiosError(e)) {
@@ -45,6 +47,8 @@ export function CageListScreen() {
   const [search, setSearch] = useState('');
   const [cageScannerOpen, setCageScannerOpen] = useState(false);
   const [cageScanError, setCageScanError] = useState<string | null>(null);
+  const [packageScannerOpen, setPackageScannerOpen] = useState(false);
+  const [packageScanError, setPackageScanError] = useState<string | null>(null);
 
   const transfer =
     route.params?.mode === 'transfer'
@@ -83,25 +87,33 @@ export function CageListScreen() {
     },
   });
 
+  useEffect(() => {
+    prepareScanAudio();
+  }, []);
+
   const resolveCageQrMutation = useMutation({
     mutationFn: (raw: string) => resolveWarehouseCageQr(raw),
     onSuccess: (cage) => {
       setCageScanError(null);
       if (transfer !== null) {
         if (cage.id === transfer.excludeCageId) {
+          playScanFeedback('error');
           setCageScanError('Esa es la jaula de origen. Elegí otra.');
           return;
         }
         const t = transfer.tracking.trim();
         if (t === '') return;
+        playScanFeedback('success');
         setCageScannerOpen(false);
         transferMutation.mutate({ cage: { id: cage.id, name: cage.name }, tracking: t });
         return;
       }
+      playScanFeedback('success');
       setCageScannerOpen(false);
       navigation.navigate('CageWorkspace', { cageId: cage.id, cageName: cage.name });
     },
     onError: (e: unknown) => {
+      playScanFeedback('error');
       setCageScanError(axiosMessage(e, 'No se pudo leer la jaula.'));
     },
   });
@@ -127,6 +139,37 @@ export function CageListScreen() {
     },
     [resolveCageQrMutation, transferMutation.isPending],
   );
+
+  const onPackageQrScanned = useCallback(
+    (raw: string) => {
+      if (!packageScannerOpen) return;
+      const tracking = normalizeShipmentScanToLookupKey(raw);
+      if (tracking === '') {
+        playScanFeedback('error');
+        setPackageScanError('No se pudo leer el QR del paquete. Probá otra vez.');
+        return;
+      }
+      playScanFeedback('success');
+      setPackageScanError(null);
+      setPackageScannerOpen(false);
+      navigation.setParams({
+        mode: 'transfer',
+        transferTracking: tracking,
+        excludeCageId: undefined,
+        transferFromLabel: '',
+      });
+    },
+    [navigation, packageScannerOpen],
+  );
+
+  const onCancelTransfer = useCallback(() => {
+    navigation.setParams({
+      mode: undefined,
+      transferTracking: undefined,
+      excludeCageId: undefined,
+      transferFromLabel: undefined,
+    });
+  }, [navigation]);
 
   const renderItem = useCallback(
     ({ item }: { item: WarehouseCageListItem }) => {
@@ -158,7 +201,24 @@ export function CageListScreen() {
   const intro =
     transfer !== null ? (
       <View style={styles.transferBanner}>
-        <Text style={styles.transferTitle}>Transferir paquete</Text>
+        <View style={styles.transferHeaderRow}>
+          <Text style={styles.transferTitle}>Transferir paquete</Text>
+          <Pressable
+            style={styles.transferCancelBtn}
+            onPress={onCancelTransfer}
+            disabled={transferMutation.isPending}
+            hitSlop={8}
+          >
+            <Text
+              style={[
+                styles.transferCancelLabel,
+                transferMutation.isPending && styles.transferCancelLabelDisabled,
+              ]}
+            >
+              Cancelar
+            </Text>
+          </Pressable>
+        </View>
         <Text style={styles.transferBody}>
           Elegí la jaula destino para el tracking{' '}
           <Text style={styles.transferMono}>{transfer.tracking}</Text>
@@ -176,8 +236,9 @@ export function CageListScreen() {
       </View>
     ) : (
       <Text style={styles.intro}>
-        Elegí una jaula con la búsqueda o escaneando el QR pegado al contenedor. Después escaneá los paquetes. Para mover
-        un envío, usá &quot;Mover&quot; desde la jaula actual.
+        Elegí una jaula con la búsqueda o escaneando el QR pegado al contenedor. Después escaneá los paquetes.
+        Para reubicar un envío entre jaulas, tocá &quot;Mover paquete&quot; o usá &quot;Mover&quot; desde la
+        jaula actual.
       </Text>
     );
 
@@ -216,8 +277,28 @@ export function CageListScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.muted} />
           </Pressable>
+          {transfer === null ? (
+            <Pressable
+              style={({ pressed }) => [styles.movePackageBtn, pressed && styles.scanCageBtnPressed]}
+              onPress={() => {
+                setPackageScanError(null);
+                setPackageScannerOpen(true);
+              }}
+              disabled={transferMutation.isPending}
+            >
+              <Ionicons name="swap-horizontal-outline" size={22} color={theme.colors.primary} />
+              <View style={styles.scanCageBtnText}>
+                <Text style={styles.scanCageBtnTitle}>Mover paquete entre jaulas</Text>
+                <Text style={styles.scanCageBtnSub}>Escaneá el envío y elegí la jaula destino</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.muted} />
+            </Pressable>
+          ) : null}
           {cageScanError !== null && !cageScannerOpen ? (
             <Text style={styles.cageScanErr}>{cageScanError}</Text>
+          ) : null}
+          {packageScanError !== null && !packageScannerOpen ? (
+            <Text style={styles.cageScanErr}>{packageScanError}</Text>
           ) : null}
           <FlatList
             data={filteredCages}
@@ -259,6 +340,26 @@ export function CageListScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      <Modal
+        visible={packageScannerOpen}
+        animationType="slide"
+        onRequestClose={() => setPackageScannerOpen(false)}
+      >
+        <View style={styles.cageModalWrap}>
+          <Text style={styles.cageModalTitle}>Escaneá el paquete a mover</Text>
+          <Text style={styles.cageModalSub}>
+            Apuntá al QR del envío. Después vas a elegir la jaula destino.
+          </Text>
+          {packageScanError !== null ? (
+            <Text style={styles.cageModalErr}>{packageScanError}</Text>
+          ) : null}
+          <QrScanner onScan={onPackageQrScanned} containerStyle={styles.cageScannerBox} />
+          <Pressable style={styles.cageModalClose} onPress={() => setPackageScannerOpen(false)}>
+            <Text style={styles.cageModalCloseLabel}>Cerrar</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -276,13 +377,25 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusMd,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm + 2,
       marginBottom: spacing.sm,
     },
     scanCageBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: spacing.radiusMd,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.primary + '44',
+    },
+    movePackageBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
@@ -333,6 +446,12 @@ function createStyles(t: AppTheme) {
       textAlign: 'center',
       marginBottom: spacing.sm,
     },
+    cageModalSub: {
+      ...typography.caption,
+      color: colors.muted,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
     cageScannerBox: {
       flex: 1,
       minHeight: 320,
@@ -364,10 +483,28 @@ function createStyles(t: AppTheme) {
       borderWidth: 1,
       borderColor: colors.primary + '55',
     },
+    transferHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+    transferCancelBtn: {
+      paddingVertical: 2,
+      paddingHorizontal: spacing.sm,
+      borderRadius: spacing.radiusSm,
+    },
+    transferCancelLabel: {
+      ...typography.captionStrong,
+      color: colors.danger,
+    },
+    transferCancelLabelDisabled: {
+      opacity: 0.5,
+    },
     transferTitle: {
       ...typography.bodyStrong,
       color: colors.text,
-      marginBottom: spacing.xs,
     },
     transferBody: {
       ...typography.caption,
@@ -409,7 +546,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     cardPressed: {
       opacity: 0.92,

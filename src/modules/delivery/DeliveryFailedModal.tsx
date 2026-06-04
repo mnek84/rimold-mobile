@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
 import { enqueueEvent, EventType } from '@core/sync';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 import { useDeliveryFailureReasonsQuery } from '@modules/delivery/hooks/useDeliveryFailureReasonsQuery';
 
@@ -253,7 +253,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
       borderBottomWidth: 1,
-      borderBottomColor: borderSubtle,
+      borderBottomColor: colors.border,
     },
     headerTitle: {
       ...typography.subtitle,
@@ -316,7 +316,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.md,
       borderRadius: spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       backgroundColor: colors.surface,
     },
     reasonRowSelected: {
@@ -333,7 +333,7 @@ function createStyles(t: AppTheme) {
     noteInput: {
       minHeight: 100,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusMd,
       paddingHorizontal: spacing.md + 2,
       paddingVertical: spacing.md,
@@ -353,7 +353,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     photoBtnLabel: {
       ...typography.bodyStrong,

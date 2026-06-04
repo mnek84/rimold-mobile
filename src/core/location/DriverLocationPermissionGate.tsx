@@ -5,7 +5,7 @@ import {
   getDriverLocationBlockedReason,
   subscribeDriverLocationBlocked,
 } from './driverLocationTracking';
-import { borderSubtle, useTheme } from '@theme';
+import { useTheme } from '@theme';
 
 /**
  * Blocks interaction until the driver grants location access (foreground / always).
@@ -30,7 +30,7 @@ export function DriverLocationPermissionGate() {
             styles.card,
             {
               backgroundColor: theme.colors.surface,
-              borderColor: borderSubtle,
+              borderColor: theme.colors.border,
             },
           ]}
         >
@@ -47,7 +47,7 @@ export function DriverLocationPermissionGate() {
               { backgroundColor: theme.colors.primary, opacity: pressed ? 0.85 : 1 },
             ]}
           >
-            <Text style={[styles.buttonLabel, theme.typography.bodyStrong, { color: '#ffffff' }]}>
+            <Text style={[styles.buttonLabel, theme.typography.bodyStrong, { color: theme.colors.primaryOn }]}>
               Abrir ajustes
             </Text>
           </Pressable>

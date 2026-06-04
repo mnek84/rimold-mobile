@@ -13,7 +13,7 @@ import { DeliveryStack } from '@navigation/DeliveryStack';
 import { DriverLocationPermissionGate } from '@core/location/DriverLocationPermissionGate';
 import { hasRole } from '@core/auth/types';
 import { useAuthStore } from '@store/useAuthStore';
-import { borderSubtle, useTheme } from '@theme';
+import { useTheme } from '@theme';
 
 import type { MainTabParamList } from './types';
 
@@ -65,14 +65,16 @@ export function AppNavigator() {
       tabBarActiveTintColor: theme.colors.primary,
       tabBarInactiveTintColor: theme.colors.muted,
       tabBarStyle: {
-        borderTopColor: borderSubtle,
+        borderTopColor: theme.colors.border,
         backgroundColor: theme.colors.surface,
       },
     }),
     [theme],
   );
 
-  // StatusBar siempre light — el contenido de la app es oscuro
+  // StatusBar adaptativa segun el scheme del theme.
+  const statusBarStyle = theme.scheme === 'light' ? 'dark' : 'light';
+
   if (isLoading) {
     return (
       <View
@@ -83,7 +85,7 @@ export function AppNavigator() {
           alignItems: 'center',
         }}
       >
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <ActivityIndicator color={theme.colors.primary} size="large" />
       </View>
     );
@@ -92,7 +94,7 @@ export function AppNavigator() {
   if (!isAuthenticated || user === null) {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={statusBarStyle} />
         <LoginScreen />
       </>
     );
@@ -103,7 +105,7 @@ export function AppNavigator() {
 
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style={statusBarStyle} />
       {canSeeDriverTabs ? <DriverLocationPermissionGate /> : null}
       <Tab.Navigator screenOptions={tabScreenOptions}>
         {canSeeDriverTabs ? (

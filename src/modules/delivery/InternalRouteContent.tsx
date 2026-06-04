@@ -8,7 +8,7 @@ import { fetchDriverRoute, optimizeRoute, type DriverRouteView, type RouteStopVi
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { isValidLatLng } from '@core/geo/coordinates';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = { routeId: string };
 
@@ -230,7 +230,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: spacing.md,
@@ -271,7 +271,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       marginBottom: spacing.sm,
     },
     stopRowNext: {

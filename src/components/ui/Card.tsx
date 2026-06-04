@@ -9,7 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Padding = 'none' | 'sm' | 'md' | 'lg';
 
@@ -50,7 +50,7 @@ export function Card({ children, padding = 'md', style, onPress, ...viewProps }:
         accessibilityRole="button"
         onPress={onPress}
         style={({ pressed }) => [composedStyle, pressed && styles.pressed]}
-        android_ripple={{ color: 'rgba(241, 245, 249, 0.12)' }}
+        android_ripple={{ color: theme.colors.overlay }}
       >
         {children}
       </Pressable>
@@ -65,22 +65,22 @@ export function Card({ children, padding = 'md', style, onPress, ...viewProps }:
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, motion } = t;
+  const { colors, spacing, motion, elevation } = t;
   return StyleSheet.create({
     card: {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusCard,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       ...Platform.select({
         ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.35,
-          shadowRadius: 8,
+          shadowColor: elevation.shadowColor,
+          shadowOffset: { width: 0, height: elevation.shadowOffsetY },
+          shadowOpacity: elevation.shadowOpacity,
+          shadowRadius: elevation.shadowRadius,
         },
         android: {
-          elevation: 3,
+          elevation: elevation.androidElevation,
         },
         default: {},
       }),

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -20,10 +19,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-const BEEP_ASSET = require('../../../assets/sounds/industrial_beep.wav') as number;
-
 import { Button, ScreenContainer } from '@components/ui';
 import { QrScanner } from '@components/QrScanner';
+import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { parseQrPayload } from '@core/scanner/parseQrPayload';
 import { EventType } from '@core/sync/eventTypes';
 import { enqueueEvent, scheduleProcessQueueIfOnline } from '@core/sync/syncEngine';
@@ -38,7 +36,7 @@ import {
   useColectaSessionStore,
 } from '@modules/colecta/colectaSessionStore';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
 
 type Props = NativeStackScreenProps<ColectaStackParamList, 'ColectaScan'>;
@@ -145,25 +143,11 @@ export function ColectaScanScreen({ navigation, route }: Props) {
 
   // Configurar audio mode una sola vez al montar
   useEffect(() => {
-    void Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    prepareScanAudio();
     return () => {
       if (lastScannedTimerRef.current !== null) clearTimeout(lastScannedTimerRef.current);
       if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
     };
-  }, []);
-
-  /** Reproduce el beep creando y descartando el Sound object — patrón más confiable con expo-av. */
-  const playBeep = useCallback(async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(BEEP_ASSET, { shouldPlay: true, volume: 1 });
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          void sound.unloadAsync();
-        }
-      });
-    } catch {
-      // Si falla el audio, la vibración y el visual siguen funcionando
-    }
   }, []);
 
   useEffect(() => {
@@ -214,9 +198,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   /** Feedback multisensorial al escanear exitosamente: vibración + flash verde + rebote contador. */
   const triggerScanFeedback = useCallback(
     (trackingId: string, source: ColectaScanSource) => {
-      // Sonido de beep + vibración táctil
-      void playBeep();
-      Vibration.vibrate(55);
+      playScanFeedback('success');
 
       // Flash verde sobre la cámara
       scanFlashOpacity.value = withSequence(
@@ -235,11 +217,11 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       setLastScanned({ trackingId, source });
       lastScannedTimerRef.current = setTimeout(() => setLastScanned(null), 3000);
     },
-    [playBeep, scanFlashOpacity, counterScale],
+    [scanFlashOpacity, counterScale],
   );
 
   const triggerScanError = useCallback((error: ScanError) => {
-    Vibration.vibrate([0, 80, 60, 80]);
+    playScanFeedback('error');
     if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
     setScanError(error);
     setLastScanned(null);
@@ -721,7 +703,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
       marginBottom: spacing.md,
@@ -770,7 +752,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusLg,
       marginBottom: spacing.sm,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     rowPressed: {
       opacity: 0.7,

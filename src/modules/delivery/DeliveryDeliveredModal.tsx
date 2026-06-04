@@ -18,7 +18,7 @@ import { SignaturePad, type SignaturePadHandle } from '@components/SignaturePad'
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
 import { enqueueEvent, EventType } from '@core/sync';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 const RELATIONSHIP_OPTIONS = [
   { value: 'titular', label: 'Titular' },
@@ -260,7 +260,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
       borderBottomWidth: 1,
-      borderBottomColor: borderSubtle,
+      borderBottomColor: colors.border,
     },
     headerTitle: {
       ...typography.subtitle,
@@ -300,7 +300,7 @@ function createStyles(t: AppTheme) {
     },
     input: {
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusMd,
       paddingHorizontal: spacing.md + 2,
       paddingVertical: spacing.md,
@@ -319,7 +319,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.md,
       borderRadius: spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       backgroundColor: colors.surface,
     },
     relChipSelected: {
@@ -355,7 +355,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     photoBtnLabel: {
       ...typography.bodyStrong,

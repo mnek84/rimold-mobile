@@ -1,6 +1,6 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { borderSubtle, useTheme } from '@theme';
+import { useTheme } from '@theme';
 
 import { useAppUpdateStore } from './appUpdateStore';
 
@@ -34,7 +34,7 @@ export function AppUpdateOverlay() {
             styles.card,
             {
               backgroundColor: theme.colors.surface,
-              borderColor: borderSubtle,
+              borderColor: theme.colors.border,
             },
           ]}
         >
@@ -74,7 +74,7 @@ export function AppUpdateOverlay() {
                 { backgroundColor: theme.colors.primary, opacity: pressed ? 0.85 : 1 },
               ]}
             >
-              <Text style={[styles.buttonLabel, theme.typography.bodyStrong, { color: '#ffffff' }]}>
+              <Text style={[styles.buttonLabel, theme.typography.bodyStrong, { color: theme.colors.primaryOn }]}>
                 Reintentar
               </Text>
             </Pressable>

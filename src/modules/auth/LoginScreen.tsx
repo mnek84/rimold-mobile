@@ -17,7 +17,7 @@ const logo = require('../../../assets/logo.png') as number;
 
 import { getAuthErrorMessage, login } from '@core/api/auth';
 import { useAuthStore } from '@store/useAuthStore';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 import { LoginQrScannerModal } from './LoginQrScannerModal';
 
@@ -107,7 +107,7 @@ export function LoginScreen() {
               disabled={submitting}
             >
               {submitting ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={theme.colors.primaryOn} />
               ) : (
                 <Text style={styles.buttonLabel}>Entrar</Text>
               )}
@@ -230,7 +230,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusCard,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       padding: spacing.xl,
       gap: spacing.md,
       // Sombra para elevación
@@ -247,7 +247,7 @@ function createStyles(t: AppTheme) {
     },
     input: {
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusMd,
       paddingVertical: spacing.md + 2,
       paddingHorizontal: spacing.lg,
@@ -267,7 +267,7 @@ function createStyles(t: AppTheme) {
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: 50,
-      shadowColor: '#2563eb',
+      shadowColor: colors.primary,
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.4,
       shadowRadius: 8,
@@ -278,7 +278,7 @@ function createStyles(t: AppTheme) {
       transform: [{ scale: motion.pressScale }],
     },
     buttonLabel: {
-      color: '#fff',
+      color: colors.primaryOn,
       ...typography.bodyStrong,
     },
     divider: {
@@ -289,7 +289,7 @@ function createStyles(t: AppTheme) {
     dividerLine: {
       flex: 1,
       height: 1,
-      backgroundColor: borderSubtle,
+      backgroundColor: colors.border,
     },
     dividerLabel: {
       ...typography.caption,
@@ -300,7 +300,7 @@ function createStyles(t: AppTheme) {
       paddingVertical: spacing.md + 2,
       borderRadius: spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',

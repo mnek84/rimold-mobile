@@ -13,7 +13,7 @@ import { QrScanner } from '@components/QrScanner';
 import { getAuthErrorMessage, loginWithQr } from '@core/api/auth';
 import type { AuthUser } from '@core/auth/types';
 import { parseEmployeeLoginQr } from '@core/scanner/parseEmployeeLoginQr';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = {
   visible: boolean;
@@ -127,7 +127,7 @@ function useThemeStyles(theme: AppTheme) {
       paddingHorizontal: theme.spacing.md,
       borderRadius: theme.spacing.radiusMd,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: theme.colors.border,
       backgroundColor: theme.colors.surface,
     },
     closeBtnPressed: {

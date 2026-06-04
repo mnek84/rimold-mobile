@@ -14,7 +14,7 @@ import { QrScanner } from '@components/QrScanner';
 import { AssignScanError, assignShipmentByTracking } from '@core/api/shipments';
 import { showToast } from '@core/feedback/toastStore';
 import { resolveTrackingIdForAssign } from '@core/scanner/resolveTrackingIdForAssign';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = {
   visible: boolean;
@@ -351,7 +351,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
       borderBottomWidth: 1,
-      borderBottomColor: borderSubtle,
+      borderBottomColor: colors.border,
     },
     headerTitle: {
       ...typography.subtitle,
@@ -395,7 +395,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.surface,
       borderRadius: spacing.radiusCard,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.lg,
       gap: spacing.sm,
@@ -429,12 +429,12 @@ function createStyles(t: AppTheme) {
     },
     confirmBtnPrimaryLabel: {
       ...typography.bodyStrong,
-      color: '#ffffff',
+      color: colors.primaryOn,
     },
     confirmBtnSecondary: {
       backgroundColor: 'transparent',
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     confirmBtnSecondaryLabel: {
       ...typography.bodyStrong,
@@ -455,7 +455,7 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
       borderTopWidth: 1,
-      borderTopColor: borderSubtle,
+      borderTopColor: colors.border,
     },
     errorText: {
       ...typography.body,

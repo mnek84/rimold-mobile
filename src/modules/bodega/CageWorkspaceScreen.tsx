@@ -3,7 +3,7 @@ import { CommonActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +17,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { QrScanner } from '@components/QrScanner';
 import { Button, ScreenContainer } from '@components/ui';
@@ -28,13 +35,22 @@ import {
   type DriverForAssignment,
   type WarehouseCageShipment,
 } from '@core/api/cagesWarehouse';
+import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
 import type { BodegaStackParamList } from '@navigation/bodegaStackTypes';
-import { borderSubtle, useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme } from '@theme';
 
 type Props = NativeStackScreenProps<BodegaStackParamList, 'CageWorkspace'>;
 
 type ScanErrorRow = { id: string; code: string; message: string };
+
+type LastScanned = { tracking: string; duplicate: boolean };
+
+const SCAN_COOLDOWN_MS = 1500;
+const LAST_SCANNED_TTL_MS = 3000;
+const SCAN_ERROR_TTL_MS = 4500;
+const CORNER_SIZE = 22;
+const CORNER_THICKNESS = 3;
 
 function resolveTrackingFromScanRaw(raw: string): string {
   return normalizeShipmentScanToLookupKey(raw);
@@ -51,18 +67,40 @@ function axiosMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message !== '' ? e.message : fallback;
 }
 
+/** Visible shortening of long tracking codes for the "last scanned" banner. */
+function formatTrackingDisplay(t: string): string {
+  if (t.startsWith('TRK_')) return '#' + t.slice(4, 14).toUpperCase();
+  if (t.length > 16) return t.slice(0, 13).toUpperCase() + '…';
+  return t.toUpperCase();
+}
+
 export function CageWorkspaceScreen({ navigation, route }: Props) {
   const { cageId, cageName } = route.params;
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const qc = useQueryClient();
 
-  const [scannerOpen, setScannerOpen] = useState(false);
   const [scanErrors, setScanErrors] = useState<ScanErrorRow[]>([]);
+  const [lastScanned, setLastScanned] = useState<LastScanned | null>(null);
+  const [transientError, setTransientError] = useState<string | null>(null);
   const [closeOpen, setCloseOpen] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [driverSearch, setDriverSearch] = useState('');
   const [closeError, setCloseError] = useState<string | null>(null);
+
+  const lastScannedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Locks while a scan POST is in flight (defends against double-fire from camera frames). */
+  const scanInFlightRef = useRef(false);
+
+  // Reanimated overlays for visual feedback over the scanner.
+  const successFlash = useSharedValue(0);
+  const errorFlash = useSharedValue(0);
+  const counterScale = useSharedValue(1);
+
+  const successFlashStyle = useAnimatedStyle(() => ({ opacity: successFlash.value }));
+  const errorFlashStyle = useAnimatedStyle(() => ({ opacity: errorFlash.value }));
+  const counterStyle = useAnimatedStyle(() => ({ transform: [{ scale: counterScale.value }] }));
 
   const detailQuery = useQuery({
     queryKey: ['warehouse', 'cages', 'detail', cageId],
@@ -75,14 +113,71 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
     enabled: closeOpen,
   });
 
+  const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
+  const okCount = shipments.length;
+
+  const trackingsInCage = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of shipments) set.add(s.tracking);
+    return set;
+  }, [shipments]);
+
+  useEffect(() => {
+    prepareScanAudio();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (lastScannedTimerRef.current !== null) clearTimeout(lastScannedTimerRef.current);
+      if (errorTimerRef.current !== null) clearTimeout(errorTimerRef.current);
+    };
+  }, []);
+
+  const triggerSuccessVisuals = useCallback(
+    (tracking: string, duplicate: boolean) => {
+      playScanFeedback('success');
+      successFlash.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withTiming(0, { duration: 380 }),
+      );
+      counterScale.value = withSequence(
+        withSpring(1.3, { damping: 3, stiffness: 320 }),
+        withSpring(1, { damping: 8, stiffness: 180 }),
+      );
+      if (lastScannedTimerRef.current !== null) clearTimeout(lastScannedTimerRef.current);
+      setLastScanned({ tracking, duplicate });
+      lastScannedTimerRef.current = setTimeout(() => setLastScanned(null), LAST_SCANNED_TTL_MS);
+      if (errorTimerRef.current !== null) clearTimeout(errorTimerRef.current);
+      setTransientError(null);
+    },
+    [successFlash, counterScale],
+  );
+
+  const triggerErrorVisuals = useCallback(
+    (message: string) => {
+      playScanFeedback('error');
+      errorFlash.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withTiming(0, { duration: 480 }),
+      );
+      if (errorTimerRef.current !== null) clearTimeout(errorTimerRef.current);
+      setTransientError(message);
+      setLastScanned(null);
+      errorTimerRef.current = setTimeout(() => setTransientError(null), SCAN_ERROR_TTL_MS);
+    },
+    [errorFlash],
+  );
+
   const scanMutation = useMutation({
     mutationFn: (tracking: string) => scanPackageIntoCage(cageId, tracking),
-    onSuccess: async () => {
+    onSuccess: async (_d, tracking) => {
+      triggerSuccessVisuals(tracking, false);
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages'] });
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages', 'detail', cageId] });
     },
     onError: (e, tracking) => {
       const msg = axiosMessage(e, 'No se pudo agregar el paquete.');
+      triggerErrorVisuals(msg);
       setScanErrors((prev) => [
         {
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -91,6 +186,9 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         },
         ...prev,
       ]);
+    },
+    onSettled: () => {
+      scanInFlightRef.current = false;
     },
   });
 
@@ -116,9 +214,6 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
     },
   });
 
-  const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
-  const okCount = shipments.length;
-
   const drivers = driversQuery.data ?? [];
   const filteredDrivers = useMemo(() => {
     const q = driverSearch.trim().toLowerCase();
@@ -140,12 +235,18 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
 
   const onQrScanned = useCallback(
     (raw: string) => {
-      const t = resolveTrackingFromScanRaw(raw);
-      if (t === '') return;
-      setScannerOpen(false);
-      scanMutation.mutate(t);
+      if (scanInFlightRef.current || closeMutation.isPending) return;
+      const tracking = resolveTrackingFromScanRaw(raw);
+      if (tracking === '') return;
+      // Local de-duplication: package already in this cage → reward feedback without hitting the API.
+      if (trackingsInCage.has(tracking)) {
+        triggerSuccessVisuals(tracking, true);
+        return;
+      }
+      scanInFlightRef.current = true;
+      scanMutation.mutate(tracking);
     },
-    [scanMutation],
+    [scanMutation, trackingsInCage, triggerSuccessVisuals, closeMutation.isPending],
   );
 
   const onConfirmClose = useCallback(() => {
@@ -180,114 +281,129 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
     [selectedDriverId, styles],
   );
 
+  const renderShipment = useCallback(
+    ({ item }: { item: WarehouseCageShipment }) => (
+      <View style={styles.shipRow}>
+        <View style={styles.shipRowMain}>
+          <Text style={styles.shipTracking}>{item.tracking}</Text>
+          <Text style={styles.shipStatus}>
+            {item.status_code === 'in_cage' ? 'En jaula' : (item.status_code ?? '—')}
+          </Text>
+        </View>
+        {item.status_code === 'in_cage' ? (
+          <Pressable
+            style={styles.transferBtn}
+            onPress={() =>
+              navigation.navigate('CageList', {
+                mode: 'transfer',
+                transferTracking: item.tracking,
+                excludeCageId: cageId,
+                transferFromLabel: cageName,
+              })
+            }
+          >
+            <Text style={styles.transferBtnLabel}>Mover</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ),
+    [cageId, cageName, navigation, styles],
+  );
+
   return (
-    <ScreenContainer scroll keyboardAvoiding>
+    <ScreenContainer>
       <Text style={styles.cageLabel}>Jaula</Text>
       <Text style={styles.cageName}>{cageName}</Text>
 
+      <View style={styles.scannerWrap}>
+        <QrScanner
+          onScan={onQrScanned}
+          scanCooldownMs={SCAN_COOLDOWN_MS}
+          containerStyle={styles.scanner}
+        />
+        <Animated.View style={[styles.flashSuccess, successFlashStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.flashError, errorFlashStyle]} pointerEvents="none" />
+        <View style={[styles.corner, styles.cornerTL]} pointerEvents="none" />
+        <View style={[styles.corner, styles.cornerTR]} pointerEvents="none" />
+        <View style={[styles.corner, styles.cornerBL]} pointerEvents="none" />
+        <View style={[styles.corner, styles.cornerBR]} pointerEvents="none" />
+        {scanMutation.isPending ? (
+          <View style={styles.scannerLockOverlay} pointerEvents="none">
+            <ActivityIndicator color="#ffffff" />
+            <Text style={styles.scannerLockText}>Registrando…</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {transientError !== null ? (
+        <View style={styles.scanErrorBanner}>
+          <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
+          <Text style={styles.scanErrorText}>{transientError}</Text>
+        </View>
+      ) : lastScanned !== null ? (
+        <View style={styles.lastScannedBanner}>
+          <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+          <View style={styles.lastScannedTextWrap}>
+            <Text style={styles.lastScannedLabel}>
+              {lastScanned.duplicate ? 'Ya estaba en la jaula' : '¡Agregado!'}
+            </Text>
+            <Text style={styles.lastScannedId}>{formatTrackingDisplay(lastScanned.tracking)}</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.hintRow}>
+          <Ionicons name="scan-outline" size={16} color={theme.colors.muted} />
+          <Text style={styles.hintText}>Apuntá al QR del paquete</Text>
+        </View>
+      )}
+
       <View style={styles.statsRow}>
-        <View style={styles.statBox}>
+        <Animated.View style={[styles.statBox, counterStyle]}>
           <Text style={[styles.statValue, styles.statOk]}>{okCount}</Text>
           <Text style={styles.statLabel}>OK en jaula</Text>
-        </View>
+        </Animated.View>
         <View style={styles.statBox}>
           <Text style={[styles.statValue, styles.statBad]}>{scanErrors.length}</Text>
-          <Text style={styles.statLabel}>Errores de escaneo</Text>
+          <Text style={styles.statLabel}>Rechazos</Text>
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>Agregar paquete</Text>
-      <Pressable
-        style={[styles.qrPrimaryBtn, scanMutation.isPending && styles.qrPrimaryBtnDisabled]}
-        onPress={() => setScannerOpen(true)}
-        disabled={scanMutation.isPending}
+      <Button
+        onPress={() => {
+          if (okCount === 0) {
+            setCloseError(null);
+            closeMutation.mutate(null);
+          } else {
+            onOpenCloseModal();
+          }
+        }}
+        disabled={detailQuery.isLoading || closeMutation.isPending}
+        loading={closeMutation.isPending}
+        style={styles.closeCageBtn}
       >
-        <Ionicons name="qr-code-outline" size={32} color="#fff" style={styles.qrPrimaryIcon} />
-        <View style={styles.qrPrimaryTextWrap}>
-          <Text style={styles.qrPrimaryTitle}>Escanear QR</Text>
-          <Text style={styles.qrPrimarySub}>Apuntá al código del paquete</Text>
-        </View>
-      </Pressable>
-      {scanMutation.isPending ? (
-        <Text style={styles.scanPendingLabel}>Registrando paquete…</Text>
-      ) : null}
-
-      {scanErrors.length > 0 ? (
-        <View style={styles.errorsBlock}>
-          <Text style={styles.errorsTitle}>Últimos rechazos</Text>
-          {scanErrors.slice(0, 6).map((row) => (
-            <Text key={row.id} style={styles.errorLine} numberOfLines={2}>
-              <Text style={styles.errorCode}>{row.code}</Text> — {row.message}
-            </Text>
-          ))}
-        </View>
-      ) : null}
+        {okCount === 0 ? 'Cerrar jaula' : 'Cerrar jaula y asignar conductor'}
+      </Button>
+      {closeError !== null && !closeOpen ? <Text style={styles.footerCloseErr}>{closeError}</Text> : null}
 
       <View style={styles.listHeaderRow}>
         <Text style={styles.sectionLabel}>Paquetes en esta jaula</Text>
         {detailQuery.isFetching ? <ActivityIndicator size="small" color={theme.colors.primary} /> : null}
       </View>
+
       {detailQuery.isLoading ? (
         <ActivityIndicator color={theme.colors.primary} style={styles.loader} />
-      ) : shipments.length === 0 ? (
-        <Text style={styles.emptyList}>Todavía no hay paquetes. Escaneá el primero.</Text>
       ) : (
-        <View style={styles.shipList}>
-          {shipments.map((item) => (
-            <View key={item.id} style={styles.shipRow}>
-              <View style={styles.shipRowMain}>
-                <Text style={styles.shipTracking}>{item.tracking}</Text>
-                <Text style={styles.shipStatus}>
-                  {item.status_code === 'in_cage' ? 'En jaula' : (item.status_code ?? '—')}
-                </Text>
-              </View>
-              {item.status_code === 'in_cage' ? (
-                <Pressable
-                  style={styles.transferBtn}
-                  onPress={() =>
-                    navigation.navigate('CageList', {
-                      mode: 'transfer',
-                      transferTracking: item.tracking,
-                      excludeCageId: cageId,
-                      transferFromLabel: cageName,
-                    })
-                  }
-                >
-                  <Text style={styles.transferBtnLabel}>Mover</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-        </View>
+        <FlatList
+          data={shipments}
+          keyExtractor={(s) => s.id}
+          renderItem={renderShipment}
+          style={styles.shipList}
+          contentContainerStyle={styles.shipListContent}
+          ListEmptyComponent={
+            <Text style={styles.emptyList}>Todavía no hay paquetes. Escaneá el primero.</Text>
+          }
+        />
       )}
-
-      <View style={styles.footer}>
-        <Button
-          onPress={() => {
-            if (okCount === 0) {
-              setCloseError(null);
-              closeMutation.mutate(null);
-            } else {
-              onOpenCloseModal();
-            }
-          }}
-          disabled={detailQuery.isLoading || closeMutation.isPending}
-          loading={closeMutation.isPending}
-        >
-          {okCount === 0 ? 'Cerrar jaula' : 'Cerrar jaula y asignar conductor'}
-        </Button>
-        {closeError !== null && !closeOpen ? <Text style={styles.footerCloseErr}>{closeError}</Text> : null}
-      </View>
-
-      <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
-        <View style={styles.modalWrap}>
-          <Text style={styles.modalTitle}>Apuntá al QR del paquete</Text>
-          <QrScanner onScan={onQrScanned} containerStyle={styles.scannerBox} />
-          <Pressable style={styles.modalClose} onPress={() => setScannerOpen(false)}>
-            <Text style={styles.modalCloseLabel}>Cerrar</Text>
-          </Pressable>
-        </View>
-      </Modal>
 
       <Modal visible={closeOpen} animationType="fade" transparent onRequestClose={onRequestCloseModal}>
         <KeyboardAvoidingView
@@ -373,10 +489,131 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       marginBottom: spacing.md,
     },
+
+    // ── Scanner ────────────────────────────────────────────────────────
+    scannerWrap: {
+      height: 230,
+      borderRadius: spacing.radiusLg,
+      overflow: 'hidden',
+      backgroundColor: '#000',
+      marginBottom: spacing.md,
+    },
+    scanner: { flex: 1 },
+    flashSuccess: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(34, 197, 94, 0.48)',
+    },
+    flashError: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(239, 68, 68, 0.48)',
+    },
+    corner: {
+      position: 'absolute',
+      width: CORNER_SIZE,
+      height: CORNER_SIZE,
+      borderColor: colors.primary,
+    },
+    cornerTL: {
+      top: 12,
+      left: 12,
+      borderTopWidth: CORNER_THICKNESS,
+      borderLeftWidth: CORNER_THICKNESS,
+      borderTopLeftRadius: 4,
+    },
+    cornerTR: {
+      top: 12,
+      right: 12,
+      borderTopWidth: CORNER_THICKNESS,
+      borderRightWidth: CORNER_THICKNESS,
+      borderTopRightRadius: 4,
+    },
+    cornerBL: {
+      bottom: 12,
+      left: 12,
+      borderBottomWidth: CORNER_THICKNESS,
+      borderLeftWidth: CORNER_THICKNESS,
+      borderBottomLeftRadius: 4,
+    },
+    cornerBR: {
+      bottom: 12,
+      right: 12,
+      borderBottomWidth: CORNER_THICKNESS,
+      borderRightWidth: CORNER_THICKNESS,
+      borderBottomRightRadius: 4,
+    },
+    scannerLockOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      gap: spacing.xs,
+    },
+    scannerLockText: {
+      ...typography.bodyStrong,
+      color: '#ffffff',
+      letterSpacing: 0.4,
+    },
+
+    // ── Banners ────────────────────────────────────────────────────────
+    lastScannedBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: 'rgba(34, 197, 94, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(34, 197, 94, 0.4)',
+      borderRadius: spacing.radiusMd,
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      minHeight: 52,
+    },
+    lastScannedTextWrap: { flex: 1, minWidth: 0 },
+    lastScannedLabel: {
+      ...typography.captionStrong,
+      color: colors.success,
+    },
+    lastScannedId: {
+      ...typography.bodyStrong,
+      color: colors.text,
+      marginTop: 2,
+    },
+    scanErrorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.45)',
+      borderRadius: spacing.radiusMd,
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      minHeight: 52,
+    },
+    scanErrorText: {
+      ...typography.body,
+      color: colors.danger,
+      flex: 1,
+    },
+    hintRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.xs,
+      marginBottom: spacing.md,
+      minHeight: 52,
+    },
+    hintText: {
+      ...typography.caption,
+      color: colors.muted,
+    },
+
+    // ── Stats ──────────────────────────────────────────────────────────
     statsRow: {
       flexDirection: 'row',
       gap: spacing.sm,
-      marginBottom: spacing.lg,
+      marginBottom: spacing.md,
     },
     statBox: {
       flex: 1,
@@ -384,7 +621,7 @@ function createStyles(t: AppTheme) {
       borderRadius: spacing.radiusMd,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
     },
     statValue: {
       ...typography.title,
@@ -400,75 +637,35 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
       marginTop: 4,
     },
-    sectionLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-      marginBottom: spacing.sm,
-    },
-    qrPrimaryBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingVertical: spacing.lg,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
+
+    // ── Cerrar jaula ───────────────────────────────────────────────────
+    closeCageBtn: {
       marginBottom: spacing.md,
     },
-    qrPrimaryBtnDisabled: {
-      opacity: 0.65,
-    },
-    qrPrimaryIcon: {
-      opacity: 0.95,
-    },
-    qrPrimaryTextWrap: {
-      flex: 1,
-      minWidth: 0,
-    },
-    qrPrimaryTitle: {
-      ...typography.subtitle,
-      color: '#fff',
-    },
-    qrPrimarySub: {
+    footerCloseErr: {
       ...typography.caption,
-      color: '#ffffffcc',
-      marginTop: 4,
-    },
-    scanPendingLabel: {
-      ...typography.caption,
-      color: colors.muted,
-      marginBottom: spacing.md,
-    },
-    errorsBlock: {
-      marginBottom: spacing.md,
-      padding: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.danger + '44',
-    },
-    errorsTitle: {
-      ...typography.captionStrong,
       color: colors.danger,
-      marginBottom: spacing.xs,
+      marginTop: -spacing.sm,
+      marginBottom: spacing.md,
+      textAlign: 'center',
     },
-    errorLine: {
-      ...typography.caption,
-      color: colors.muted,
-      marginTop: 4,
-    },
-    errorCode: {
-      ...typography.captionStrong,
-      color: colors.text,
-    },
+
+    // ── Lista ──────────────────────────────────────────────────────────
     listHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: spacing.xs,
     },
+    sectionLabel: {
+      ...typography.bodyStrong,
+      color: colors.text,
+    },
     shipList: {
-      marginBottom: spacing.md,
+      flex: 1,
+    },
+    shipListContent: {
+      paddingBottom: spacing.lg,
     },
     shipRow: {
       flexDirection: 'row',
@@ -477,7 +674,7 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       paddingVertical: spacing.sm,
       borderBottomWidth: 1,
-      borderBottomColor: borderSubtle,
+      borderBottomColor: colors.border,
     },
     shipRowMain: {
       flex: 1,
@@ -511,40 +708,8 @@ function createStyles(t: AppTheme) {
     loader: {
       marginVertical: spacing.md,
     },
-    footer: {
-      marginTop: 'auto',
-      paddingTop: spacing.md,
-    },
-    footerCloseErr: {
-      ...typography.caption,
-      color: colors.danger,
-      marginTop: spacing.sm,
-      textAlign: 'center',
-    },
-    modalWrap: {
-      flex: 1,
-      backgroundColor: colors.background,
-      paddingTop: spacing.xxl,
-      paddingHorizontal: spacing.md,
-    },
-    modalTitle: {
-      ...typography.subtitle,
-      color: colors.text,
-      textAlign: 'center',
-      marginBottom: spacing.md,
-    },
-    scannerBox: {
-      flex: 1,
-      minHeight: 320,
-    },
-    modalClose: {
-      padding: spacing.lg,
-      alignItems: 'center',
-    },
-    modalCloseLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
-    },
+
+    // ── Modal cerrar jaula ─────────────────────────────────────────────
     closeKeyboardRoot: {
       flex: 1,
     },
@@ -584,7 +749,7 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       backgroundColor: colors.background,
       borderWidth: 1,
-      borderColor: borderSubtle,
+      borderColor: colors.border,
       borderRadius: spacing.radiusMd,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm + 2,
@@ -632,7 +797,7 @@ function createStyles(t: AppTheme) {
     },
     confirmBtnLabel: {
       ...typography.bodyStrong,
-      color: '#fff',
+      color: colors.primaryOn,
     },
   });
 }
