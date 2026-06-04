@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastHost } from '@components/ToastHost';
+import { AppUpdateBootstrap, AppUpdateOverlay } from '@core/app-update';
 import { queryClient } from '@core/query/queryClient';
 import { DriverTrackingBootstrap } from '@core/location/DriverTrackingBootstrap';
 import { SyncBootstrap } from '@core/sync';
@@ -18,9 +19,11 @@ export function AppProviders({ children }: PropsWithChildren) {
           <View style={{ flex: 1 }}>
             <NavigationContainer>
               <SyncBootstrap />
+              <AppUpdateBootstrap />
               <DriverTrackingBootstrap />
               {children}
             </NavigationContainer>
+            <AppUpdateOverlay />
             <ToastHost />
           </View>
         </QueryClientProvider>

@@ -6,6 +6,13 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, ScreenContainer } from '@components/ui';
 import { refreshSessionUser } from '@core/api/auth';
+import {
+  getInstalledVersionCode,
+  getInstalledVersionName,
+  isAndroidAppUpdateSupported,
+  useAppUpdateStore,
+} from '@core/app-update';
+import { showToast } from '@core/feedback/toastStore';
 import { getUserRoles, type AuthRole } from '@core/auth/types';
 import { queryClient } from '@core/query/queryClient';
 import { processQueue, useSyncStatusStore } from '@core/sync';
@@ -65,6 +72,13 @@ export function SettingsScreen(_props: Props) {
   const lastSyncAt = useSyncStatusStore((s) => s.lastSyncAt);
   const isSyncing = useSyncStatusStore((s) => s.isSyncing);
   const [forceSyncBusy, setForceSyncBusy] = useState(false);
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const appUpdateStatus = useAppUpdateStore((s) => s.status);
+  const checkForUpdate = useAppUpdateStore((s) => s.checkForUpdate);
+
+  const installedVersionName = getInstalledVersionName();
+  const installedVersionCode = getInstalledVersionCode();
+  const showAppUpdateSection = isAndroidAppUpdateSupported();
 
   const lastSuccessfulSyncLabel =
     lastSyncAt != null
@@ -112,6 +126,23 @@ export function SettingsScreen(_props: Props) {
     })();
   }, []);
 
+  const onCheckForUpdates = useCallback(() => {
+    setUpdateCheckBusy(true);
+    void (async () => {
+      try {
+        await checkForUpdate({ force: true });
+        const { status, lastError } = useAppUpdateStore.getState();
+        if (status === 'up_to_date') {
+          showToast('Ya tenés la última versión instalada.');
+        } else if (status === 'error' && lastError != null) {
+          showToast(lastError);
+        }
+      } finally {
+        setUpdateCheckBusy(false);
+      }
+    })();
+  }, [checkForUpdate]);
+
   const displayName =
     user?.name != null && user.name !== '' ? user.name : 'Sin nombre registrado';
 
@@ -157,6 +188,35 @@ export function SettingsScreen(_props: Props) {
           Cerrar sesión
         </Button>
       </Card>
+
+      {showAppUpdateSection && (
+        <Card>
+          <SectionHeader
+            icon="phone-portrait-outline"
+            title="Aplicación"
+            iconColor={iconAccent}
+            styles={styles}
+          />
+          <View style={styles.syncRows}>
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Versión instalada</Text>
+              <Text style={styles.rowValue}>
+                {installedVersionName} (build {installedVersionCode})
+              </Text>
+            </View>
+          </View>
+          <Button
+            variant="outline"
+            size="md"
+            loading={updateCheckBusy || appUpdateStatus === 'checking'}
+            disabled={appUpdateStatus === 'downloading' || appUpdateStatus === 'installing'}
+            onPress={onCheckForUpdates}
+            style={styles.forceSyncBtn}
+          >
+            Buscar actualizaciones
+          </Button>
+        </Card>
+      )}
 
       <Card>
         <SectionHeader

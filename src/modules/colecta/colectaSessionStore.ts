@@ -27,6 +27,8 @@ type State = {
   startNewSession: (selection: ColectaSelection) => void;
   /** Append scan if not duplicate. */
   addScannedItem: (trackingId: string, source: ColectaScanSource) => void;
+  /** Remove a scanned item from the open session (long-press flow). */
+  removeScannedItem: (trackingId: string) => void;
   /** Drop session after COLLECTION_FINISHED or logout. */
   clearSession: () => void;
   markCollectionStartedEmitted: () => void;
@@ -63,6 +65,10 @@ export const useColectaSessionStore = create<State>()(
           }
           return { items: [...state.items, { trackingId, source }] };
         }),
+      removeScannedItem: (trackingId) =>
+        set((state) => ({
+          items: state.items.filter((i) => i.trackingId !== trackingId),
+        })),
       clearSession: () => set({ ...emptySession }),
       markCollectionStartedEmitted: () => set({ collectionStartedEmitted: true }),
     }),

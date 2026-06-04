@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   Vibration,
@@ -23,10 +24,14 @@ const BEEP_ASSET = require('../../../assets/sounds/industrial_beep.wav') as numb
 
 import { Button, ScreenContainer } from '@components/ui';
 import { QrScanner } from '@components/QrScanner';
-import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
 import { parseQrPayload } from '@core/scanner/parseQrPayload';
 import { EventType } from '@core/sync/eventTypes';
 import { enqueueEvent, scheduleProcessQueueIfOnline } from '@core/sync/syncEngine';
+import { useIsOnline } from '@core/sync/useIsOnline';
+import {
+  validateColectaScan,
+  type ColectaScanInvalidReason,
+} from '@modules/colecta/api/colectaScan';
 import { useColectaSelectionStore } from '@modules/colecta/colectaSelectionStore';
 import {
   type ColectaScanSource,
@@ -47,6 +52,33 @@ function scanSourceFromParse(raw: string): ColectaScanSource {
   if (p.type === 'mercadolibre') return 'flex';
   if (p.type === 'internal') return 'interno';
   return 'externo';
+}
+
+type ScanError = {
+  message: string;
+  reason: ColectaScanInvalidReason;
+};
+
+function describeInvalidReason(
+  reason: ColectaScanInvalidReason,
+  details: { currentStatus?: string; mlSenderId?: number },
+): string {
+  switch (reason) {
+    case 'not_found':
+      return 'El paquete no existe.';
+    case 'wrong_business':
+      return 'Este paquete pertenece a otro cliente.';
+    case 'invalid_status':
+      return details.currentStatus !== undefined && details.currentStatus !== ''
+        ? `Estado no válido para colecta (${details.currentStatus}).`
+        : 'Estado no válido para colecta.';
+    case 'sender_not_authorized':
+      return details.mlSenderId !== undefined
+        ? `Sender ML ${details.mlSenderId} no autorizado para este depósito.`
+        : 'Sender ML no autorizado para este depósito.';
+    case 'network':
+      return 'Sin conexión. Reintentá cuando vuelvas a tener red.';
+  }
 }
 
 function formatTrackingDisplay(trackingId: string): string {
@@ -81,8 +113,11 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   const sessionClientId = useColectaSessionStore((s) => s.clientId);
   const sessionWarehouseId = useColectaSessionStore((s) => s.warehouseId);
   const addScannedItem = useColectaSessionStore((s) => s.addScannedItem);
+  const removeScannedItem = useColectaSessionStore((s) => s.removeScannedItem);
   const markCollectionStartedEmitted = useColectaSessionStore((s) => s.markCollectionStartedEmitted);
   const clearColectaSession = useColectaSessionStore((s) => s.clearSession);
+
+  const isOnline = useIsOnline();
 
   const [storeHydrated, setStoreHydrated] = useState(
     () => useColectaSessionStore.persist.hasHydrated(),
@@ -91,7 +126,12 @@ export function ColectaScanScreen({ navigation, route }: Props) {
     trackingId: string;
     source: ColectaScanSource;
   } | null>(null);
+  const [scanError, setScanError] = useState<ScanError | null>(null);
+  const [isValidating, setIsValidating] = useState<boolean>(false);
   const lastScannedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Locks the scanner while a backend validation is in flight (prevents double-scan races). */
+  const validatingRef = useRef<boolean>(false);
   // ── Animaciones ────────────────────────────────────────────────────────
   // Flash verde sobre el scanner cuando se escanea exitosamente
   const scanFlashOpacity = useSharedValue(0);
@@ -108,6 +148,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
     void Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     return () => {
       if (lastScannedTimerRef.current !== null) clearTimeout(lastScannedTimerRef.current);
+      if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
     };
   }, []);
 
@@ -197,42 +238,94 @@ export function ColectaScanScreen({ navigation, route }: Props) {
     [playBeep, scanFlashOpacity, counterScale],
   );
 
+  const triggerScanError = useCallback((error: ScanError) => {
+    Vibration.vibrate([0, 80, 60, 80]);
+    if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
+    setScanError(error);
+    setLastScanned(null);
+    scanErrorTimerRef.current = setTimeout(() => setScanError(null), 4500);
+  }, []);
+
   const onScan = useCallback(
     (raw: string) => {
       if (collectionId == null || clientId === '' || warehouseId === '') return;
-      const trackingId = normalizeShipmentScanToLookupKey(raw);
-      if (trackingId === '') return;
-      const source = scanSourceFromParse(raw);
-      const already = useColectaSessionStore.getState().items.some(
-        (i) => i.trackingId === trackingId,
-      );
-      if (already) return;
-      if (enqueuedTrackingRef.current.has(trackingId)) return;
-      enqueuedTrackingRef.current.add(trackingId);
-      void (async () => {
-        const sess = useColectaSessionStore.getState();
-        if (!sess.collectionStartedEmitted) {
-          await enqueueEvent({
-            type: EventType.COLLECTION_STARTED,
-            payload: {
-              collectionId,
-              businessId: clientId,
-              warehouseId,
-              businessName: clientName,
-              warehouseName,
-              ...(authUser?.id ? { driverUserId: authUser.id } : {}),
-              ...(authUser?.name?.trim() ? { driverName: authUser.name.trim() } : {}),
-            },
-          });
-          markCollectionStartedEmitted();
-        }
-        addScannedItem(trackingId, source);
-        triggerScanFeedback(trackingId, source);
-        await enqueueEvent({
-          type: EventType.COLLECTION_ITEM_ADDED,
-          payload: { collectionId, trackingId, raw: trackingId },
+      if (validatingRef.current) return;
+      if (!isOnline) {
+        triggerScanError({
+          reason: 'network',
+          message: describeInvalidReason('network', {}),
         });
-        scheduleProcessQueueIfOnline();
+        return;
+      }
+      const trimmed = raw.trim();
+      if (trimmed === '') return;
+
+      validatingRef.current = true;
+      setIsValidating(true);
+      void (async () => {
+        try {
+          const result = await validateColectaScan({
+            raw: trimmed,
+            collectionId,
+            businessId: clientId,
+            warehouseId,
+          });
+
+          if (!result.valid) {
+            triggerScanError({
+              reason: result.reason,
+              message: describeInvalidReason(result.reason, {
+                currentStatus: result.currentStatus,
+                mlSenderId: result.mlSenderId,
+              }),
+            });
+            return;
+          }
+
+          const trackingId = result.trackingId;
+          const source = scanSourceFromParse(trimmed);
+          const already = useColectaSessionStore
+            .getState()
+            .items.some((i) => i.trackingId === trackingId);
+          if (already) {
+            triggerScanFeedback(trackingId, source);
+            return;
+          }
+          if (enqueuedTrackingRef.current.has(trackingId)) {
+            triggerScanFeedback(trackingId, source);
+            return;
+          }
+          enqueuedTrackingRef.current.add(trackingId);
+
+          const sess = useColectaSessionStore.getState();
+          if (!sess.collectionStartedEmitted) {
+            await enqueueEvent({
+              type: EventType.COLLECTION_STARTED,
+              payload: {
+                collectionId,
+                businessId: clientId,
+                warehouseId,
+                businessName: clientName,
+                warehouseName,
+                ...(authUser?.id ? { driverUserId: authUser.id } : {}),
+                ...(authUser?.name?.trim() ? { driverName: authUser.name.trim() } : {}),
+              },
+            });
+            markCollectionStartedEmitted();
+          }
+          addScannedItem(trackingId, source);
+          triggerScanFeedback(trackingId, source);
+          if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
+          setScanError(null);
+          await enqueueEvent({
+            type: EventType.COLLECTION_ITEM_ADDED,
+            payload: { collectionId, trackingId, raw: trimmed },
+          });
+          scheduleProcessQueueIfOnline();
+        } finally {
+          validatingRef.current = false;
+          setIsValidating(false);
+        }
       })();
     },
     [
@@ -241,12 +334,51 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       collectionId,
       clientName,
       warehouseName,
+      isOnline,
       addScannedItem,
       triggerScanFeedback,
+      triggerScanError,
       markCollectionStartedEmitted,
       authUser?.id,
       authUser?.name,
     ],
+  );
+
+  const onRemoveItem = useCallback(
+    (trackingId: string) => {
+      if (collectionId == null) return;
+      if (!isOnline) {
+        triggerScanError({
+          reason: 'network',
+          message: describeInvalidReason('network', {}),
+        });
+        return;
+      }
+      Alert.alert(
+        'Eliminar paquete',
+        '¿Quitar este paquete de la colecta? La operación se sincronizará con el backend.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                removeScannedItem(trackingId);
+                enqueuedTrackingRef.current.delete(trackingId);
+                Vibration.vibrate(40);
+                await enqueueEvent({
+                  type: EventType.COLLECTION_ITEM_REMOVED,
+                  payload: { collectionId, trackingId, raw: trackingId },
+                });
+                scheduleProcessQueueIfOnline();
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [collectionId, isOnline, removeScannedItem, triggerScanError],
   );
 
   const onFinalize = useCallback(() => {
@@ -318,7 +450,33 @@ export function ColectaScanScreen({ navigation, route }: Props) {
         <View style={[styles.corner, styles.cornerTR]} pointerEvents="none" />
         <View style={[styles.corner, styles.cornerBL]} pointerEvents="none" />
         <View style={[styles.corner, styles.cornerBR]} pointerEvents="none" />
+        {(!isOnline || isValidating) && (
+          <View style={styles.scannerLockOverlay} pointerEvents="none">
+            {isValidating && <ActivityIndicator color="#ffffff" />}
+            <Text style={styles.scannerLockText}>
+              {!isOnline ? 'Sin conexión' : 'Validando…'}
+            </Text>
+          </View>
+        )}
       </View>
+
+      {/* ── Banner offline (persistente mientras no haya red) ── */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={18} color={theme.colors.danger} />
+          <Text style={styles.offlineBannerText}>
+            Sin conexión. La colecta requiere red para validar paquetes.
+          </Text>
+        </View>
+      )}
+
+      {/* ── Banner de error de scan (transitorio) ── */}
+      {scanError !== null && (
+        <View style={styles.scanErrorBanner}>
+          <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
+          <Text style={styles.scanErrorText}>{scanError.message}</Text>
+        </View>
+      )}
 
       {/* ── Último escaneo / hint ── */}
       {lastScanned !== null ? (
@@ -378,7 +536,14 @@ export function ColectaScanScreen({ navigation, route }: Props) {
           </View>
         }
         renderItem={({ item, index }) => (
-          <View style={styles.row}>
+          <Pressable
+            onLongPress={() => onRemoveItem(item.trackingId)}
+            delayLongPress={450}
+            android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            accessibilityRole="button"
+            accessibilityHint="Mantené presionado para quitar este paquete de la colecta"
+          >
             <View style={styles.rowBadge}>
               <Text style={styles.rowNum}>{index + 1}</Text>
             </View>
@@ -398,7 +563,8 @@ export function ColectaScanScreen({ navigation, route }: Props) {
                 </Text>
               </View>
             )}
-          </View>
+            <Ionicons name="ellipsis-vertical" size={14} color={theme.colors.muted} />
+          </Pressable>
         )}
       />
     </ScreenContainer>
@@ -605,6 +771,57 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.sm,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: borderSubtle,
+    },
+    rowPressed: {
+      opacity: 0.7,
+      backgroundColor: colors.background,
+    },
+    scannerLockOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      gap: spacing.xs,
+    },
+    scannerLockText: {
+      ...typography.bodyStrong,
+      color: '#ffffff',
+      letterSpacing: 0.4,
+    },
+    offlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.45)',
+      borderRadius: spacing.radiusMd,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.sm,
+    },
+    offlineBannerText: {
+      ...typography.captionStrong,
+      color: colors.danger,
+      flex: 1,
+    },
+    scanErrorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(239, 68, 68, 0.45)',
+      borderRadius: spacing.radiusMd,
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      minHeight: 52,
+    },
+    scanErrorText: {
+      ...typography.body,
+      color: colors.danger,
+      flex: 1,
     },
     rowBadge: {
       width: 26,

@@ -127,7 +127,8 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       return;
     }
 
-    case EventType.COLLECTION_ITEM_ADDED: {
+    case EventType.COLLECTION_ITEM_ADDED:
+    case EventType.COLLECTION_ITEM_REMOVED: {
       const p = payload as CollectionPayload;
       const collectionId = assertCollectionId(p);
       const body: Record<string, unknown> = {};
