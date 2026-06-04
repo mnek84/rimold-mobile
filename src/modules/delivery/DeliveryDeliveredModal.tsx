@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PhotoPreview } from '@components/PhotoPreview';
 import { SignaturePad, type SignaturePadHandle } from '@components/SignaturePad';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
@@ -227,7 +228,9 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
               ) : null}
             </View>
             {photoDataUrl != null ? (
-              <Text style={styles.photoHint}>Foto adjunta</Text>
+              <View style={styles.photoPreviewWrap}>
+                <PhotoPreview uri={photoDataUrl} size={120} />
+              </View>
             ) : null}
 
             <Pressable
@@ -372,9 +375,7 @@ function createStyles(t: AppTheme) {
       ...typography.bodyStrong,
       color: colors.muted,
     },
-    photoHint: {
-      ...typography.captionStrong,
-      color: colors.success,
+    photoPreviewWrap: {
       marginTop: spacing.sm,
     },
     submitBtn: {

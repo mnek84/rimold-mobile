@@ -73,8 +73,7 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
   };
 }
 
-export async function fetchDriverRoute(routeId: string): Promise<DriverRouteView> {
-  const { data } = await apiClient.get<unknown>(`/routes/${routeId.trim()}`);
+function parseDriverRoute(data: unknown): DriverRouteView {
   if (data === null || typeof data !== 'object') {
     throw new Error('Invalid route response');
   }
@@ -97,6 +96,20 @@ export async function fetchDriverRoute(routeId: string): Promise<DriverRouteView
     date,
     stops,
   };
+}
+
+export async function fetchDriverRoute(routeId: string): Promise<DriverRouteView> {
+  const { data } = await apiClient.get<unknown>(`/routes/${routeId.trim()}`);
+  return parseDriverRoute(data);
+}
+
+/**
+ * Driver self-service: ask the backend to (idempotently) build today's active
+ * internal route from every shipment currently assigned to the driver.
+ */
+export async function createDriverRoute(): Promise<DriverRouteView> {
+  const { data } = await apiClient.post<unknown>('/driver/routes');
+  return parseDriverRoute(data);
 }
 
 export async function optimizeRoute(routeId: string): Promise<OptimizeRouteResponse> {

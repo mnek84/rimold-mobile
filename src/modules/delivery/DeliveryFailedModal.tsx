@@ -20,6 +20,7 @@ import { showToast } from '@core/feedback/toastStore';
 import { enqueueEvent, EventType } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
+import { PhotoPreview } from '@components/PhotoPreview';
 import { useDeliveryFailureReasonsQuery } from '@modules/delivery/hooks/useDeliveryFailureReasonsQuery';
 
 type Props = {
@@ -220,7 +221,9 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
               ) : null}
             </View>
             {photoDataUrl != null ? (
-              <Text style={styles.photoOk}>Foto lista</Text>
+              <View style={styles.photoPreviewWrap}>
+                <PhotoPreview uri={photoDataUrl} size={120} />
+              </View>
             ) : null}
 
             <Pressable
@@ -370,9 +373,7 @@ function createStyles(t: AppTheme) {
       ...typography.bodyStrong,
       color: colors.muted,
     },
-    photoOk: {
-      ...typography.captionStrong,
-      color: colors.success,
+    photoPreviewWrap: {
       marginTop: spacing.sm,
     },
     submitBtn: {

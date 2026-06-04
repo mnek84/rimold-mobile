@@ -20,7 +20,7 @@ export async function pickAndCompressPhoto(permissionPrompt?: string): Promise<s
   let asset: ImagePicker.ImagePickerAsset | null = null;
 
   if (camPerm.granted) {
-    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 1 });
     if (result.canceled || result.assets[0] == null) return null;
     asset = result.assets[0];
   } else {
@@ -34,7 +34,7 @@ export async function pickAndCompressPhoto(permissionPrompt?: string): Promise<s
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 1,
     });
     if (result.canceled || result.assets[0] == null) return null;
