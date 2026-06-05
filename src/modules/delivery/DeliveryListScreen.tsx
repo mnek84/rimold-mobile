@@ -6,6 +6,7 @@ import { ScreenContainer } from '@components/ui';
 import type { DeliveryStackParamList } from '@navigation/deliveryStackTypes';
 
 import { DeliveryListView } from './components/DeliveryListView';
+import { DeliveryReportFailureScanModal } from './DeliveryReportFailureScanModal';
 import { DeliveryScanPackageModal } from './DeliveryScanPackageModal';
 import { useDeliveryList } from './hooks/useDeliveryList';
 
@@ -14,6 +15,7 @@ type Props = NativeStackScreenProps<DeliveryStackParamList, 'DeliveryList'>;
 export function DeliveryListScreen({ navigation }: Props) {
   const list = useDeliveryList();
   const [scanOpen, setScanOpen] = useState(false);
+  const [reportFailureOpen, setReportFailureOpen] = useState(false);
 
   useFocusEffect(list.reloadSilent);
 
@@ -39,12 +41,18 @@ export function DeliveryListScreen({ navigation }: Props) {
         }
         onRefresh={list.onRefresh}
         onPressScan={() => setScanOpen(true)}
+        onPressReportFailure={() => setReportFailureOpen(true)}
         onPressShipment={onPressShipment}
       />
       <DeliveryScanPackageModal
         visible={scanOpen}
         onClose={() => setScanOpen(false)}
         onAssigned={list.reloadSilent}
+      />
+      <DeliveryReportFailureScanModal
+        visible={reportFailureOpen}
+        onClose={() => setReportFailureOpen(false)}
+        onReported={list.reloadSilent}
       />
     </ScreenContainer>
   );

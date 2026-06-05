@@ -86,12 +86,25 @@ export class AssignScanError extends Error {
 
   readonly currentDriver: AssignScanCurrentDriver | null;
 
+  /**
+   * Backend-resolved shipment UUID (only populated for reasons where the
+   * shipment was identified, e.g. `flex_not_supported`). Lets the mobile
+   * pivot a rejected scan into the report-failure flow without an extra
+   * lookup round-trip.
+   */
+  readonly shipmentId: string | null;
+
+  /** Canonical tracking returned by the server for the scanned shipment. */
+  readonly trackingId: string | null;
+
   constructor(params: {
     status: number;
     reason: AssignScanReason | string;
     message: string;
     currentStatus?: string | null;
     currentDriver?: AssignScanCurrentDriver | null;
+    shipmentId?: string | null;
+    trackingId?: string | null;
   }) {
     super(params.message);
     this.name = 'AssignScanError';
@@ -99,6 +112,8 @@ export class AssignScanError extends Error {
     this.reason = params.reason;
     this.currentStatus = params.currentStatus ?? null;
     this.currentDriver = params.currentDriver ?? null;
+    this.shipmentId = params.shipmentId ?? null;
+    this.trackingId = params.trackingId ?? null;
   }
 }
 
@@ -139,12 +154,17 @@ function parseAssignScanError(error: unknown): AssignScanError | null {
 
   const message = typeof obj.message === 'string' && obj.message.length > 0 ? obj.message : reason;
 
+  const shipmentId = typeof obj.shipment_id === 'string' && obj.shipment_id !== '' ? obj.shipment_id : null;
+  const trackingId = typeof obj.tracking_id === 'string' && obj.tracking_id !== '' ? obj.tracking_id : null;
+
   return new AssignScanError({
     status,
     reason,
     message,
     currentStatus,
     currentDriver,
+    shipmentId,
+    trackingId,
   });
 }
 
@@ -160,6 +180,65 @@ export async function assignShipmentByTracking(
       force_reassign: forceReassign,
     });
     return data;
+  } catch (e) {
+    const scanError = parseAssignScanError(e);
+    if (scanError !== null) {
+      throw scanError;
+    }
+    throw e;
+  }
+}
+
+/**
+ * Read-only metadata for a shipment scanned via QR / barcode / tracking input.
+ * Returned by `POST /shipments/lookup`. Used by the mobile "report failure by
+ * scan" flow to drive the existing DeliveryFailedModal without claiming the
+ * shipment for the driver.
+ */
+export type ShipmentScanLookupResponse = {
+  id: string;
+  tracking_id: string;
+  status: string;
+  execution_type: string;
+  business_id: string;
+  driver_id: string | null;
+};
+
+function normalizeShipmentScanLookupResponse(raw: unknown): ShipmentScanLookupResponse | null {
+  if (raw === null || typeof raw !== 'object') {
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== 'string' || r.id === '') {
+    return null;
+  }
+  return {
+    id: r.id,
+    tracking_id: typeof r.tracking_id === 'string' ? r.tracking_id : '',
+    status: typeof r.status === 'string' ? r.status : '',
+    execution_type: typeof r.execution_type === 'string' ? r.execution_type : 'internal',
+    business_id: typeof r.business_id === 'string' ? r.business_id : '',
+    driver_id: typeof r.driver_id === 'string' && r.driver_id !== '' ? r.driver_id : null,
+  };
+}
+
+/**
+ * Look up shipment metadata for the scan-and-report-failure flow.
+ *
+ * Throws an {@link AssignScanError} for known 4xx rejection reasons (notably
+ * `not_found` and `already_<status>`), so call sites can reuse the same error
+ * handling shape as {@link assignShipmentByTracking}.
+ */
+export async function lookupShipmentByScan(raw: string): Promise<ShipmentScanLookupResponse> {
+  try {
+    const { data } = await apiClient.post<unknown>('/shipments/lookup', {
+      raw: raw.trim(),
+    });
+    const normalized = normalizeShipmentScanLookupResponse(data);
+    if (normalized === null) {
+      throw new Error('La respuesta de búsqueda de envío fue inválida.');
+    }
+    return normalized;
   } catch (e) {
     const scanError = parseAssignScanError(e);
     if (scanError !== null) {

@@ -54,6 +54,7 @@ type Props = {
   onPressFlexMap?: () => void;
   onRefresh: () => void;
   onPressScan: () => void;
+  onPressReportFailure: () => void;
   onPressShipment: (shipmentId: string) => void;
 };
 
@@ -68,6 +69,7 @@ export function DeliveryListView({
   onPressFlexMap,
   onRefresh,
   onPressScan,
+  onPressReportFailure,
   onPressShipment,
 }: Props) {
   const theme = useTheme();
@@ -107,6 +109,33 @@ export function DeliveryListView({
             Escanear paquete
           </Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reportar paquete fallido"
+          accessibilityState={{ disabled: scanDisabled }}
+          disabled={scanDisabled}
+          style={({ pressed }) => [
+            styles.btnReportFailure,
+            scanDisabled && styles.btnReportFailureDisabled,
+            pressed && !scanDisabled && styles.btnPressed,
+          ]}
+          onPress={onPressReportFailure}
+        >
+          <Ionicons
+            name="alert-circle-outline"
+            size={18}
+            color={scanDisabled ? theme.colors.muted : theme.colors.danger}
+            style={styles.scanIcon}
+          />
+          <Text
+            style={[
+              styles.btnReportFailureLabel,
+              scanDisabled && styles.btnReportFailureLabelDisabled,
+            ]}
+          >
+            Reportar paquete fallido
+          </Text>
+        </Pressable>
         {showFlexMap && (
           <Pressable
             accessibilityRole="button"
@@ -123,11 +152,13 @@ export function DeliveryListView({
       scanDisabled,
       showFlexMap,
       onPressScan,
+      onPressReportFailure,
       onPressFlexMap,
       totalShipments,
       styles,
       theme.colors.muted,
       theme.colors.primary,
+      theme.colors.danger,
     ],
   );
 
@@ -304,6 +335,29 @@ function createStyles(t: AppTheme) {
       color: colors.primaryOn,
     },
     btnScanLabelDisabled: {
+      color: colors.muted,
+    },
+    btnReportFailure: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+    },
+    btnReportFailureDisabled: {
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    btnReportFailureLabel: {
+      ...typography.bodyStrong,
+      color: colors.danger,
+    },
+    btnReportFailureLabelDisabled: {
       color: colors.muted,
     },
     flexMapBtn: {

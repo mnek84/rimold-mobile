@@ -16,6 +16,8 @@ import { showToast } from '@core/feedback/toastStore';
 import { resolveTrackingIdForAssign } from '@core/scanner/resolveTrackingIdForAssign';
 import { useTheme, type AppTheme } from '@theme';
 
+import { DeliveryFailedModal } from './DeliveryFailedModal';
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -34,6 +36,15 @@ type ErrorTone = 'info' | 'warning' | 'critical';
 type ErrorState = {
   message: string;
   tone: ErrorTone;
+  /**
+   * When the rejection identifies a shipment the driver could still report as
+   * failed (e.g. flex packages not in their route), we surface a "Marcar como
+   * fallida" action alongside the error banner.
+   */
+  failureTarget?: {
+    shipmentId: string;
+    trackingId: string | null;
+  };
 };
 
 export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props) {
@@ -43,6 +54,7 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
   const [error, setError] = useState<ErrorState | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [failureShipmentId, setFailureShipmentId] = useState<string | null>(null);
   const postingRef = useRef(false);
   const inFlightKeysRef = useRef<Set<string>>(new Set());
 
@@ -51,6 +63,7 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
       setError(null);
       setBusy(false);
       setConfirm(null);
+      setFailureShipmentId(null);
       postingRef.current = false;
       inFlightKeysRef.current.clear();
     }
@@ -120,9 +133,17 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
             return;
           }
           case 'flex_not_supported': {
+            const failureTarget =
+              err.shipmentId !== null
+                ? { shipmentId: err.shipmentId, trackingId: err.trackingId }
+                : undefined;
             setError({
-              message: 'Los paquetes Flex se gestionan desde la app de Mercado Libre.',
+              message:
+                failureTarget !== undefined
+                  ? 'Los paquetes Flex se gestionan desde Mercado Libre. Si no podés entregarlo, marcalo como fallido.'
+                  : 'Los paquetes Flex se gestionan desde la app de Mercado Libre.',
               tone: 'warning',
+              failureTarget,
             });
             return;
           }
@@ -215,6 +236,25 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
     setError(null);
   }, []);
 
+  const handleOpenFailureModal = useCallback(() => {
+    if (error?.failureTarget == null) {
+      return;
+    }
+    setFailureShipmentId(error.failureTarget.shipmentId);
+  }, [error]);
+
+  const handleFailureModalClose = useCallback(() => {
+    setFailureShipmentId(null);
+  }, []);
+
+  const handleFailureQueued = useCallback(() => {
+    setFailureShipmentId(null);
+    setError(null);
+    showToast('Paquete reportado como fallido');
+    onAssigned();
+    onClose();
+  }, [onAssigned, onClose]);
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -284,7 +324,24 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
             <Text style={[styles.errorText, errorTextStyleFor(theme, error.tone)]}>
               {error.message}
             </Text>
+            {error.failureTarget != null ? (
+              <Pressable
+                onPress={handleOpenFailureModal}
+                style={({ pressed }) => [styles.failureCta, pressed && styles.pressedStrong]}
+              >
+                <Text style={styles.failureCtaLabel}>Marcar como fallida</Text>
+              </Pressable>
+            ) : null}
           </View>
+        ) : null}
+
+        {failureShipmentId !== null ? (
+          <DeliveryFailedModal
+            visible={failureShipmentId !== null}
+            shipmentId={failureShipmentId}
+            onClose={handleFailureModalClose}
+            onQueued={handleFailureQueued}
+          />
         ) : null}
       </SafeAreaView>
     </Modal>
@@ -456,10 +513,24 @@ function createStyles(t: AppTheme) {
       paddingVertical: spacing.md,
       borderTopWidth: 1,
       borderTopColor: colors.border,
+      gap: spacing.sm,
     },
     errorText: {
       ...typography.body,
       textAlign: 'center',
+    },
+    failureCta: {
+      alignSelf: 'center',
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      borderRadius: spacing.radiusMd,
+      backgroundColor: colors.danger,
+      minWidth: 220,
+      alignItems: 'center',
+    },
+    failureCtaLabel: {
+      ...typography.bodyStrong,
+      color: colors.background,
     },
   });
 }
