@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -73,6 +73,30 @@ export function ClientSelectionScreen({ navigation }: Props) {
   const [query, setQuery] = useState('');
   const debouncedSearch = useDebouncedValue(query, SEARCH_DEBOUNCE_MS);
   const queryClient = useQueryClient();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Ver historial de colectas"
+          onPress={() => navigation.navigate('ColectaHistory')}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.headerRightButton,
+            pressed && styles.headerRightButtonPressed,
+          ]}
+        >
+          <Ionicons name="time-outline" size={22} color={theme.colors.primary} />
+        </Pressable>
+      ),
+    });
+  }, [
+    navigation,
+    styles.headerRightButton,
+    styles.headerRightButtonPressed,
+    theme.colors.primary,
+  ]);
 
   const infinite = useInfiniteQuery({
     queryKey: ['clients', debouncedSearch] as const,
@@ -703,6 +727,13 @@ function createStyles(t: AppTheme) {
       ...typography.body,
       color: colors.muted,
       textAlign: 'center',
+    },
+    headerRightButton: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    headerRightButtonPressed: {
+      opacity: motion.pressOpacitySoft,
     },
   });
 }

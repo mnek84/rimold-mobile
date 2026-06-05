@@ -9,6 +9,7 @@ export type ColectaStackParamList = {
     warehouseId: string;
     warehouseName: string;
   };
+  ColectaHistory: undefined;
 };
 
 export type ColectaStackNav<T extends keyof ColectaStackParamList> = NativeStackNavigationProp<

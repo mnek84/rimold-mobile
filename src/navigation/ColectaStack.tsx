@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { ClientSelectionScreen } from '@modules/colecta/ClientSelectionScreen';
+import { ColectaHistoryScreen } from '@modules/colecta/ColectaHistoryScreen';
 import { ColectaScanScreen } from '@modules/colecta/ColectaScanScreen';
 
 import { useDriverNativeStackScreenOptions } from './nativeStackScreenOptions';
@@ -24,6 +25,11 @@ export function ColectaStack() {
         name="ColectaScan"
         component={ColectaScanScreen}
         options={{ title: 'Escanear' }}
+      />
+      <Stack.Screen
+        name="ColectaHistory"
+        component={ColectaHistoryScreen}
+        options={{ title: 'Historial' }}
       />
     </Stack.Navigator>
   );
