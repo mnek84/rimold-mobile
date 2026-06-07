@@ -27,6 +27,7 @@ import Animated, {
 
 import { QrScanner } from '@components/QrScanner';
 import { Button, ScreenContainer } from '@components/ui';
+import { fetchActiveCageSession } from '@core/api/cageSessions';
 import {
   closeWarehouseCage,
   fetchDriversForAssignment,
@@ -112,6 +113,14 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
     queryFn: fetchDriversForAssignment,
     enabled: closeOpen,
   });
+
+  const sessionQuery = useQuery({
+    queryKey: ['cage-sessions', 'active'],
+    queryFn: fetchActiveCageSession,
+    refetchInterval: 4_000,
+    staleTime: 0,
+  });
+  const hasActiveSession = sessionQuery.data?.session !== null && sessionQuery.data?.session !== undefined;
 
   const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
   const okCount = shipments.length;
@@ -368,22 +377,35 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      <Button
-        onPress={() => {
-          if (okCount === 0) {
-            setCloseError(null);
-            closeMutation.mutate(null);
-          } else {
-            onOpenCloseModal();
-          }
-        }}
-        disabled={detailQuery.isLoading || closeMutation.isPending}
-        loading={closeMutation.isPending}
-        style={styles.closeCageBtn}
-      >
-        {okCount === 0 ? 'Cerrar jaula' : 'Cerrar jaula y asignar conductor'}
-      </Button>
-      {closeError !== null && !closeOpen ? <Text style={styles.footerCloseErr}>{closeError}</Text> : null}
+      {hasActiveSession ? (
+        <View style={styles.sessionLockedBanner}>
+          <Ionicons name="lock-closed-outline" size={16} color={theme.colors.muted} />
+          <Text style={styles.sessionLockedText}>
+            Esta jaula se cierra al cerrar la sesión.
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Button
+            onPress={() => {
+              if (okCount === 0) {
+                setCloseError(null);
+                closeMutation.mutate(null);
+              } else {
+                onOpenCloseModal();
+              }
+            }}
+            disabled={detailQuery.isLoading || closeMutation.isPending}
+            loading={closeMutation.isPending}
+            style={styles.closeCageBtn}
+          >
+            {okCount === 0 ? 'Cerrar jaula' : 'Cerrar jaula y asignar conductor'}
+          </Button>
+          {closeError !== null && !closeOpen ? (
+            <Text style={styles.footerCloseErr}>{closeError}</Text>
+          ) : null}
+        </>
+      )}
 
       <View style={styles.listHeaderRow}>
         <Text style={styles.sectionLabel}>Paquetes en esta jaula</Text>
@@ -641,6 +663,23 @@ function createStyles(t: AppTheme) {
     // ── Cerrar jaula ───────────────────────────────────────────────────
     closeCageBtn: {
       marginBottom: spacing.md,
+    },
+    sessionLockedBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: spacing.radiusMd,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sessionLockedText: {
+      ...typography.caption,
+      color: colors.muted,
+      flex: 1,
     },
     footerCloseErr: {
       ...typography.caption,

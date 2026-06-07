@@ -9,8 +9,10 @@ export type CageListParams = {
 };
 
 export type BodegaStackParamList = {
+  CageSessionGate: undefined;
   CageList: CageListParams | undefined;
   CageWorkspace: { cageId: string; cageName: string };
+  CloseCageSession: undefined;
 };
 
 export type BodegaStackNav<T extends keyof BodegaStackParamList> = NativeStackNavigationProp<

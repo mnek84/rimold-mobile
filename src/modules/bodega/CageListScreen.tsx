@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { QrScanner } from '@components/QrScanner';
 import { ScreenContainer } from '@components/ui';
+import { fetchActiveCageSession } from '@core/api/cageSessions';
 import {
   fetchWarehouseCages,
   resolveWarehouseCageQr,
@@ -62,7 +63,26 @@ export function CageListScreen() {
   const query = useQuery({
     queryKey: ['warehouse', 'cages'],
     queryFn: fetchWarehouseCages,
+    refetchInterval: 4_000,
+    staleTime: 0,
   });
+
+  const sessionQ = useQuery({
+    queryKey: ['cage-sessions', 'active'],
+    queryFn: fetchActiveCageSession,
+    refetchInterval: 4_000,
+    staleTime: 0,
+  });
+  const session = sessionQ.data?.session ?? null;
+
+  // If the session was just closed (by another device or by this user), kick
+  // back to the gate so the operator has to start a new one.
+  useEffect(() => {
+    if (sessionQ.isLoading) return;
+    if (session === null) {
+      navigation.reset({ index: 0, routes: [{ name: 'CageSessionGate' }] });
+    }
+  }, [navigation, session, sessionQ.isLoading]);
 
   const filteredCages = useMemo(() => {
     const rows = query.data ?? [];
@@ -198,6 +218,35 @@ export function CageListScreen() {
     [onSelect, styles, transfer, transferMutation.isPending],
   );
 
+  const totalShipmentsInSession = useMemo(() => {
+    const rows = sessionQ.data?.cages ?? [];
+    return rows.reduce((acc, c) => acc + (c.shipments_count ?? 0), 0);
+  }, [sessionQ.data?.cages]);
+
+  const cagesWithPackagesInSession = (sessionQ.data?.cages ?? []).filter(
+    (c) => (c.shipments_count ?? 0) > 0,
+  ).length;
+
+  const sessionHeader =
+    session !== null ? (
+      <View style={styles.sessionHeader}>
+        <View style={styles.sessionHeaderText}>
+          <Text style={styles.sessionTitle}>Sesión {session.name}</Text>
+          <Text style={styles.sessionSub}>
+            {totalShipmentsInSession} paquete{totalShipmentsInSession === 1 ? '' : 's'} en {cagesWithPackagesInSession} jaula
+            {cagesWithPackagesInSession === 1 ? '' : 's'}
+          </Text>
+        </View>
+        <Pressable
+          style={styles.closeSessionBtn}
+          onPress={() => navigation.navigate('CloseCageSession')}
+        >
+          <Ionicons name="checkmark-done-outline" size={18} color={theme.colors.primary} />
+          <Text style={styles.closeSessionBtnLabel}>Cerrar sesión</Text>
+        </Pressable>
+      </View>
+    ) : null;
+
   const intro =
     transfer !== null ? (
       <View style={styles.transferBanner}>
@@ -244,6 +293,7 @@ export function CageListScreen() {
 
   return (
     <ScreenContainer>
+      {sessionHeader}
       {intro}
 
       {query.isLoading ? (
@@ -371,6 +421,43 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.muted,
       marginBottom: spacing.md,
+    },
+    sessionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      padding: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: spacing.radiusMd,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.primary + '44',
+    },
+    sessionHeaderText: { flex: 1, minWidth: 0 },
+    sessionTitle: {
+      ...typography.bodyStrong,
+      color: colors.text,
+    },
+    sessionSub: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: 2,
+    },
+    closeSessionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: spacing.radiusMd,
+      borderWidth: 1,
+      borderColor: colors.primary + '66',
+      backgroundColor: colors.primary + '11',
+    },
+    closeSessionBtnLabel: {
+      ...typography.captionStrong,
+      color: colors.primary,
     },
     searchInput: {
       ...typography.body,
