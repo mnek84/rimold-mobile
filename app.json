@@ -2,7 +2,7 @@
   "expo": {
     "name": "mobile",
     "slug": "mobile",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mobile",
@@ -53,14 +53,14 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan QR codes."
+          "cameraPermission": "Permitir $(PRODUCT_NAME) Acceder a la cámara para escanear códigos QR."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location on the map and near-destination alerts.",
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to share your location with dispatch while you deliver, including when the app is in the background.",
+          "locationWhenInUsePermission": "Permitir $(PRODUCT_NAME) Usar su ubicación en el mapa y alertas de proximidad al destino.",
+          "locationAlwaysAndWhenInUsePermission": "Permitir $(PRODUCT_NAME) Compartir su ubicación con el despacho mientras entrega, incluso cuando la aplicación está en segundo plano.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
@@ -70,7 +70,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow $(PRODUCT_NAME) to choose a delivery photo."
+          "photosPermission": "Permitir $(PRODUCT_NAME) Elegir una foto de entrega."
         }
       ],
       "expo-secure-store",
