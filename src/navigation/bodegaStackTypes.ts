@@ -9,6 +9,8 @@ export type CageListParams = {
 };
 
 export type BodegaStackParamList = {
+  BodegaHome: undefined;
+  WarehouseEntry: undefined;
   CageSessionGate: undefined;
   CageList: CageListParams | undefined;
   CageWorkspace: { cageId: string; cageName: string };

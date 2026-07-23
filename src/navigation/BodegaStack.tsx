@@ -1,9 +1,11 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { BodegaHomeScreen } from '@modules/bodega/BodegaHomeScreen';
 import { CageListScreen } from '@modules/bodega/CageListScreen';
 import { CageSessionGateScreen } from '@modules/bodega/CageSessionGateScreen';
 import { CageWorkspaceScreen } from '@modules/bodega/CageWorkspaceScreen';
 import { CloseCageSessionScreen } from '@modules/bodega/CloseCageSessionScreen';
+import { WarehouseEntryScreen } from '@modules/bodega/WarehouseEntryScreen';
 
 import { useDriverNativeStackScreenOptions } from './nativeStackScreenOptions';
 import type { BodegaStackParamList } from './bodegaStackTypes';
@@ -14,9 +16,19 @@ export function BodegaStack() {
   const screenOptions = useDriverNativeStackScreenOptions();
   return (
     <Stack.Navigator
-      initialRouteName="CageSessionGate"
+      initialRouteName="BodegaHome"
       screenOptions={screenOptions}
     >
+      <Stack.Screen
+        name="BodegaHome"
+        component={BodegaHomeScreen}
+        options={{ title: 'Depósito' }}
+      />
+      <Stack.Screen
+        name="WarehouseEntry"
+        component={WarehouseEntryScreen}
+        options={{ title: 'Ingreso a depósito' }}
+      />
       <Stack.Screen
         name="CageSessionGate"
         component={CageSessionGateScreen}

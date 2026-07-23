@@ -19,7 +19,7 @@ export const DELIVERY_DETAIL_ACTIONS: {
 // transition once the queued event reaches the projection (see
 // ShipmentProjection::resolveTargetStatusCode):
 //   en_camino → SHIPMENT_IN_TRANSIT      → out_for_delivery
-//   cerca     → SHIPMENT_NEAR_DESTINATION → in_depot   (reused as "near destination")
+//   cerca     → SHIPMENT_NEAR_DESTINATION → near_destination
 //   entregado → SHIPMENT_DELIVERED       → delivered
 //   fallido   → SHIPMENT_FAILED          → failed
 export const DELIVERY_ACTION_EVENT_MAP: Record<
@@ -27,7 +27,7 @@ export const DELIVERY_ACTION_EVENT_MAP: Record<
   { eventType: string; optimisticCode: string }
 > = {
   en_camino: { eventType: EventType.SHIPMENT_IN_TRANSIT, optimisticCode: 'out_for_delivery' },
-  cerca: { eventType: EventType.SHIPMENT_NEAR_DESTINATION, optimisticCode: 'in_depot' },
+  cerca: { eventType: EventType.SHIPMENT_NEAR_DESTINATION, optimisticCode: 'near_destination' },
   entregado: { eventType: EventType.SHIPMENT_DELIVERED, optimisticCode: 'delivered' },
   fallido: { eventType: EventType.SHIPMENT_FAILED, optimisticCode: 'failed' },
 };

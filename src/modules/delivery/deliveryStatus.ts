@@ -4,9 +4,9 @@ import type { AppTheme } from '@theme';
 export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados';
 
 const ENTREGADOS = new Set(['delivered', 'returned']);
-// `in_depot` is reused on the driver side as "Cerca" (near destination); it sits
-// between `out_for_delivery` and the final state, so it lists as "En ruta".
-const EN_RUTA = new Set(['out_for_delivery', 'in_transit', 'in_depot']);
+// `near_destination` is the driver-side "Cerca" sub-state; it sits between
+// `out_for_delivery` and the final state, so it lists as "En ruta".
+const EN_RUTA = new Set(['out_for_delivery', 'in_transit', 'near_destination']);
 
 /** Bucket for list grouping (Spanish UI labels). */
 export function statusDeliveryGroup(status: string): DeliveryGroup {
@@ -92,7 +92,8 @@ const DRIVER_STATUS_LABEL_ES: Record<string, string> = {
   created: 'Ingresado',
   picked: 'Retirado',
   collected: 'Recolectado',
-  in_depot: 'Cerca',
+  in_warehouse: 'En depósito',
+  near_destination: 'Cerca',
   in_cage: 'En jaula',
   pending_route: 'Pendiente de ruta',
   assigned: 'Asignado',
@@ -114,22 +115,22 @@ export function formatDriverShipmentStatusLabel(code: string): string {
 
 /**
  * Driver-side phase (0–3) used to drive the timeline + action enablement:
- *   0 = pre-delivery (assigned, picked, in_cage, …)
+ *   0 = pre-delivery (assigned, picked, in_warehouse, in_cage, …)
  *   1 = "En camino" (out_for_delivery / integration in_transit) — driver left
- *   2 = "Cerca"     (in_depot reused as near-destination)        — driver arriving
+ *   2 = "Cerca"     (near_destination)                         — driver arriving
  *   3 = terminal    (delivered, returned, failed, cancelled)
  */
 export function shipmentDriverPhaseIndex(statusCode: string | null | undefined): number {
   const s = (statusCode ?? '').trim().toLowerCase();
   if (
-    ['created', 'picked', 'in_cage', 'assigned', 'pending_route', 'missing_zone', 'collected'].includes(s)
+    ['created', 'picked', 'in_warehouse', 'in_cage', 'assigned', 'pending_route', 'missing_zone', 'collected'].includes(s)
   ) {
     return 0;
   }
   if (s === 'out_for_delivery' || s === 'in_transit') {
     return 1;
   }
-  if (s === 'in_depot') {
+  if (s === 'near_destination') {
     return 2;
   }
   if (['delivered', 'returned', 'failed', 'cancelled'].includes(s)) {
@@ -168,9 +169,9 @@ export function shipmentListBadgeKind(status: string): ShipmentListBadgeKind {
   if (s === 'failed' || s === 'cancelled') {
     return 'failed';
   }
-  // `in_depot` is reused on the driver side as "Cerca" (near destination),
-  // which is part of the in-transit phase from the driver's POV.
-  if (s === 'out_for_delivery' || s === 'in_transit' || s === 'in_depot') {
+  // `near_destination` is the driver-side "Cerca" sub-state, which is part of
+  // the in-transit phase from the driver's POV.
+  if (s === 'out_for_delivery' || s === 'in_transit' || s === 'near_destination') {
     return 'in_transit';
   }
   return 'pending';
@@ -228,21 +229,22 @@ export function isDriverActionEnabled(
 
   switch (action) {
     case 'en_camino':
-      return ['assigned', 'created', 'picked', 'in_cage', 'pending_route', 'collected'].includes(s);
+      return ['assigned', 'created', 'picked', 'in_warehouse', 'in_cage', 'pending_route', 'collected'].includes(s);
     case 'cerca':
       return s === 'out_for_delivery' || s === 'in_transit';
     case 'entregado':
       // Delivery is allowed both from "En camino" (out_for_delivery) and from
-      // "Cerca" (in_depot) so the driver does not have to wait for the
+      // "Cerca" (near_destination) so the driver does not have to wait for the
       // geofence to flip the state.
-      return s === 'out_for_delivery' || s === 'in_transit' || s === 'in_depot';
+      return s === 'out_for_delivery' || s === 'in_transit' || s === 'near_destination';
     case 'fallido':
       return [
         'assigned',
         'created',
         'picked',
+        'in_warehouse',
         'in_cage',
-        'in_depot',
+        'near_destination',
         'out_for_delivery',
         'in_transit',
         'pending_route',
@@ -265,7 +267,7 @@ export type TimelineStepUi = {
  * Cada paso corresponde 1:1 con la fase del conductor (ver shipmentDriverPhaseIndex):
  *   step 0 = Asignado (phase 0)
  *   step 1 = En camino (phase 1, out_for_delivery)
- *   step 2 = Cerca     (phase 2, in_depot)
+ *   step 2 = Cerca     (phase 2, near_destination)
  *   step 3 = terminal  (phase 3)
  */
 export function buildShipmentTimeline(statusCode: string | null | undefined): TimelineStepUi[] {
