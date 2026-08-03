@@ -1,16 +1,19 @@
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import { Button, ScreenContainer } from '@components/ui';
-import { fetchDriverRoute, optimizeRoute, type DriverRouteView, type RouteStopView } from '@core/api/routes';
+import { optimizeRoute, type DriverRouteView, type RouteStopView } from '@core/api/routes';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { isValidLatLng } from '@core/geo/coordinates';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
 import { useTheme, type AppTheme } from '@theme';
 
-type Props = { routeId: string };
+type Props = {
+  route: DriverRouteView;
+  onRefresh: () => Promise<void>;
+};
 
 function formatDrivingDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) {
@@ -25,14 +28,10 @@ function formatDrivingDuration(seconds: number): string {
   return mm > 0 ? `~${h} h ${mm} min` : `~${h} h`;
 }
 
-export function InternalRouteContent({ routeId }: Props) {
+export function InternalRouteContent({ route, onRefresh }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const mapRef = useRef<MapView>(null);
-
-  const [routeData, setRouteData] = useState<DriverRouteView | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadingRoute, setLoadingRoute] = useState(true);
 
   const [polylineCoords, setPolylineCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [durationSec, setDurationSec] = useState<number | null>(null);
@@ -40,51 +39,33 @@ export function InternalRouteContent({ routeId }: Props) {
   const [started, setStarted] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoadingRoute(true);
-    setLoadError(null);
-    try {
-      const r = await fetchDriverRoute(routeId);
-      setRouteData(r);
-    } catch (e) {
-      setRouteData(null);
-      setLoadError(messageForShipmentListError(e));
-    } finally {
-      setLoadingRoute(false);
-    }
-  }, [routeId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Reset started/polyline when routeId changes
+  // Reset optimization state when the route identity or its stop count changes
+  // (e.g. new shipments were appended as stops after a sync).
   useEffect(() => {
     setStarted(false);
     setPolylineCoords([]);
     setDurationSec(null);
     setDistanceM(null);
     setOptimizeError(null);
-  }, [routeId]);
+  }, [route.id, route.stops.length]);
 
   const stopsWithCoords = useMemo(() => {
-    if (routeData === null) return [];
-    return routeData.stops.filter(
+    return route.stops.filter(
       (s) => s.latitude !== null && s.longitude !== null && isValidLatLng(s.latitude, s.longitude),
     );
-  }, [routeData]);
+  }, [route.stops]);
 
   const nextStop: RouteStopView | null = useMemo(() => {
-    if (routeData === null) return null;
-    return routeData.stops.find((s) => s.status === 'pending') ?? null;
-  }, [routeData]);
+    return route.stops.find((s) => s.status === 'pending') ?? null;
+  }, [route.stops]);
 
   const onStartRoute = useCallback(async () => {
     setOptimizing(true);
     setOptimizeError(null);
     try {
-      const res = await optimizeRoute(routeId);
+      const res = await optimizeRoute(route.id);
       setPolylineCoords(decodeOsrmPolyline(res.polyline));
       setDurationSec(res.duration);
       setDistanceM(res.distance);
@@ -94,7 +75,7 @@ export function InternalRouteContent({ routeId }: Props) {
     } finally {
       setOptimizing(false);
     }
-  }, [routeId]);
+  }, [route.id]);
 
   useEffect(() => {
     const coords = [
@@ -114,20 +95,21 @@ export function InternalRouteContent({ routeId }: Props) {
     void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
   }, [nextStop]);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh]);
+
   const routeColor = theme.colors.success;
 
   const mapBlock =
     Platform.OS === 'web' ? (
       <View style={styles.mapPlaceholder}>
         <Text style={styles.muted}>El mapa no está disponible en web.</Text>
-      </View>
-    ) : loadingRoute ? (
-      <View style={styles.mapPlaceholder}>
-        <ActivityIndicator color={routeColor} />
-      </View>
-    ) : loadError != null ? (
-      <View style={styles.mapPlaceholder}>
-        <Text style={styles.errorText}>{loadError}</Text>
       </View>
     ) : (
       <MapView
@@ -161,14 +143,26 @@ export function InternalRouteContent({ routeId }: Props) {
     );
 
   return (
-    <ScreenContainer scroll>
+    <ScreenContainer
+      scroll
+      scrollViewProps={{
+        refreshControl: (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        ),
+      }}
+    >
       {mapBlock}
 
       <View style={styles.actions}>
         <Button
           variant="primary"
           loading={optimizing}
-          disabled={loadingRoute || loadError != null || optimizing}
+          disabled={optimizing}
           onPress={() => void onStartRoute()}
         >
           Iniciar ruta
@@ -188,28 +182,24 @@ export function InternalRouteContent({ routeId }: Props) {
       </View>
 
       <Text style={styles.sectionTitle}>Paradas</Text>
-      {routeData === null && loadingRoute ? (
-        <Text style={styles.muted}>Cargando…</Text>
-      ) : (
-        routeData?.stops.map((s) => {
-          const isNext = nextStop !== null && s.id === nextStop.id;
-          return (
-            <View key={s.id} style={[styles.stopRow, isNext && styles.stopRowNext]}>
-              <Text style={styles.stopSeq}>{s.sequence}</Text>
-              <View style={styles.stopBody}>
-                <Text style={styles.stopTitle}>
-                  {isNext ? 'Siguiente · ' : ''}Parada {s.sequence}
-                  {s.shipmentId != null ? ` · ${s.shipmentId.slice(0, 8)}` : ''}
-                </Text>
-                <Text style={styles.muted} numberOfLines={2}>
-                  {s.label ?? '—'}
-                </Text>
-                <Text style={styles.mutedSmall}>{s.status}</Text>
-              </View>
+      {route.stops.map((s) => {
+        const isNext = nextStop !== null && s.id === nextStop.id;
+        return (
+          <View key={s.id} style={[styles.stopRow, isNext && styles.stopRowNext]}>
+            <Text style={styles.stopSeq}>{s.sequence}</Text>
+            <View style={styles.stopBody}>
+              <Text style={styles.stopTitle}>
+                {isNext ? 'Siguiente · ' : ''}Parada {s.sequence}
+                {s.shipmentId != null ? ` · ${s.shipmentId.slice(0, 8)}` : ''}
+              </Text>
+              <Text style={styles.muted} numberOfLines={2}>
+                {s.label ?? '—'}
+              </Text>
+              <Text style={styles.mutedSmall}>{s.status}</Text>
             </View>
-          );
-        })
-      )}
+          </View>
+        );
+      })}
     </ScreenContainer>
   );
 }

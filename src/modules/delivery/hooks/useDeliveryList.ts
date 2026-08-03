@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
-import { useDeliveryStore } from '@store/useDeliveryStore';
 
 import { groupShipmentsForSections, pickNextShipmentId } from '../deliveryStatus';
 
@@ -13,7 +12,6 @@ export function useDeliveryList() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setDeliveryData = useDeliveryStore((s) => s.setDeliveryData);
 
   const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent') => {
     if (mode === 'initial') {
@@ -27,10 +25,6 @@ export function useDeliveryList() {
     try {
       const rows = await fetchShipmentsToday();
       setShipments(rows);
-      const routeId =
-        rows.find((r) => typeof r.route_id === 'string' && r.route_id !== '' && r.execution_type !== 'flex')
-          ?.route_id ?? null;
-      setDeliveryData(rows.length, routeId);
     } catch (e) {
       setShipments([]);
       if (mode !== 'silent') {
@@ -40,7 +34,7 @@ export function useDeliveryList() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [setDeliveryData]);
+  }, []);
 
   useEffect(() => {
     void load('initial');
@@ -55,15 +49,6 @@ export function useDeliveryList() {
   }, [load]);
 
   const nextShipmentId = useMemo(() => pickNextShipmentId(shipments), [shipments]);
-
-  const internalRouteId = useMemo(() => {
-    for (const r of shipments) {
-      if (typeof r.route_id === 'string' && r.route_id !== '' && r.execution_type !== 'flex') {
-        return r.route_id;
-      }
-    }
-    return null;
-  }, [shipments]);
 
   const flexBatchId = useMemo(() => {
     for (const r of shipments) {

@@ -1,11 +1,11 @@
+import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
-import { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from '@components/ui';
-import { createDriverRoute } from '@core/api/routes';
-import { useDeliveryStore } from '@store/useDeliveryStore';
+import { createDriverRoute, type DriverRouteView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
 import { InternalRouteContent } from './InternalRouteContent';
@@ -13,96 +13,108 @@ import { InternalRouteContent } from './InternalRouteContent';
 /**
  * Bottom tab "Ruta" for drivers.
  *
- *  - With an active internal route assigned: render the map.
- *  - With shipments assigned but no route yet: show the "Crear ruta" CTA so the
- *    driver can self-service build today's route from his assigned shipments
- *    (POST /driver/routes).
- *  - With no shipments at all: empty state.
+ * Auto-syncs on focus: every time the tab gains focus we POST /driver/routes
+ * (idempotent) so the backend adds any shipments assigned since the last sync
+ * to today's active Route as new stops. The response is the full Route, which
+ * we render directly — no separate "Crear ruta" CTA.
  */
 export function RouteMapTabScreen() {
-  const totalShipments = useDeliveryStore((s) => s.totalShipments);
-  const routeId = useDeliveryStore((s) => s.internalRouteId);
-  const setDeliveryData = useDeliveryStore((s) => s.setDeliveryData);
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [route, setRoute] = useState<DriverRouteView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [empty, setEmpty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
-  const onCreateRoute = useCallback(async () => {
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const route = await createDriverRoute();
-      setDeliveryData(Math.max(totalShipments, route.stops.length), route.id);
-    } catch (e) {
-      setCreateError(messageForCreateRouteError(e));
-    } finally {
-      setCreating(false);
+  const sync = useCallback(async (mode: 'initial' | 'refresh') => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    if (mode === 'initial') {
+      setLoading(true);
     }
-  }, [setDeliveryData, totalShipments]);
+    setError(null);
+    try {
+      const r = await createDriverRoute();
+      setRoute(r);
+      setEmpty(false);
+    } catch (e) {
+      if (isNoShipmentsError(e)) {
+        setRoute(null);
+        setEmpty(true);
+      } else {
+        setError(messageForSyncError(e));
+      }
+    } finally {
+      setLoading(false);
+      inFlight.current = false;
+    }
+  }, []);
 
-  if (routeId !== null) {
-    return <InternalRouteContent routeId={routeId} />;
+  useFocusEffect(
+    useCallback(() => {
+      void sync('initial');
+    }, [sync]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    await sync('refresh');
+  }, [sync]);
+
+  if (loading && route === null) {
+    return (
+      <View style={styles.empty}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
   }
 
-  if (totalShipments <= 0) {
+  if (error !== null && route === null) {
+    return (
+      <View style={styles.empty}>
+        <Ionicons name="alert-circle-outline" size={48} color={theme.colors.danger} />
+        <Text style={styles.emptyTitle}>No pudimos cargar la ruta</Text>
+        <Text style={styles.emptySubtitle}>{error}</Text>
+        <View style={styles.actions}>
+          <Button variant="primary" onPress={() => void sync('initial')}>
+            Reintentar
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
+  if (empty || route === null || route.stops.length === 0) {
     return (
       <View style={styles.empty}>
         <Ionicons name="map-outline" size={48} color={theme.colors.muted} />
         <Text style={styles.emptyTitle}>Sin envíos asignados</Text>
         <Text style={styles.emptySubtitle}>
-          Cuando tengas envíos asignados vas a poder crear tu ruta desde acá.
+          Cuando tengas envíos asignados vas a poder ver tu ruta desde acá.
         </Text>
       </View>
     );
   }
 
-  return (
-    <View style={styles.empty}>
-      <Ionicons name="navigate-outline" size={48} color={theme.colors.muted} />
-      <Text style={styles.emptyTitle}>Aún no creaste la ruta</Text>
-      <Text style={styles.emptySubtitle}>
-        Tenés {totalShipments} {totalShipments === 1 ? 'envío asignado' : 'envíos asignados'}. Tocá "Crear ruta"
-        para armar la ruta del día.
-      </Text>
-      <View style={styles.actions}>
-        <Button variant="primary" loading={creating} onPress={() => void onCreateRoute()}>
-          Crear ruta
-        </Button>
-        {createError !== null && <Text style={styles.errorText}>{createError}</Text>}
-      </View>
-    </View>
-  );
+  return <InternalRouteContent route={route} onRefresh={onRefresh} />;
 }
 
-function messageForCreateRouteError(e: unknown): string {
+function isNoShipmentsError(e: unknown): boolean {
+  return axios.isAxiosError(e) && e.response?.status === 422;
+}
+
+function messageForSyncError(e: unknown): string {
   if (axios.isAxiosError(e)) {
-    const status = e.response?.status;
-    if (status === 401) {
+    if (e.response?.status === 401) {
       return 'Sesión expirada o no válida. Volvé a iniciar sesión.';
-    }
-    if (status === 422) {
-      const errs = e.response?.data?.errors;
-      if (errs !== null && typeof errs === 'object') {
-        const list = Object.values(errs as Record<string, unknown>).flat();
-        const first = list.find((v) => typeof v === 'string' && v !== '');
-        if (typeof first === 'string') {
-          return first;
-        }
-      }
-      const m = e.response?.data?.message;
-      if (typeof m === 'string' && m.trim() !== '') {
-        return m;
-      }
-      return 'No hay envíos disponibles para armar la ruta.';
     }
     const m = e.response?.data?.message;
     if (typeof m === 'string' && m.trim() !== '') {
       return m;
     }
   }
-  return 'No se pudo crear la ruta.';
+  return 'No se pudo cargar la ruta.';
 }
 
 function createStyles(t: AppTheme) {
@@ -131,11 +143,6 @@ function createStyles(t: AppTheme) {
       maxWidth: 320,
       gap: spacing.sm,
       marginTop: spacing.md,
-    },
-    errorText: {
-      ...typography.caption,
-      color: colors.danger,
-      textAlign: 'center',
     },
   });
 }

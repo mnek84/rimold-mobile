@@ -3,7 +3,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DeliveryDetailScreen } from '@modules/delivery/DeliveryDetailScreen';
 import { DeliveryListScreen } from '@modules/delivery/DeliveryListScreen';
 import { FlexBatchMapScreen } from '@modules/delivery/FlexBatchMapScreen';
-import { InternalRouteScreen } from '@modules/delivery/InternalRouteScreen';
 
 import { useDriverNativeStackScreenOptions } from './nativeStackScreenOptions';
 import type { DeliveryStackParamList } from './deliveryStackTypes';
@@ -25,11 +24,6 @@ export function DeliveryStack() {
           title: 'Entrega',
           headerBackTitle: 'Lista',
         }}
-      />
-      <Stack.Screen
-        name="InternalRoute"
-        component={InternalRouteScreen}
-        options={{ title: 'Ruta interna', headerBackTitle: 'Lista' }}
       />
       <Stack.Screen
         name="FlexBatchMap"

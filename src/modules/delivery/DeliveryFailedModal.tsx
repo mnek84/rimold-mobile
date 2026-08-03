@@ -1,4 +1,4 @@
-import { pickAndCompressPhoto } from '@core/media/compressPhoto';
+import { PhotoCaptureModal, type PhotoCaptureResult } from '@core/media/PhotoCaptureModal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,14 +39,16 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [note, setNote] = useState('');
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<PhotoCaptureResult | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
     setNote('');
-    setPhotoDataUrl(null);
+    setPhoto(null);
+    setCameraOpen(false);
   }, [visible]);
 
   useEffect(() => {
@@ -61,23 +63,21 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
     });
   }, [visible, options]);
 
-  const takePhoto = useCallback(async () => {
-    const dataUrl = await pickAndCompressPhoto(
-      'Se necesita cámara o galería para adjuntar la foto obligatoria.',
-    );
-    if (dataUrl != null) {
-      setPhotoDataUrl(dataUrl);
-    }
+  const openCamera = useCallback(() => setCameraOpen(true), []);
+  const closeCamera = useCallback(() => setCameraOpen(false), []);
+  const handleCameraCapture = useCallback((result: PhotoCaptureResult) => {
+    setPhoto(result);
+    setCameraOpen(false);
   }, []);
 
-  const clearPhoto = useCallback(() => setPhotoDataUrl(null), []);
+  const clearPhoto = useCallback(() => setPhoto(null), []);
 
   const handleSubmit = useCallback(() => {
     const sid = shipmentId.trim();
     if (sid === '') {
       return;
     }
-    if (photoDataUrl == null || photoDataUrl.trim() === '') {
+    if (photo == null || photo.dataUrl.trim() === '') {
       Alert.alert('Foto obligatoria', 'Adjuntá una foto del intento de entrega.');
       return;
     }
@@ -97,7 +97,7 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
       shipmentId: sid,
       failed_reason: opt.label,
       failed_reason_code: opt.code,
-      photo: photoDataUrl,
+      photo: photo.dataUrl,
     };
     const noteTrim = note.trim();
     if (noteTrim !== '') {
@@ -120,7 +120,7 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
     onClose,
     onQueued,
     options,
-    photoDataUrl,
+    photo,
     reasonsQuery.isError,
     selectedCode,
     shipmentId,
@@ -205,13 +205,13 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
             <View style={styles.photoRow}>
               <Pressable
                 style={({ pressed }) => [styles.photoBtn, pressed && styles.pressed]}
-                onPress={() => void takePhoto()}
+                onPress={openCamera}
               >
                 <Text style={styles.photoBtnLabel}>
-                  {photoDataUrl != null ? 'Cambiar foto' : 'Tomar foto'}
+                  {photo != null ? 'Cambiar foto' : 'Tomar foto'}
                 </Text>
               </Pressable>
-              {photoDataUrl != null ? (
+              {photo != null ? (
                 <Pressable
                   style={({ pressed }) => [styles.photoBtnOutline, pressed && styles.pressed]}
                   onPress={clearPhoto}
@@ -220,9 +220,9 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
                 </Pressable>
               ) : null}
             </View>
-            {photoDataUrl != null ? (
+            {photo != null ? (
               <View style={styles.photoPreviewWrap}>
-                <PhotoPreview uri={photoDataUrl} size={120} />
+                <PhotoPreview uri={photo.previewUri} size={120} />
               </View>
             ) : null}
 
@@ -235,6 +235,11 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <PhotoCaptureModal
+        visible={cameraOpen}
+        onCapture={handleCameraCapture}
+        onClose={closeCamera}
+      />
     </Modal>
   );
 }

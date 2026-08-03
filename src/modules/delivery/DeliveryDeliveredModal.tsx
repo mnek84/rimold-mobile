@@ -1,4 +1,4 @@
-import { pickAndCompressPhoto } from '@core/media/compressPhoto';
+import { PhotoCaptureModal, type PhotoCaptureResult } from '@core/media/PhotoCaptureModal';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -44,7 +44,8 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
   const [dni, setDni] = useState('');
   const [receiverName, setReceiverName] = useState('');
   const [relationship, setRelationship] = useState<RelationshipValue>('titular');
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<PhotoCaptureResult | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const sigRef = useRef<SignaturePadHandle>(null);
   const submitIntentRef = useRef(false);
 
@@ -53,22 +54,21 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
       setDni('');
       setReceiverName('');
       setRelationship('titular');
-      setPhotoDataUrl(null);
+      setPhoto(null);
+      setCameraOpen(false);
       submitIntentRef.current = false;
       sigRef.current?.clear();
     }
   }, [visible]);
 
-  const takePhoto = useCallback(async () => {
-    const dataUrl = await pickAndCompressPhoto(
-      'Se necesita cámara o galería para adjuntar una foto.',
-    );
-    if (dataUrl != null) {
-      setPhotoDataUrl(dataUrl);
-    }
+  const openCamera = useCallback(() => setCameraOpen(true), []);
+  const closeCamera = useCallback(() => setCameraOpen(false), []);
+  const handleCameraCapture = useCallback((result: PhotoCaptureResult) => {
+    setPhoto(result);
+    setCameraOpen(false);
   }, []);
 
-  const clearPhoto = useCallback(() => setPhotoDataUrl(null), []);
+  const clearPhoto = useCallback(() => setPhoto(null), []);
 
   const finalizeSubmit = useCallback(
     (signatureDataUrl: string) => {
@@ -82,7 +82,7 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
         receiver_name: receiverName.trim(),
         relationship,
         signature: signatureDataUrl.trim(),
-        ...(photoDataUrl != null ? { photo: photoDataUrl } : {}),
+        ...(photo != null ? { photo: photo.dataUrl } : {}),
       };
 
       void enqueueEvent({
@@ -98,7 +98,7 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
           showToast(TOAST_DELIVERY.sendError);
         });
     },
-    [dni, onClose, onQueued, photoDataUrl, receiverName, relationship, shipmentId],
+    [dni, onClose, onQueued, photo, receiverName, relationship, shipmentId],
   );
 
   const onSignature = useCallback(
@@ -212,13 +212,13 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
             <View style={styles.photoRow}>
               <Pressable
                 style={({ pressed }) => [styles.photoBtn, pressed && styles.pressed]}
-                onPress={() => void takePhoto()}
+                onPress={openCamera}
               >
                 <Text style={styles.photoBtnLabel}>
-                  {photoDataUrl != null ? 'Cambiar foto' : 'Tomar foto'}
+                  {photo != null ? 'Cambiar foto' : 'Tomar foto'}
                 </Text>
               </Pressable>
-              {photoDataUrl != null ? (
+              {photo != null ? (
                 <Pressable
                   style={({ pressed }) => [styles.photoBtnOutline, pressed && styles.pressed]}
                   onPress={clearPhoto}
@@ -227,9 +227,9 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
                 </Pressable>
               ) : null}
             </View>
-            {photoDataUrl != null ? (
+            {photo != null ? (
               <View style={styles.photoPreviewWrap}>
-                <PhotoPreview uri={photoDataUrl} size={120} />
+                <PhotoPreview uri={photo.previewUri} size={120} />
               </View>
             ) : null}
 
@@ -242,6 +242,11 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <PhotoCaptureModal
+        visible={cameraOpen}
+        onCapture={handleCameraCapture}
+        onClose={closeCamera}
+      />
     </Modal>
   );
 }

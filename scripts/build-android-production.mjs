@@ -159,6 +159,16 @@ function validateEnv() {
     );
   }
 
+  const mapsKey = env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
+  if (!mapsKey) {
+    fail(
+      'GOOGLE_MAPS_ANDROID_API_KEY is required in .env.production.\n' +
+        '  Without it, react-native-maps crashes on Android when opening a route/map.\n' +
+        '  Create a key in Google Cloud Console (Maps SDK for Android enabled),\n' +
+        '  restrict it to package `com.logistica.mobile`, and paste it in .env.production.',
+    );
+  }
+
   return env;
 }
 
