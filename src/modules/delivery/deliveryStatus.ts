@@ -3,7 +3,7 @@ import type { AppTheme } from '@theme';
 
 export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados';
 
-const ENTREGADOS = new Set(['delivered', 'returned']);
+const ENTREGADOS = new Set(['delivered', 'returned', 'cancelled']);
 // `near_destination` is the driver-side "Cerca" sub-state; it sits between
 // `out_for_delivery` and the final state, so it lists as "En ruta".
 const EN_RUTA = new Set(['out_for_delivery', 'in_transit', 'near_destination']);
@@ -20,7 +20,7 @@ export function statusDeliveryGroup(status: string): DeliveryGroup {
   return 'pendientes';
 }
 
-const GROUP_ORDER: DeliveryGroup[] = ['pendientes', 'en_ruta', 'entregados'];
+const GROUP_ORDER: DeliveryGroup[] = ['en_ruta', 'pendientes'];
 
 const GROUP_LABEL: Record<DeliveryGroup, string> = {
   pendientes: 'Pendientes',

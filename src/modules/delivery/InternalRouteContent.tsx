@@ -1,14 +1,22 @@
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 
 import { Button, ScreenContainer } from '@components/ui';
-import { optimizeRoute, type DriverRouteView, type RouteStopView } from '@core/api/routes';
+import {
+  finishDriverRoute,
+  optimizeRoute,
+  startDriverRoute,
+  type DriverRouteView,
+  type RouteStopView,
+} from '@core/api/routes';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
+import { showToast } from '@core/feedback/toastStore';
 import { isValidLatLng } from '@core/geo/coordinates';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
 import { useTheme, type AppTheme } from '@theme';
+import axios from 'axios';
 
 type Props = {
   route: DriverRouteView;
@@ -28,28 +36,63 @@ function formatDrivingDuration(seconds: number): string {
   return mm > 0 ? `~${h} h ${mm} min` : `~${h} h`;
 }
 
+function formatStartedAt(iso: string | null): string | null {
+  if (iso === null) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function pendingStopsCountFrom(err: unknown): number | null {
+  if (!axios.isAxiosError(err)) return null;
+  if (err.response?.status !== 422) return null;
+  const errors = err.response.data?.errors;
+  const arr = errors?.pending_stops;
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const first = typeof arr[0] === 'string' ? arr[0] : '';
+  const match = first.match(/(\d+)/);
+  return match !== null ? Number(match[1]) : null;
+}
+
 export function InternalRouteContent({ route, onRefresh }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const mapRef = useRef<MapView>(null);
 
+  const started = route.startedAt !== null && route.finishedAt === null;
+  const finished = route.finishedAt !== null;
+
   const [polylineCoords, setPolylineCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [durationSec, setDurationSec] = useState<number | null>(null);
   const [distanceM, setDistanceM] = useState<number | null>(null);
-  const [started, setStarted] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
-  const [optimizeError, setOptimizeError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<null | 'start' | 'reoptimize' | 'finish'>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Reset optimization state when the route identity or its stop count changes
-  // (e.g. new shipments were appended as stops after a sync).
+  // Only reset the visual cache (polyline / ETA) when the underlying route changes.
+  // Appended stops do NOT reset these — the server tracks started/finished state.
   useEffect(() => {
-    setStarted(false);
     setPolylineCoords([]);
     setDurationSec(null);
     setDistanceM(null);
-    setOptimizeError(null);
-  }, [route.id, route.stops.length]);
+    setActionError(null);
+  }, [route.id]);
+
+  // Notify the driver when new stops are appended after the route has started.
+  const previousStopsCount = useRef<number>(route.stops.length);
+  useEffect(() => {
+    const previous = previousStopsCount.current;
+    const current = route.stops.length;
+    if (started && current > previous) {
+      const added = current - previous;
+      showToast(
+        added === 1
+          ? 'Se agregó una parada nueva a tu ruta'
+          : `Se agregaron ${added} paradas nuevas a tu ruta`,
+      );
+    }
+    previousStopsCount.current = current;
+  }, [route.stops.length, started]);
 
   const stopsWithCoords = useMemo(() => {
     return route.stops.filter(
@@ -61,21 +104,80 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     return route.stops.find((s) => s.status === 'pending') ?? null;
   }, [route.stops]);
 
-  const onStartRoute = useCallback(async () => {
-    setOptimizing(true);
-    setOptimizeError(null);
-    try {
-      const res = await optimizeRoute(route.id);
+  const applyOptimizeResult = useCallback(
+    (res: { polyline: string; duration: number; distance: number }) => {
       setPolylineCoords(decodeOsrmPolyline(res.polyline));
       setDurationSec(res.duration);
       setDistanceM(res.distance);
-      setStarted(true);
+    },
+    [],
+  );
+
+  const onStartRoute = useCallback(async () => {
+    setBusy('start');
+    setActionError(null);
+    try {
+      const res = await optimizeRoute(route.id);
+      applyOptimizeResult(res);
+      await startDriverRoute(route.id);
+      await onRefresh();
     } catch (e) {
-      setOptimizeError(messageForShipmentListError(e));
+      setActionError(messageForShipmentListError(e));
     } finally {
-      setOptimizing(false);
+      setBusy(null);
     }
-  }, [route.id]);
+  }, [route.id, applyOptimizeResult, onRefresh]);
+
+  const onReoptimize = useCallback(async () => {
+    setBusy('reoptimize');
+    setActionError(null);
+    try {
+      const res = await optimizeRoute(route.id);
+      applyOptimizeResult(res);
+    } catch (e) {
+      setActionError(messageForShipmentListError(e));
+    } finally {
+      setBusy(null);
+    }
+  }, [route.id, applyOptimizeResult]);
+
+  const finishNow = useCallback(
+    async (force: boolean) => {
+      setBusy('finish');
+      setActionError(null);
+      try {
+        await finishDriverRoute(route.id, { force });
+        await onRefresh();
+      } catch (e) {
+        const pending = pendingStopsCountFrom(e);
+        if (pending !== null) {
+          Alert.alert(
+            'Finalizar ruta',
+            `Quedan ${pending} paradas sin entregar. ¿Finalizar de todos modos?`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Finalizar',
+                style: 'destructive',
+                onPress: () => {
+                  void finishNow(true);
+                },
+              },
+            ],
+          );
+          return;
+        }
+        setActionError(messageForShipmentListError(e));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [route.id, onRefresh],
+  );
+
+  const onFinishRoute = useCallback(() => {
+    void finishNow(false);
+  }, [finishNow]);
 
   useEffect(() => {
     const coords = [
@@ -105,6 +207,7 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
   }, [onRefresh]);
 
   const routeColor = theme.colors.success;
+  const startedAtLabel = formatStartedAt(route.startedAt);
 
   const mapBlock =
     Platform.OS === 'web' ? (
@@ -142,6 +245,8 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
       </MapView>
     );
 
+  const canShowEta = durationSec !== null && (started || finished);
+
   return (
     <ScreenContainer
       scroll
@@ -156,24 +261,57 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
         ),
       }}
     >
+      {started && startedAtLabel !== null && (
+        <View style={styles.statusChip}>
+          <Text style={styles.statusChipText}>En curso desde {startedAtLabel}</Text>
+        </View>
+      )}
+      {finished && (
+        <View style={[styles.statusChip, styles.statusChipFinished]}>
+          <Text style={styles.statusChipText}>Ruta finalizada</Text>
+        </View>
+      )}
+
       {mapBlock}
 
       <View style={styles.actions}>
-        <Button
-          variant="primary"
-          loading={optimizing}
-          disabled={optimizing}
-          onPress={() => void onStartRoute()}
-        >
-          Iniciar ruta
-        </Button>
-        {started && durationSec !== null && (
+        {!started && !finished && (
+          <Button
+            variant="primary"
+            loading={busy === 'start'}
+            disabled={busy !== null}
+            onPress={() => void onStartRoute()}
+          >
+            Iniciar ruta
+          </Button>
+        )}
+        {started && (
+          <>
+            <Button
+              variant="primary"
+              loading={busy === 'reoptimize'}
+              disabled={busy !== null}
+              onPress={() => void onReoptimize()}
+            >
+              Re-optimizar
+            </Button>
+            <Button
+              variant="outline"
+              loading={busy === 'finish'}
+              disabled={busy !== null}
+              onPress={onFinishRoute}
+            >
+              Finalizar ruta
+            </Button>
+          </>
+        )}
+        {canShowEta && (
           <Text style={styles.eta}>
-            ETA aprox.: {formatDrivingDuration(durationSec)}
+            ETA aprox.: {formatDrivingDuration(durationSec!)}
             {distanceM !== null ? ` · ${(distanceM / 1000).toFixed(1)} km` : ''}
           </Text>
         )}
-        {optimizeError != null && <Text style={styles.errorText}>{optimizeError}</Text>}
+        {actionError != null && <Text style={styles.errorText}>{actionError}</Text>}
         {nextStop !== null && nextStop.latitude !== null && nextStop.longitude !== null && started && (
           <Button variant="outline" onPress={openGoogleMapsNext}>
             Abrir siguiente en Google Maps
@@ -184,18 +322,28 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
       <Text style={styles.sectionTitle}>Paradas</Text>
       {route.stops.map((s) => {
         const isNext = nextStop !== null && s.id === nextStop.id;
+        const localityParts = [s.city, s.state].filter((v): v is string => v !== null);
+        const localityLine =
+          localityParts.length > 0 || s.postalCode !== null
+            ? [localityParts.join(', '), s.postalCode !== null ? `CP ${s.postalCode}` : null]
+                .filter((v): v is string => v !== null && v !== '')
+                .join(' · ')
+            : null;
         return (
           <View key={s.id} style={[styles.stopRow, isNext && styles.stopRowNext]}>
             <Text style={styles.stopSeq}>{s.sequence}</Text>
             <View style={styles.stopBody}>
               <Text style={styles.stopTitle}>
                 {isNext ? 'Siguiente · ' : ''}Parada {s.sequence}
-                {s.shipmentId != null ? ` · ${s.shipmentId.slice(0, 8)}` : ''}
               </Text>
               <Text style={styles.muted} numberOfLines={2}>
                 {s.label ?? '—'}
               </Text>
-              <Text style={styles.mutedSmall}>{s.status}</Text>
+              {localityLine !== null && (
+                <Text style={styles.mutedSmall} numberOfLines={1}>
+                  {localityLine}
+                </Text>
+              )}
             </View>
           </View>
         );
@@ -253,6 +401,23 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.danger,
       textAlign: 'center',
+    },
+    statusChip: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.surface,
+      borderColor: colors.primary,
+      borderWidth: 1,
+      borderRadius: spacing.radiusMd,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      marginBottom: spacing.sm,
+    },
+    statusChipFinished: {
+      borderColor: colors.muted,
+    },
+    statusChipText: {
+      ...typography.caption,
+      color: colors.text,
     },
     stopRow: {
       flexDirection: 'row',

@@ -5,6 +5,7 @@ export type DeliveryStackParamList = {
   DeliveryList: undefined;
   DeliveryDetail: { shipmentId: string };
   FlexBatchMap: { batchId: string };
+  DeliveryHistory: undefined;
 };
 
 export type DeliveryStackNav<T extends keyof DeliveryStackParamList> = NativeStackNavigationProp<

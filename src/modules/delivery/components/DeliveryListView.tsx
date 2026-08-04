@@ -51,6 +51,8 @@ type Props = {
   error: string | null;
   nextShipmentId: string | null;
   flexBatchId: string | null;
+  pendingCount: number;
+  deliveredTodayCount: number;
   onPressFlexMap?: () => void;
   onRefresh: () => void;
   onPressScan: () => void;
@@ -66,6 +68,8 @@ export function DeliveryListView({
   error,
   nextShipmentId,
   flexBatchId,
+  pendingCount,
+  deliveredTodayCount,
   onPressFlexMap,
   onRefresh,
   onPressScan,
@@ -76,17 +80,14 @@ export function DeliveryListView({
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const scanDisabled = loading || refreshing;
-  const totalShipments = sections.reduce((acc, s) => acc + s.data.length, 0);
   const showFlexMap = flexBatchId != null && onPressFlexMap != null;
+  const showCount = pendingCount > 0 || deliveredTodayCount > 0;
+  const countLabel = buildCountLabel(pendingCount, deliveredTodayCount);
 
   const listChrome = useMemo(
     () => (
       <View style={styles.listHeader}>
-        {totalShipments > 0 && (
-          <Text style={styles.countLabel}>
-            {totalShipments} {totalShipments === 1 ? 'envío' : 'envíos'} de hoy
-          </Text>
-        )}
+        {showCount && <Text style={styles.countLabel}>{countLabel}</Text>}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Escanear paquete"
@@ -154,7 +155,8 @@ export function DeliveryListView({
       onPressScan,
       onPressReportFailure,
       onPressFlexMap,
-      totalShipments,
+      showCount,
+      countLabel,
       styles,
       theme.colors.muted,
       theme.colors.primary,
@@ -279,6 +281,19 @@ export function DeliveryListView({
       )}
     </View>
   );
+}
+
+function buildCountLabel(pending: number, deliveredToday: number): string {
+  const parts: string[] = [];
+  if (pending > 0) {
+    parts.push(`${pending} ${pending === 1 ? 'envío por entregar' : 'envíos por entregar'}`);
+  }
+  if (deliveredToday > 0) {
+    parts.push(
+      `${deliveredToday} ${deliveredToday === 1 ? 'entregado hoy' : 'entregados hoy'}`,
+    );
+  }
+  return parts.join(' · ');
 }
 
 function createStyles(t: AppTheme) {

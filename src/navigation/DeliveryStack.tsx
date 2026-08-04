@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { DeliveryDetailScreen } from '@modules/delivery/DeliveryDetailScreen';
+import { DeliveryHistoryScreen } from '@modules/delivery/DeliveryHistoryScreen';
 import { DeliveryListScreen } from '@modules/delivery/DeliveryListScreen';
 import { FlexBatchMapScreen } from '@modules/delivery/FlexBatchMapScreen';
 
@@ -29,6 +30,11 @@ export function DeliveryStack() {
         name="FlexBatchMap"
         component={FlexBatchMapScreen}
         options={{ title: 'Flex', headerBackTitle: 'Lista' }}
+      />
+      <Stack.Screen
+        name="DeliveryHistory"
+        component={DeliveryHistoryScreen}
+        options={{ title: 'Historial', headerBackTitle: 'Entregas' }}
       />
     </Stack.Navigator>
   );

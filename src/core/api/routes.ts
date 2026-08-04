@@ -8,6 +8,9 @@ export type RouteStopView = {
   latitude: number | null;
   longitude: number | null;
   label: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
 };
 
 export type DriverRouteView = {
@@ -15,6 +18,8 @@ export type DriverRouteView = {
   driverId: string;
   status: string;
   date: string;
+  startedAt: string | null;
+  finishedAt: string | null;
   stops: RouteStopView[];
 };
 
@@ -52,6 +57,9 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
   let lat: number | null = null;
   let lng: number | null = null;
   let label: string | null = null;
+  let city: string | null = null;
+  let state: string | null = null;
+  let postalCode: string | null = null;
   const shipment = o.shipment;
   if (shipment !== null && typeof shipment === 'object') {
     const dest = (shipment as Record<string, unknown>).destination;
@@ -60,6 +68,10 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
       lat = toFiniteNumber(d.latitude);
       lng = toFiniteNumber(d.longitude);
       label = typeof d.address_line1 === 'string' ? d.address_line1 : null;
+      city = typeof d.city === 'string' && d.city.trim() !== '' ? d.city : null;
+      state = typeof d.state === 'string' && d.state.trim() !== '' ? d.state : null;
+      postalCode =
+        typeof d.postal_code === 'string' && d.postal_code.trim() !== '' ? d.postal_code : null;
     }
   }
   return {
@@ -70,6 +82,9 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
     latitude: lat,
     longitude: lng,
     label,
+    city,
+    state,
+    postalCode,
   };
 }
 
@@ -85,6 +100,8 @@ function parseDriverRoute(data: unknown): DriverRouteView {
   const status = typeof o.status === 'string' ? o.status : '';
   const dateRaw = o.date;
   const date = typeof dateRaw === 'string' ? dateRaw : '';
+  const startedAt = typeof o.started_at === 'string' && o.started_at.trim() !== '' ? o.started_at : null;
+  const finishedAt = typeof o.finished_at === 'string' && o.finished_at.trim() !== '' ? o.finished_at : null;
   const stopsIn = Array.isArray(o.stops) ? o.stops : [];
   const stops = stopsIn.map(normalizeRouteStop).filter((s): s is RouteStopView => s !== null);
   stops.sort((a, b) => a.sequence - b.sequence);
@@ -94,6 +111,8 @@ function parseDriverRoute(data: unknown): DriverRouteView {
     driverId,
     status,
     date,
+    startedAt,
+    finishedAt,
     stops,
   };
 }
@@ -115,4 +134,26 @@ export async function createDriverRoute(): Promise<DriverRouteView> {
 export async function optimizeRoute(routeId: string): Promise<OptimizeRouteResponse> {
   const { data } = await apiClient.post<OptimizeRouteResponse>(`/routes/${routeId.trim()}/optimize`);
   return data;
+}
+
+/**
+ * Marks the route as started server-side. Idempotent: calling twice keeps the
+ * original started_at.
+ */
+export async function startDriverRoute(routeId: string): Promise<DriverRouteView> {
+  const { data } = await apiClient.post<unknown>(`/driver/routes/${routeId.trim()}/start`);
+  return parseDriverRoute(data);
+}
+
+/**
+ * Marks the route as finished. Server returns 422 with `pending_stops` when
+ * there are pending route_stops and `force` is not set.
+ */
+export async function finishDriverRoute(
+  routeId: string,
+  opts?: { force?: boolean },
+): Promise<DriverRouteView> {
+  const body = opts?.force === true ? { force: true } : {};
+  const { data } = await apiClient.post<unknown>(`/driver/routes/${routeId.trim()}/finish`, body);
+  return parseDriverRoute(data);
 }
