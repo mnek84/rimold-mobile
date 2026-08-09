@@ -1,6 +1,7 @@
 import type { LocationObject } from 'expo-location';
 
 import { isOnline } from '@core/sync/syncEngine';
+import { usePickupOrderActiveStore } from '@modules/pickups/store/pickupOrderActiveStore';
 
 import { insertPendingLocation } from './driverLocationDb';
 import { syncDriverLocationQueueOnce } from './driverLocationSyncWorker';
@@ -17,6 +18,7 @@ export function sampleFromLocationObject(loc: LocationObject): Omit<PendingLocat
     speed: speed != null && Number.isFinite(speed) && speed >= 0 ? speed : undefined,
     accuracy: accuracy != null && Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : undefined,
     timestamp,
+    pickup_order_id: usePickupOrderActiveStore.getState().activeOrderId,
   };
 }
 

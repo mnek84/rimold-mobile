@@ -14,6 +14,12 @@ export type ColectaSessionItem = {
   source?: ColectaScanSource;
 };
 
+/** Contexto opcional cuando el scan sucede dentro de un PickupStop (nuevo flujo de colectas). */
+export type PickupScanContext = {
+  orderId: string;
+  stopId: string;
+};
+
 type State = {
   collectionId: string | null;
   clientId: string;
@@ -23,8 +29,22 @@ type State = {
   items: ColectaSessionItem[];
   /** True after COLLECTION_STARTED was enqueued (primer paquete escaneado en esta sesión). */
   collectionStartedEmitted: boolean;
+  /** Cuando se está escaneando desde una PickupOrder — el finalizar cierra el stop. */
+  pickupContext: PickupScanContext | null;
   /** New session UUID and empty items (call when starting a different client/depósito). */
   startNewSession: (selection: ColectaSelection) => void;
+  /**
+   * Inicializar la sesión desde una PickupOrder (collectionId viene del backend,
+   * no se genera localmente; COLLECTION_STARTED ya fue emitido por el server).
+   */
+  initFromPickup: (params: {
+    collectionId: string;
+    clientId: string;
+    clientName: string;
+    warehouseId: string;
+    warehouseName: string;
+    pickupContext: PickupScanContext;
+  }) => void;
   /** Append scan if not duplicate. */
   addScannedItem: (trackingId: string, source: ColectaScanSource) => void;
   /** Remove a scanned item from the open session (long-press flow). */
@@ -42,6 +62,7 @@ const emptySession = {
   warehouseName: '',
   items: [] as ColectaSessionItem[],
   collectionStartedEmitted: false,
+  pickupContext: null as PickupScanContext | null,
 };
 
 export const useColectaSessionStore = create<State>()(
@@ -57,6 +78,19 @@ export const useColectaSessionStore = create<State>()(
           warehouseName: selection.warehouseName,
           items: [],
           collectionStartedEmitted: false,
+          pickupContext: null,
+        }),
+      initFromPickup: (params) =>
+        set({
+          collectionId: params.collectionId,
+          clientId: params.clientId,
+          clientName: params.clientName,
+          warehouseId: params.warehouseId,
+          warehouseName: params.warehouseName,
+          items: [],
+          // Backend ya emitió COLLECTION_STARTED en StartScanningStopAction.
+          collectionStartedEmitted: true,
+          pickupContext: params.pickupContext,
         }),
       addScannedItem: (trackingId, source) =>
         set((state) => {
@@ -83,6 +117,7 @@ export const useColectaSessionStore = create<State>()(
         warehouseName: s.warehouseName,
         items: s.items,
         collectionStartedEmitted: s.collectionStartedEmitted,
+        pickupContext: s.pickupContext,
       }),
     },
   ),

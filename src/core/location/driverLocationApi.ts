@@ -11,6 +11,7 @@ export type DriverLocationBatchPayloadItem = {
   heading?: number;
   speed?: number;
   accuracy?: number;
+  pickup_order_id?: string;
 };
 
 function rowToPayloadItem(row: PendingLocationRow): DriverLocationBatchPayloadItem {
@@ -27,6 +28,9 @@ function rowToPayloadItem(row: PendingLocationRow): DriverLocationBatchPayloadIt
   }
   if (row.accuracy !== undefined && Number.isFinite(row.accuracy)) {
     item.accuracy = row.accuracy;
+  }
+  if (row.pickup_order_id != null && row.pickup_order_id !== '') {
+    item.pickup_order_id = row.pickup_order_id;
   }
   return item;
 }

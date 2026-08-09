@@ -10,6 +10,19 @@ export type ColectaStackParamList = {
     warehouseName: string;
   };
   ColectaHistory: undefined;
+  PickupOrdersList: undefined;
+  PickupOrderPending: { orderId: string };
+  PickupOrderInProgress: { orderId: string };
+  PickupStopScanning: {
+    orderId: string;
+    stopId: string;
+    collectionId: string;
+    clientId: string;
+    clientName: string;
+    warehouseId: string;
+    warehouseName: string;
+  };
+  PickupOrdersHistory: undefined;
 };
 
 export type ColectaStackNav<T extends keyof ColectaStackParamList> = NativeStackNavigationProp<

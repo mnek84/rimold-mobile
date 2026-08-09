@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -35,6 +36,8 @@ import {
   type ColectaScanSource,
   useColectaSessionStore,
 } from '@modules/colecta/colectaSessionStore';
+import { completeStop as completePickupStopApi } from '@modules/pickups/api/pickupOrders';
+import { pickupOrderKeys } from '@modules/pickups/hooks/usePickupOrders';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 import { useAuthStore } from '@store/useAuthStore';
@@ -95,6 +98,7 @@ const CORNER_THICKNESS = 3;
 export function ColectaScanScreen({ navigation, route }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const queryClient = useQueryClient();
 
   const clientId = route.params?.clientId ?? '';
   const clientName = route.params?.clientName ?? '';
@@ -110,6 +114,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   const items = useColectaSessionStore((s) => s.items);
   const sessionClientId = useColectaSessionStore((s) => s.clientId);
   const sessionWarehouseId = useColectaSessionStore((s) => s.warehouseId);
+  const pickupContext = useColectaSessionStore((s) => s.pickupContext);
   const addScannedItem = useColectaSessionStore((s) => s.addScannedItem);
   const removeScannedItem = useColectaSessionStore((s) => s.removeScannedItem);
   const markCollectionStartedEmitted = useColectaSessionStore((s) => s.markCollectionStartedEmitted);
@@ -164,22 +169,33 @@ export function ColectaScanScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (!storeHydrated) return;
-    if (clientId === '' || warehouseId === '') {
+
+    // En el flujo de pickup el clientId puede venir vacío (warehouse sin
+    // business_id asociado) y la sesión ya fue inicializada por initFromPickup
+    // antes de navegar. No hay que redirigir a ClientSelection: esa pantalla
+    // pertenece al flujo manual legacy.
+    const isPickupFlow = pickupContext !== null;
+
+    if (!isPickupFlow && (clientId === '' || warehouseId === '')) {
       clearColectaSelection();
       navigation.replace('ClientSelection');
       return;
     }
     if (
-      collectionId == null ||
-      sessionClientId !== clientId ||
-      sessionWarehouseId !== warehouseId
+      !isPickupFlow &&
+      (collectionId == null ||
+        sessionClientId !== clientId ||
+        sessionWarehouseId !== warehouseId)
     ) {
       clearColectaSession();
       clearColectaSelection();
       navigation.replace('ClientSelection');
       return;
     }
-    setColectaSelection({ clientId, clientName, warehouseId, warehouseName });
+
+    if (clientId !== '' || warehouseId !== '') {
+      setColectaSelection({ clientId, clientName, warehouseId, warehouseName });
+    }
   }, [
     clientId,
     clientName,
@@ -188,6 +204,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
     collectionId,
     sessionClientId,
     sessionWarehouseId,
+    pickupContext,
     clearColectaSession,
     clearColectaSelection,
     navigation,
@@ -230,8 +247,40 @@ export function ColectaScanScreen({ navigation, route }: Props) {
 
   const onScan = useCallback(
     (raw: string) => {
-      if (collectionId == null || clientId === '' || warehouseId === '') return;
       if (validatingRef.current) return;
+
+      // Guard con feedback: si falta contexto (sesión no inicializada, warehouse
+      // sin business_id en pickup flow con datos legacy), avisamos en vez de
+      // ignorar el escaneo en silencio.
+      if (collectionId == null) {
+        console.warn('[colecta-scan] onScan sin collectionId; abortando');
+        triggerScanError({
+          reason: 'not_found',
+          message: 'La colecta no está iniciada. Volvé y apretá "Empezar escaneo".',
+        });
+        return;
+      }
+      if (warehouseId === '') {
+        console.warn('[colecta-scan] onScan sin warehouseId; abortando');
+        triggerScanError({
+          reason: 'not_found',
+          message: 'Falta el depósito del cliente. Volvé y reintentá.',
+        });
+        return;
+      }
+      if (clientId === '') {
+        console.warn(
+          '[colecta-scan] onScan sin clientId (business_id); abortando. warehouseId=',
+          warehouseId,
+        );
+        triggerScanError({
+          reason: 'not_found',
+          message:
+            'Este depósito no tiene cliente asociado. Contactá al admin para configurarlo.',
+        });
+        return;
+      }
+
       if (!isOnline) {
         triggerScanError({
           reason: 'network',
@@ -387,15 +436,41 @@ export function ColectaScanScreen({ navigation, route }: Props) {
                 });
                 scheduleProcessQueueIfOnline();
               }
+              const pickupCtx = useColectaSessionStore.getState().pickupContext;
               clearColectaSession();
               clearColectaSelection();
+              if (pickupCtx) {
+                // Nuevo flujo: cerrar el stop y volver al recorrido.
+                try {
+                  const idempotencyKey = `stop-complete-${pickupCtx.stopId}-${Date.now()}`;
+                  await completePickupStopApi(
+                    pickupCtx.orderId,
+                    pickupCtx.stopId,
+                    idempotencyKey,
+                  );
+                } catch (e) {
+                  // Si falla la red, se puede reintentar desde la pantalla de recorrido.
+                  console.warn('completePickupStopApi failed', e);
+                }
+                // Invalidar las queries del pickup order para que la screen
+                // anterior se refresque y muestre el stop como Completed
+                // (sin esto, el chofer volvía a ver "Continuar escaneando").
+                await queryClient.invalidateQueries({
+                  queryKey: pickupOrderKeys.detail(pickupCtx.orderId),
+                });
+                await queryClient.invalidateQueries({
+                  queryKey: pickupOrderKeys.list(),
+                });
+                navigation.goBack();
+                return;
+              }
               navigation.replace('ClientSelection');
             })();
           },
         },
       ],
     );
-  }, [collectionId, clearColectaSession, clearColectaSelection, navigation]);
+  }, [collectionId, clearColectaSession, clearColectaSelection, navigation, queryClient]);
 
   if (!storeHydrated) {
     return (

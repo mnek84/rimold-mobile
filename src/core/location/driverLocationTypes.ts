@@ -12,6 +12,12 @@ export type PendingLocation = {
   /** Unix time in milliseconds (device clock). */
   timestamp: number;
   synced: boolean;
+  /**
+   * PickupOrder activa al momento de la captura del fix. Se envía al backend
+   * para ligar los puntos a la orden y habilitar el broadcast por canal
+   * pickup-orders.{orderId} + el replay histórico del recorrido.
+   */
+  pickup_order_id?: string | null;
 };
 
 export type DriverLocationTrackingStatus = {

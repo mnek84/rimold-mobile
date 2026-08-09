@@ -7,6 +7,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { LoginScreen } from '@modules/auth/LoginScreen';
 import { RouteMapTabScreen } from '@modules/delivery/RouteMapTabScreen';
 import { BodegaStack } from '@navigation/BodegaStack';
+import { NotificationListener } from '@modules/notifications/NotificationListener';
 import { SettingsScreen, settingsTabBarIcon } from '@modules/settings/SettingsScreen';
 import { ColectaStack } from '@navigation/ColectaStack';
 import { DeliveryStack } from '@navigation/DeliveryStack';
@@ -106,6 +107,7 @@ export function AppNavigator() {
   return (
     <>
       <StatusBar style={statusBarStyle} />
+      <NotificationListener />
       {canSeeDriverTabs ? <DriverLocationPermissionGate /> : null}
       <Tab.Navigator screenOptions={tabScreenOptions}>
         {canSeeDriverTabs ? (

@@ -5,6 +5,9 @@ import type { AuthUser } from '@core/auth/types';
 import { getJSON, removeItem, setJSON } from '@core/storage/storage';
 import { useColectaSelectionStore } from '@modules/colecta/colectaSelectionStore';
 import { useColectaSessionStore } from '@modules/colecta/colectaSessionStore';
+import { revokeCurrentDevicePushToken } from '@modules/notifications/lib/revokeCurrentDevicePushToken';
+import { cancelAllPickupReminders } from '@modules/pickups/lib/reminderScheduler';
+import { usePickupOrderActiveStore } from '@modules/pickups/store/pickupOrderActiveStore';
 
 const SESSION_KEY = 'auth_session';
 
@@ -34,6 +37,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearSession: () => {
     useColectaSelectionStore.getState().clearSelection();
     useColectaSessionStore.getState().clearSession();
+    void cancelAllPickupReminders();
+    // Revocar el token push del device antes de invalidar la sesión: usa el
+    // JWT actual para llegar autenticado al backend. Fire-and-forget.
+    void revokeCurrentDevicePushToken();
+    usePickupOrderActiveStore.getState().clearAll();
     set({ token: null, user: null, isAuthenticated: false });
     void removeItem(SESSION_KEY);
   },

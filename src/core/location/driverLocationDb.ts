@@ -24,12 +24,21 @@ async function getDb(): Promise<SQLiteDatabase | null> {
           speed REAL,
           accuracy REAL,
           timestamp INTEGER NOT NULL,
+          pickup_order_id TEXT,
           synced INTEGER NOT NULL DEFAULT 0,
           attempts INTEGER NOT NULL DEFAULT 0,
           next_retry_at INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_pending_sync ON pending_locations (synced, next_retry_at, timestamp);
       `);
+      // Migración in-place para dispositivos que ya tenían la tabla sin la columna.
+      // SQLite no soporta IF NOT EXISTS sobre columnas; el try/catch absorbe el
+      // error "duplicate column name" en instalaciones ya migradas.
+      try {
+        await db.execAsync(`ALTER TABLE pending_locations ADD COLUMN pickup_order_id TEXT`);
+      } catch {
+        // columna ya existe
+      }
       return db;
     })();
   }
@@ -49,6 +58,7 @@ function rowToPending(r: {
   speed: number | null;
   accuracy: number | null;
   timestamp: number;
+  pickup_order_id: string | null;
   synced: number;
   attempts: number;
   next_retry_at: number | null;
@@ -61,6 +71,7 @@ function rowToPending(r: {
     speed: r.speed ?? undefined,
     accuracy: r.accuracy ?? undefined,
     timestamp: r.timestamp,
+    pickup_order_id: r.pickup_order_id ?? null,
     synced: r.synced === 1,
     attempts: r.attempts,
     next_retry_at: r.next_retry_at,
@@ -77,8 +88,8 @@ export async function insertPendingLocation(input: Omit<PendingLocation, 'id' | 
   }
   const id = randomUUID();
   await db.runAsync(
-    `INSERT INTO pending_locations (id, lat, lng, heading, speed, accuracy, timestamp, synced, attempts, next_retry_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL)`,
+    `INSERT INTO pending_locations (id, lat, lng, heading, speed, accuracy, timestamp, pickup_order_id, synced, attempts, next_retry_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, NULL)`,
     id,
     input.lat,
     input.lng,
@@ -86,6 +97,7 @@ export async function insertPendingLocation(input: Omit<PendingLocation, 'id' | 
     input.speed ?? null,
     input.accuracy ?? null,
     input.timestamp,
+    input.pickup_order_id ?? null,
   );
 }
 
@@ -103,11 +115,12 @@ export async function selectPendingBatchForSync(nowMs: number, limit: number): P
     speed: number | null;
     accuracy: number | null;
     timestamp: number;
+    pickup_order_id: string | null;
     synced: number;
     attempts: number;
     next_retry_at: number | null;
   }>(
-    `SELECT id, lat, lng, heading, speed, accuracy, timestamp, synced, attempts, next_retry_at
+    `SELECT id, lat, lng, heading, speed, accuracy, timestamp, pickup_order_id, synced, attempts, next_retry_at
      FROM pending_locations
      WHERE synced = 0 AND (next_retry_at IS NULL OR next_retry_at <= ?)
      ORDER BY timestamp ASC
