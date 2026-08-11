@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { registerPushToken } from './pushTokenApi';
+import { setupNotificationChannels } from './setupNotificationChannels';
 
 /**
  * Registro de push notifications con Expo:
@@ -17,13 +18,7 @@ import { registerPushToken } from './pushTokenApi';
  */
 export async function registerForPushNotifications(): Promise<string | null> {
   try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'General',
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: 'default',
-      });
-    }
+    await setupNotificationChannels();
 
     const settings = await Notifications.getPermissionsAsync();
     let granted = settings.status === 'granted';
