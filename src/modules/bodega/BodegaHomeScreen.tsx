@@ -39,20 +39,21 @@ export function BodegaHomeScreen() {
 
         <Pressable
           style={styles.card}
-          onPress={() => navigation.navigate('CageSessionGate')}
+          onPress={() => navigation.navigate('CrossdockManual')}
           accessibilityRole="button"
         >
           <View style={styles.cardIconWrap}>
-            <Ionicons name="grid-outline" size={28} color={theme.colors.primary} />
+            <Ionicons name="git-branch-outline" size={28} color={theme.colors.primary} />
           </View>
           <View style={styles.cardTextWrap}>
-            <Text style={styles.cardTitle}>Sesión de jaulas</Text>
+            <Text style={styles.cardTitle}>Crossdocking manual</Text>
             <Text style={styles.cardHint}>
-              Cargá jaulas con los paquetes ya ingresados y asigná conductores al cerrar.
+              Fallback del sorter: escaneá y te decimos a qué jaula (grid) va cada paquete.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={theme.colors.muted} />
         </Pressable>
+
       </View>
     </ScreenContainer>
   );

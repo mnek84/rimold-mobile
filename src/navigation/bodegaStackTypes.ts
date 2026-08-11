@@ -15,6 +15,8 @@ export type BodegaStackParamList = {
   CageList: CageListParams | undefined;
   CageWorkspace: { cageId: string; cageName: string };
   CloseCageSession: undefined;
+  CrossdockManual: undefined;
+  CageDepartureGate: { cageId: string; cageName: string; cageSessionId?: string };
 };
 
 export type BodegaStackNav<T extends keyof BodegaStackParamList> = NativeStackNavigationProp<
