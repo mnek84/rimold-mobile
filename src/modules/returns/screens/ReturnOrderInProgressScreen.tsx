@@ -3,12 +3,14 @@ import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, ScreenContainer } from '@components/ui';
+import { PhotoCaptureModal, type PhotoCaptureResult } from '@core/media/PhotoCaptureModal';
 import { formatShortWeekday } from '@modules/pickups/lib/formatSchedule';
 import type { ReturnStackParamList } from '@navigation/returnStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
 import {
   useArriveAtReturnStop,
+  useAttachReturnStopConforme,
   useCompleteReturnOrder,
   useCompleteReturnStop,
   useReturnOrder,
@@ -20,6 +22,7 @@ import {
   RETURN_ORDER_STATUS_LABEL,
   RETURN_STOP_STATUS_LABEL,
   nextStopAction,
+  type StopAction,
 } from '../lib/returnOrderStatus';
 import type { ReturnStop } from '../types';
 
@@ -37,9 +40,14 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
   const startScanning = useStartScanningReturnStop();
   const completeStop = useCompleteReturnStop();
   const skipStop = useSkipReturnStop();
+  const attachConforme = useAttachReturnStopConforme();
 
   const [skippingStopId, setSkippingStopId] = useState<string | null>(null);
   const [skipReason, setSkipReason] = useState('');
+
+  // Parada para la que se está pidiendo el conforme; `null` = cámara cerrada.
+  const [conformeStopId, setConformeStopId] = useState<string | null>(null);
+  const [receiverName, setReceiverName] = useState('');
 
   const order = query.data;
   const busy =
@@ -48,14 +56,23 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
     arrive.isPending ||
     startScanning.isPending ||
     completeStop.isPending ||
-    skipStop.isPending;
+    skipStop.isPending ||
+    attachConforme.isPending;
 
   function fail(e: unknown, fallback: string) {
     Alert.alert('Error', e instanceof Error ? e.message : fallback);
   }
 
-  async function handleStopAction(stop: ReturnStop, action: 'arrive' | 'scan' | 'complete') {
+  async function handleStopAction(stop: ReturnStop, action: StopAction) {
     if (!order) return;
+
+    // El conforme no es una transición: abre la cámara y la entrega se cierra
+    // después, cuando la foto ya está arriba.
+    if (action === 'conforme') {
+      setConformeStopId(stop.id);
+      return;
+    }
+
     try {
       if (action === 'arrive') {
         await arrive.mutateAsync({ orderId: order.id, stopId: stop.id });
@@ -66,6 +83,25 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
       }
     } catch (e) {
       fail(e, 'No se pudo actualizar la parada.');
+    }
+  }
+
+  async function handleConformeCaptured(result: PhotoCaptureResult) {
+    const stopId = conformeStopId;
+    setConformeStopId(null);
+    if (!order || !stopId) return;
+
+    try {
+      await attachConforme.mutateAsync({
+        orderId: order.id,
+        stopId,
+        dataUrl: result.dataUrl,
+        receiverName: receiverName.trim() || null,
+      });
+      setReceiverName('');
+      Alert.alert('Conforme adjuntado', 'Ya podés confirmar la entrega.');
+    } catch (e) {
+      fail(e, 'No se pudo adjuntar el conforme.');
     }
   }
 
@@ -143,7 +179,7 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
         <Text style={styles.sectionTitle}>Paradas ({order.stops.length})</Text>
 
         {order.stops.map((stop) => {
-          const action = nextStopAction(stop.status);
+          const action = nextStopAction(stop);
           const isSkipping = skippingStopId === stop.id;
 
           return (
@@ -170,6 +206,27 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
                       {s.tracking}
                     </Text>
                   ))}
+                </View>
+              ) : null}
+
+              {stop.conforme_path ? (
+                <Text style={styles.conformeOk}>
+                  Conforme adjunto
+                  {stop.conforme_receiver_name ? ` — recibió ${stop.conforme_receiver_name}` : ''}
+                </Text>
+              ) : stop.status === 'scanning' ? (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.stopAddress}>¿Quién recibe? (opcional)</Text>
+                  <TextInput
+                    style={styles.inputSingle}
+                    value={receiverName}
+                    onChangeText={setReceiverName}
+                    placeholder="Nombre de quien firma"
+                    placeholderTextColor={theme.colors.muted}
+                  />
+                  <Text style={styles.hint}>
+                    Sacá la foto del remito firmado para poder cerrar la entrega.
+                  </Text>
                 </View>
               ) : null}
 
@@ -220,6 +277,12 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
           );
         })}
       </ScrollView>
+
+      <PhotoCaptureModal
+        visible={conformeStopId !== null}
+        onCapture={(result) => void handleConformeCaptured(result)}
+        onClose={() => setConformeStopId(null)}
+      />
     </ScreenContainer>
   );
 }
@@ -259,6 +322,21 @@ function createStyles(theme: AppTheme) {
     },
     tracking: { fontSize: 13, color: theme.colors.text, fontVariant: ['tabular-nums'] },
     skipReason: { marginTop: 6, fontSize: 13, color: theme.colors.muted, fontStyle: 'italic' },
+    conformeOk: {
+      marginTop: 6,
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.text,
+    },
+    hint: { marginTop: 6, fontSize: 12, color: theme.colors.muted },
+    inputSingle: {
+      marginTop: 6,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.surfaceMuted,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
     input: {
       minHeight: 70,
       color: theme.colors.text,

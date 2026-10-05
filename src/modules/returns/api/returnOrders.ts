@@ -42,6 +42,9 @@ function toStop(raw: unknown): ReturnStop {
     scanning_started_at: (o.scanning_started_at as string | null) ?? null,
     completed_at: (o.completed_at as string | null) ?? null,
     skipped_at: (o.skipped_at as string | null) ?? null,
+    conforme_path: (o.conforme_path as string | null) ?? null,
+    conforme_receiver_name: (o.conforme_receiver_name as string | null) ?? null,
+    conforme_uploaded_at: (o.conforme_uploaded_at as string | null) ?? null,
     warehouse: w
       ? {
           id: String(w.id),
@@ -156,6 +159,27 @@ export async function startScanningReturnStop(
   const { data } = await apiClient.post<unknown>(
     `/return-orders/${orderId}/stops/${stopId}/start-scanning`,
     {},
+    idempotent(key),
+  );
+  return toOrder(data);
+}
+
+/**
+ * "Adjunta Conforme": la constancia de que el seller recibió.
+ *
+ * Va como data-URL —lo que devuelve `PhotoCaptureModal`— y no como multipart,
+ * porque `CameraView::takePictureAsync` en base64 es el único camino que
+ * sobrevive al APK release.
+ */
+export async function attachReturnStopConforme(
+  orderId: string,
+  stopId: string,
+  input: { dataUrl: string; receiverName?: string | null },
+  key: string,
+): Promise<ReturnOrder> {
+  const { data } = await apiClient.post<unknown>(
+    `/return-orders/${orderId}/stops/${stopId}/conforme`,
+    { photo: input.dataUrl, kind: 'photo', receiver_name: input.receiverName ?? null },
     idempotent(key),
   );
   return toOrder(data);

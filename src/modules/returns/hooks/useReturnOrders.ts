@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   acceptReturnOrder,
   arriveAtReturnStop,
+  attachReturnStopConforme,
   completeReturnOrder,
   completeReturnStop,
   fetchMyReturnOrders,
@@ -113,6 +114,30 @@ export function useStartScanningReturnStop() {
   return useMutation({
     mutationFn: ({ orderId, stopId }: { orderId: string; stopId: string }) =>
       startScanningReturnStop(orderId, stopId, newIdempotencyKey()),
+    onSuccess: (order) => invalidate(qc, order.id),
+  });
+}
+
+export function useAttachReturnStopConforme() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      orderId,
+      stopId,
+      dataUrl,
+      receiverName,
+    }: {
+      orderId: string;
+      stopId: string;
+      dataUrl: string;
+      receiverName?: string | null;
+    }) =>
+      attachReturnStopConforme(
+        orderId,
+        stopId,
+        { dataUrl, receiverName },
+        newIdempotencyKey(),
+      ),
     onSuccess: (order) => invalidate(qc, order.id),
   });
 }

@@ -47,6 +47,10 @@ export type ReturnStop = {
   scanning_started_at: string | null;
   completed_at: string | null;
   skipped_at: string | null;
+  /** Conforme del seller. Sin esto el backend no deja cerrar la parada. */
+  conforme_path: string | null;
+  conforme_receiver_name: string | null;
+  conforme_uploaded_at: string | null;
   warehouse: ReturnStopWarehouse | null;
   shipments: ReturnShipmentRef[];
 };
