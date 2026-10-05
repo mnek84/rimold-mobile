@@ -11,6 +11,7 @@ import { NotificationListener } from '@modules/notifications/NotificationListene
 import { SettingsScreen, settingsTabBarIcon } from '@modules/settings/SettingsScreen';
 import { ColectaStack } from '@navigation/ColectaStack';
 import { DeliveryStack } from '@navigation/DeliveryStack';
+import { ReturnStack } from '@navigation/ReturnStack';
 import { DriverLocationPermissionGate } from '@core/location/DriverLocationPermissionGate';
 import { hasRole } from '@core/auth/types';
 import { useAuthStore } from '@store/useAuthStore';
@@ -26,6 +27,10 @@ function colectaTabBarIcon({ color, size }: { color: string; size: number }) {
 
 function entregasTabBarIcon({ color, size }: { color: string; size: number }) {
   return <Ionicons name="car-outline" size={size} color={color} />;
+}
+
+function devolucionesTabBarIcon({ color, size }: { color: string; size: number }) {
+  return <Ionicons name="return-down-back-outline" size={size} color={color} />;
 }
 
 function rutaMapaTabBarIcon({ color, size }: { color: string; size: number }) {
@@ -127,6 +132,16 @@ export function AppNavigator() {
             options={{
               headerShown: false,
               tabBarIcon: entregasTabBarIcon,
+            }}
+          />
+        ) : null}
+        {canSeeDriverTabs ? (
+          <Tab.Screen
+            name="Devoluciones"
+            component={ReturnStack}
+            options={{
+              headerShown: false,
+              tabBarIcon: devolucionesTabBarIcon,
             }}
           />
         ) : null}
