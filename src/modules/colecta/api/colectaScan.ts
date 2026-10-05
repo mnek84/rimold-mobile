@@ -17,6 +17,14 @@ export type ColectaScanInvalidReason =
 
 export type ColectaScanSourceKind = 'existing' | 'flex_stub';
 
+/** Bulto concreto que resolvió el backend para este escaneo. */
+export type ColectaScanPackage = {
+  id: string | null;
+  code: string;
+  sequence: number;
+  totalPackages: number;
+};
+
 export type ColectaScanValidationOk = {
   valid: true;
   source: ColectaScanSourceKind;
@@ -26,6 +34,13 @@ export type ColectaScanValidationOk = {
   businessId: string | null;
   warehouseId: string | null;
   status: string | null;
+  /**
+   * Bulto escaneado. `null` cuando el código no identifica uno (etiqueta vieja):
+   * ahí la colecta trata al envío como una unidad, igual que antes.
+   */
+  package: ColectaScanPackage | null;
+  /** Cantidad total de bultos del envío, para mostrar "2/4". */
+  packageTotal: number;
 };
 
 export type ColectaScanValidationFail = {
@@ -46,10 +61,19 @@ type RawShipment = {
   status?: unknown;
 };
 
+type RawPackage = {
+  id?: unknown;
+  code?: unknown;
+  sequence?: unknown;
+  totalPackages?: unknown;
+};
+
 type RawScanResponse = {
   valid?: unknown;
   source?: unknown;
   shipment?: unknown;
+  package?: unknown;
+  packageTotal?: unknown;
   reason?: unknown;
   mlSenderId?: unknown;
   currentStatus?: unknown;
@@ -59,6 +83,25 @@ function stringOrNull(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+function positiveIntOr(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback;
+}
+
+/** Backends anteriores no mandan `package`: se degrada a null sin romper el escaneo. */
+function parsePackage(value: unknown): ColectaScanPackage | null {
+  if (value === null || typeof value !== 'object') return null;
+  const p = value as RawPackage;
+  const code = stringOrNull(p.code);
+  if (code === null) return null;
+  return {
+    id: stringOrNull(p.id),
+    code,
+    sequence: positiveIntOr(p.sequence, 1),
+    totalPackages: positiveIntOr(p.totalPackages, 1),
+  };
 }
 
 function parseOkResponse(data: RawScanResponse): ColectaScanValidationOk | null {
@@ -72,6 +115,8 @@ function parseOkResponse(data: RawScanResponse): ColectaScanValidationOk | null 
   const trackingId = stringOrNull(s.trackingId);
   if (trackingId === null) return null;
 
+  const pkg = parsePackage(data.package);
+
   return {
     valid: true,
     source,
@@ -81,6 +126,8 @@ function parseOkResponse(data: RawScanResponse): ColectaScanValidationOk | null 
     businessId: stringOrNull(s.businessId),
     warehouseId: stringOrNull(s.warehouseId),
     status: stringOrNull(s.status),
+    package: pkg,
+    packageTotal: positiveIntOr(data.packageTotal, pkg?.totalPackages ?? 1),
   };
 }
 

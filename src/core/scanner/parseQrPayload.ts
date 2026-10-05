@@ -1,10 +1,16 @@
 import { parseMercadoLibreQR } from './parseMercadoLibreQR';
-import type { ScannerParseResult } from './types';
+import type { ScannedPackage, ScannerParseResult } from './types';
 
 export const INTERNAL_QR_PREFIX = 'TRK_' as const;
 
 /** Must match backend `ShipmentQrPayload::PREFIX`. */
 export const SHIPMENT_QR_PREFIX = 'LGST1:' as const;
+
+type ShipmentQrPayload = {
+  tracking: string;
+  reference: string | null;
+  package: ScannedPackage | null;
+};
 
 function base64UrlToUtf8(b64url: string): string | null {
   try {
@@ -19,7 +25,27 @@ function base64UrlToUtf8(b64url: string): string | null {
   }
 }
 
-function tryDecodeShipmentQrTracking(trimmed: string): string | null {
+function asTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed !== '' ? trimmed : null;
+}
+
+function asPositiveInt(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback;
+}
+
+/**
+ * Decodifica el payload `LGST1:` completo.
+ *
+ * Además del tracking (`t`), lee la identidad del bulto (`p` / `pid`) y su
+ * posición (`n` / `nt`). Antes esta función devolvía sólo `t`, por lo que los 4
+ * bultos de un envío eran indistinguibles entre sí al escanear.
+ */
+function tryDecodeShipmentQr(trimmed: string): ShipmentQrPayload | null {
   if (!trimmed.startsWith(SHIPMENT_QR_PREFIX)) {
     return null;
   }
@@ -32,19 +58,30 @@ function tryDecodeShipmentQrTracking(trimmed: string): string | null {
     if (data === null || typeof data !== 'object' || !('t' in data)) {
       return null;
     }
-    const t = (data as { t?: unknown }).t;
-    if (typeof t !== 'string') {
+    const d = data as Record<string, unknown>;
+    const tracking = asTrimmedString(d.t);
+    if (tracking == null) {
       return null;
     }
-    const id = t.trim();
-    return id !== '' ? id : null;
+
+    const code = asTrimmedString(d.p);
+    const index = asPositiveInt(d.n, 1);
+    const total = asPositiveInt(d.nt, 1);
+
+    return {
+      tracking,
+      reference: asTrimmedString(d.r),
+      // Sin `p` no hay identidad de bulto: etiqueta impresa antes del cambio.
+      package: code == null ? null : { code, id: asTrimmedString(d.pid), index, total },
+    };
   } catch {
     return null;
   }
 }
 
 /**
- * Classify a scanned QR string. LGST1 payloads decode to internal tracking (`t`).
+ * Classify a scanned QR string. LGST1 payloads decode to internal tracking (`t`)
+ * plus, when present, the physical bulto they identify (`p`).
  * Legacy internal codes start with `TRK_`; the tracking id is the remainder.
  */
 export function parseQrPayload(raw: string): ScannerParseResult {
@@ -57,15 +94,19 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       type: 'mercadolibre',
       trackingId: ml.id,
       clientId: ml.sender_id,
+      reference: null,
+      package: null,
     };
   }
 
-  const fromLgst = tryDecodeShipmentQrTracking(trimmed);
+  const fromLgst = tryDecodeShipmentQr(trimmed);
   if (fromLgst !== null) {
     return {
       raw: trimmed,
       type: 'internal',
-      trackingId: fromLgst,
+      trackingId: fromLgst.tracking,
+      reference: fromLgst.reference,
+      package: fromLgst.package,
     };
   }
 
@@ -74,6 +115,8 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       raw: trimmed,
       type: 'internal',
       trackingId: trimmed.slice(INTERNAL_QR_PREFIX.length),
+      reference: null,
+      package: null,
     };
   }
 
@@ -81,5 +124,7 @@ export function parseQrPayload(raw: string): ScannerParseResult {
     raw: trimmed,
     type: 'external',
     trackingId: null,
+    reference: null,
+    package: null,
   };
 }

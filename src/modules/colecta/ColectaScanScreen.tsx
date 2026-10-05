@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { Button, ScreenContainer } from '@components/ui';
+import { PackageProgress } from '@components/PackageProgress';
 import { QrScanner } from '@components/QrScanner';
 import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { parseQrPayload } from '@core/scanner/parseQrPayload';
@@ -33,7 +34,9 @@ import {
 } from '@modules/colecta/api/colectaScan';
 import { useColectaSelectionStore } from '@modules/colecta/colectaSelectionStore';
 import {
+  colectaItemKey,
   type ColectaScanSource,
+  type ColectaSessionItem,
   useColectaSessionStore,
 } from '@modules/colecta/colectaSessionStore';
 import { completeStop as completePickupStopApi } from '@modules/pickups/api/pickupOrders';
@@ -117,6 +120,25 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   const pickupContext = useColectaSessionStore((s) => s.pickupContext);
   const addScannedItem = useColectaSessionStore((s) => s.addScannedItem);
   const removeScannedItem = useColectaSessionStore((s) => s.removeScannedItem);
+
+  /**
+   * Progreso del envío del último bulto escaneado: lo que le dice al operador
+   * cuántos bultos de ESE envío lleva y cuáles le faltan.
+   */
+  const lastShipmentProgress = useMemo(() => {
+    const last = items[items.length - 1];
+    if (last == null || last.packageTotal == null || last.packageTotal <= 1) {
+      return null;
+    }
+    const sameShipment = items.filter((i) => i.trackingId === last.trackingId);
+    return {
+      trackingId: last.trackingId,
+      total: last.packageTotal,
+      scannedIndexes: sameShipment
+        .map((i) => i.packageIndex)
+        .filter((i): i is number => typeof i === 'number'),
+    };
+  }, [items]);
   const markCollectionStartedEmitted = useColectaSessionStore((s) => s.markCollectionStartedEmitted);
   const clearColectaSession = useColectaSessionStore((s) => s.clearSession);
 
@@ -315,18 +337,24 @@ export function ColectaScanScreen({ navigation, route }: Props) {
 
           const trackingId = result.trackingId;
           const source = scanSourceFromParse(trimmed);
+          const scannedPackage = result.package;
+
+          // Los N bultos de un envío comparten tracking: deduplicar por tracking
+          // descartaría el bulto 2 como repetido del 1. La clave es el bulto.
+          const dedupeKey = scannedPackage?.code ?? trackingId;
+
           const already = useColectaSessionStore
             .getState()
-            .items.some((i) => i.trackingId === trackingId);
+            .items.some((i) => colectaItemKey(i) === dedupeKey);
           if (already) {
             triggerScanFeedback(trackingId, source);
             return;
           }
-          if (enqueuedTrackingRef.current.has(trackingId)) {
+          if (enqueuedTrackingRef.current.has(dedupeKey)) {
             triggerScanFeedback(trackingId, source);
             return;
           }
-          enqueuedTrackingRef.current.add(trackingId);
+          enqueuedTrackingRef.current.add(dedupeKey);
 
           const sess = useColectaSessionStore.getState();
           if (!sess.collectionStartedEmitted) {
@@ -344,13 +372,30 @@ export function ColectaScanScreen({ navigation, route }: Props) {
             });
             markCollectionStartedEmitted();
           }
-          addScannedItem(trackingId, source);
+          addScannedItem(
+            trackingId,
+            source,
+            scannedPackage != null
+              ? {
+                  code: scannedPackage.code,
+                  index: scannedPackage.sequence,
+                  total: scannedPackage.totalPackages,
+                }
+              : null,
+          );
           triggerScanFeedback(trackingId, source);
           if (scanErrorTimerRef.current !== null) clearTimeout(scanErrorTimerRef.current);
           setScanError(null);
           await enqueueEvent({
             type: EventType.COLLECTION_ITEM_ADDED,
-            payload: { collectionId, trackingId, raw: trimmed },
+            // `packageCode` identifica el bulto colectado; el backend lo prioriza
+            // sobre `trackingId`, que queda como fallback para builds anteriores.
+            payload: {
+              collectionId,
+              trackingId,
+              raw: trimmed,
+              ...(scannedPackage != null ? { packageCode: scannedPackage.code } : {}),
+            },
           });
           scheduleProcessQueueIfOnline();
         } finally {
@@ -376,7 +421,9 @@ export function ColectaScanScreen({ navigation, route }: Props) {
   );
 
   const onRemoveItem = useCallback(
-    (trackingId: string) => {
+    (item: ColectaSessionItem) => {
+      const trackingId = item.trackingId;
+      const key = colectaItemKey(item);
       if (collectionId == null) return;
       if (!isOnline) {
         triggerScanError({
@@ -395,12 +442,17 @@ export function ColectaScanScreen({ navigation, route }: Props) {
             style: 'destructive',
             onPress: () => {
               void (async () => {
-                removeScannedItem(trackingId);
-                enqueuedTrackingRef.current.delete(trackingId);
+                removeScannedItem(key);
+                enqueuedTrackingRef.current.delete(key);
                 Vibration.vibrate(40);
                 await enqueueEvent({
                   type: EventType.COLLECTION_ITEM_REMOVED,
-                  payload: { collectionId, trackingId, raw: trackingId },
+                  payload: {
+                    collectionId,
+                    trackingId,
+                    raw: key,
+                    ...(item.packageCode != null ? { packageCode: item.packageCode } : {}),
+                  },
                 });
                 scheduleProcessQueueIfOnline();
               })();
@@ -570,10 +622,19 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       {/* ── Contador con animación de rebote ── */}
       <Animated.View style={[styles.counterCard, counterAnimStyle]}>
         <Text style={styles.counterNumber}>{items.length}</Text>
-        <Text style={styles.counterUnit}>{items.length === 1 ? 'paquete' : 'paquetes'}</Text>
+        <Text style={styles.counterUnit}>{items.length === 1 ? 'bulto' : 'bultos'}</Text>
         <View style={styles.counterSpacer} />
         <Ionicons name="cube-outline" size={20} color={theme.colors.muted} />
       </Animated.View>
+
+      {/* ── Progreso por bulto del último envío escaneado ── */}
+      {lastShipmentProgress != null ? (
+        <PackageProgress
+          total={lastShipmentProgress.total}
+          scannedIndexes={lastShipmentProgress.scannedIndexes}
+          trackingId={lastShipmentProgress.trackingId}
+        />
+      ) : null}
 
       {/* ── Finalizar ── */}
       <Button variant="primary" size="lg" onPress={onFinalize} style={styles.finalizeBtn}>
@@ -583,7 +644,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
       {/* ── Lista de paquetes escaneados ── */}
       <FlatList
         data={items}
-        keyExtractor={(item, i) => `${item.trackingId}-${i}`}
+        keyExtractor={(item, i) => `${colectaItemKey(item)}-${i}`}
         style={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
@@ -594,7 +655,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
         }
         renderItem={({ item, index }) => (
           <Pressable
-            onLongPress={() => onRemoveItem(item.trackingId)}
+            onLongPress={() => onRemoveItem(item)}
             delayLongPress={450}
             android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -605,9 +666,16 @@ export function ColectaScanScreen({ navigation, route }: Props) {
               <Text style={styles.rowNum}>{index + 1}</Text>
             </View>
             <Ionicons name="cube" size={16} color={theme.colors.primary} />
-            <Text style={styles.rowText} numberOfLines={1}>
-              {formatTrackingDisplay(item.trackingId)}
-            </Text>
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.rowText} numberOfLines={1}>
+                {formatTrackingDisplay(item.trackingId)}
+              </Text>
+              {item.packageIndex != null && (item.packageTotal ?? 1) > 1 ? (
+                <Text style={styles.rowBulto} numberOfLines={1}>
+                  Bulto {item.packageIndex}/{item.packageTotal}
+                </Text>
+              ) : null}
+            </View>
             {(item.source === 'flex' || item.source === 'interno') && (
               <View
                 style={[
@@ -892,10 +960,17 @@ function createStyles(t: AppTheme) {
       ...typography.captionStrong,
       color: colors.primary,
     },
-    rowText: {
+    rowTextWrap: {
       flex: 1,
+      gap: 1,
+    },
+    rowText: {
       ...typography.bodyStrong,
       color: colors.text,
+    },
+    rowBulto: {
+      ...typography.caption,
+      color: colors.muted,
     },
   });
 }

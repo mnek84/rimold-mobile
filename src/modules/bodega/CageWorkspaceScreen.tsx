@@ -38,6 +38,7 @@ import {
 } from '@core/api/cagesWarehouse';
 import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
+import { parseQrPayload } from '@core/scanner/parseQrPayload';
 import type { BodegaStackParamList } from '@navigation/bodegaStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -47,6 +48,8 @@ type ScanErrorRow = { id: string; code: string; message: string };
 
 type LastScanned = { tracking: string; duplicate: boolean };
 
+type CageScanInput = { payload: string; tracking: string; packageCode: string | null };
+
 const SCAN_COOLDOWN_MS = 1500;
 const LAST_SCANNED_TTL_MS = 3000;
 const SCAN_ERROR_TTL_MS = 4500;
@@ -55,6 +58,32 @@ const CORNER_THICKNESS = 3;
 
 function resolveTrackingFromScanRaw(raw: string): string {
   return normalizeShipmentScanToLookupKey(raw);
+}
+
+/**
+ * Qué mandar al backend y con qué clave deduplicar localmente.
+ *
+ * El backend resuelve el bulto a partir del payload crudo, así que se manda tal
+ * cual: normalizarlo a tracking perdería la identidad del bulto y los 4 bultos
+ * de un envío volverían a ser indistinguibles.
+ */
+function describeCageScan(raw: string): {
+  payload: string;
+  tracking: string;
+  packageCode: string | null;
+} | null {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+
+  const parsed = parseQrPayload(trimmed);
+  const tracking = resolveTrackingFromScanRaw(trimmed);
+  if (tracking === '') return null;
+
+  return {
+    payload: parsed.package != null ? trimmed : tracking,
+    tracking,
+    packageCode: parsed.package?.code ?? null,
+  };
 }
 
 function axiosMessage(e: unknown, fallback: string): string {
@@ -125,6 +154,9 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
   const okCount = shipments.length;
 
+  /** Bultos ya registrados en esta sesión de escaneo, para no repetir el request. */
+  const scannedPackageCodesRef = useRef<Set<string>>(new Set());
+
   const trackingsInCage = useMemo(() => {
     const set = new Set<string>();
     for (const s of shipments) set.add(s.tracking);
@@ -178,19 +210,22 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   );
 
   const scanMutation = useMutation({
-    mutationFn: (tracking: string) => scanPackageIntoCage(cageId, tracking),
-    onSuccess: async (_d, tracking) => {
-      triggerSuccessVisuals(tracking, false);
+    mutationFn: (scan: CageScanInput) => scanPackageIntoCage(cageId, scan.payload),
+    onSuccess: async (_d, scan) => {
+      if (scan.packageCode !== null) {
+        scannedPackageCodesRef.current.add(scan.packageCode);
+      }
+      triggerSuccessVisuals(scan.packageCode ?? scan.tracking, false);
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages'] });
       await qc.invalidateQueries({ queryKey: ['warehouse', 'cages', 'detail', cageId] });
     },
-    onError: (e, tracking) => {
+    onError: (e, scan) => {
       const msg = axiosMessage(e, 'No se pudo agregar el paquete.');
       triggerErrorVisuals(msg);
       setScanErrors((prev) => [
         {
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          code: tracking,
+          code: scan.packageCode ?? scan.tracking,
           message: msg,
         },
         ...prev,
@@ -245,15 +280,24 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   const onQrScanned = useCallback(
     (raw: string) => {
       if (scanInFlightRef.current || closeMutation.isPending) return;
-      const tracking = resolveTrackingFromScanRaw(raw);
-      if (tracking === '') return;
-      // Local de-duplication: package already in this cage → reward feedback without hitting the API.
-      if (trackingsInCage.has(tracking)) {
-        triggerSuccessVisuals(tracking, true);
+      const scan = describeCageScan(raw);
+      if (scan === null) return;
+
+      if (scan.packageCode !== null) {
+        // Con identidad de bulto la dedup es por bulto: que el envío ya esté en
+        // la jaula no significa que ESTE bulto haya entrado.
+        if (scannedPackageCodesRef.current.has(scan.packageCode)) {
+          triggerSuccessVisuals(scan.packageCode, true);
+          return;
+        }
+      } else if (trackingsInCage.has(scan.tracking)) {
+        // Escaneo sin identidad de bulto (etiqueta vieja): comportamiento previo.
+        triggerSuccessVisuals(scan.tracking, true);
         return;
       }
+
       scanInFlightRef.current = true;
-      scanMutation.mutate(tracking);
+      scanMutation.mutate(scan);
     },
     [scanMutation, trackingsInCage, triggerSuccessVisuals, closeMutation.isPending],
   );

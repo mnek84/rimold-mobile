@@ -10,12 +10,31 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { PackageProgress } from '@components/PackageProgress';
 import { QrScanner } from '@components/QrScanner';
 import { ScreenContainer } from '@components/ui';
 import { warehouseEntryScan, type WarehouseEntryScanResult } from '@core/api/warehouseEntry';
 import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
 import { useTheme, type AppTheme } from '@theme';
+
+/**
+ * Posiciones ya ingresadas, derivadas de los códigos faltantes que informa el
+ * backend. El código de bulto termina en "-NN", así que el sufijo da la posición.
+ */
+function indexesFromMissing(total: number, missing: string[], tracking: string): number[] {
+  const missingIndexes = new Set(
+    missing
+      .map((code) => {
+        const suffix = code.startsWith(`${tracking}-`) ? code.slice(tracking.length + 1) : null;
+        const n = suffix === null ? NaN : Number(suffix);
+        return Number.isFinite(n) ? n : NaN;
+      })
+      .filter((n) => Number.isFinite(n)),
+  );
+
+  return Array.from({ length: total }, (_, i) => i + 1).filter((i) => !missingIndexes.has(i));
+}
 
 const SCAN_COOLDOWN_MS = 1500;
 const LAST_SCANNED_TTL_MS = 3000;
@@ -129,18 +148,49 @@ export function WarehouseEntryScreen() {
     [errorFlash],
   );
 
+  const [lastProgress, setLastProgress] = useState<{
+    tracking: string;
+    total: number;
+    scanned: number;
+    missing: string[];
+    indexes: number[];
+  } | null>(null);
+
   const scanMutation = useMutation({
     mutationFn: (raw: string) => warehouseEntryScan(raw),
     onSuccess: (result, raw) => {
       const scannedKey = normalizeShipmentScanToLookupKey(raw);
       if (result.valid) {
         const tracking = result.shipment.tracking;
+        const pkgs = result.packages;
         triggerSuccessVisuals(tracking, result.duplicate);
+
+        // Progreso del envío recién escaneado: cuántos bultos ingresaron y cuál falta.
+        setLastProgress(
+          pkgs !== null && pkgs.total > 1
+            ? {
+                tracking,
+                total: pkgs.total,
+                scanned: pkgs.scanned,
+                missing: pkgs.missing,
+                indexes: indexesFromMissing(pkgs.total, pkgs.missing, tracking),
+              }
+            : null,
+        );
+
+        const bultoLabel =
+          pkgs?.package != null && pkgs.total > 1
+            ? ` · Bulto ${pkgs.package.sequence}/${pkgs.total}`
+            : '';
+
         pushHistory({
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           tracking,
           outcome: result.duplicate ? 'duplicate' : 'ingressed',
-          detail: result.duplicate ? 'Ya estaba ingresado' : 'Ingresado a depósito',
+          detail:
+            (result.duplicate ? 'Ya estaba ingresado' : 'Ingresado a depósito') +
+            bultoLabel +
+            (pkgs !== null && pkgs.total > 1 ? ` (${pkgs.scanned}/${pkgs.total})` : ''),
         });
       } else {
         const message = messageForFailure(result);
@@ -247,6 +297,15 @@ export function WarehouseEntryScreen() {
           <Text style={styles.hintTextInline}>Apuntá al QR del paquete</Text>
         </View>
       )}
+
+      {lastProgress !== null ? (
+        <PackageProgress
+          total={lastProgress.total}
+          scannedIndexes={lastProgress.indexes}
+          trackingId={lastProgress.tracking}
+          missingCodes={lastProgress.missing}
+        />
+      ) : null}
 
       <View style={styles.statsRow}>
         <Animated.View style={[styles.statBox, counterStyle]}>

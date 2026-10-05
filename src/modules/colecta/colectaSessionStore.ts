@@ -12,7 +12,30 @@ export type ColectaSessionItem = {
   trackingId: string;
   /** Ausente en ítems persistidos antes de agregar origen (colecta). */
   source?: ColectaScanSource;
+  /**
+   * Identidad del bulto escaneado. Ausente en ítems persistidos antes del
+   * modelo por bulto, y en escaneos cuyo código no identifica uno.
+   */
+  packageCode?: string;
+  packageIndex?: number;
+  packageTotal?: number;
 };
+
+/**
+ * Clave con la que se deduplica dentro de la sesión.
+ *
+ * Los N bultos de un envío comparten tracking, así que deduplicar por tracking
+ * descartaría el bulto 2 como repetido del 1. Con código de bulto se usa ese;
+ * sin él se cae al tracking, que es el comportamiento previo.
+ */
+export function colectaItemKey(item: Pick<ColectaSessionItem, 'trackingId' | 'packageCode'>): string {
+  return item.packageCode ?? item.trackingId;
+}
+
+/** Bultos escaneados de un envío dentro de la sesión abierta. */
+export function scannedCountForTracking(items: ColectaSessionItem[], trackingId: string): number {
+  return items.filter((i) => i.trackingId === trackingId).length;
+}
 
 /** Contexto opcional cuando el scan sucede dentro de un PickupStop (nuevo flujo de colectas). */
 export type PickupScanContext = {
@@ -45,10 +68,14 @@ type State = {
     warehouseName: string;
     pickupContext: PickupScanContext;
   }) => void;
-  /** Append scan if not duplicate. */
-  addScannedItem: (trackingId: string, source: ColectaScanSource) => void;
+  /** Append scan if not duplicate (deduped by bulto when the scan identifies one). */
+  addScannedItem: (
+    trackingId: string,
+    source: ColectaScanSource,
+    pkg?: { code: string; index: number; total: number } | null,
+  ) => void;
   /** Remove a scanned item from the open session (long-press flow). */
-  removeScannedItem: (trackingId: string) => void;
+  removeScannedItem: (key: string) => void;
   /** Drop session after COLLECTION_FINISHED or logout. */
   clearSession: () => void;
   markCollectionStartedEmitted: () => void;
@@ -92,16 +119,24 @@ export const useColectaSessionStore = create<State>()(
           collectionStartedEmitted: true,
           pickupContext: params.pickupContext,
         }),
-      addScannedItem: (trackingId, source) =>
+      addScannedItem: (trackingId, source, pkg) =>
         set((state) => {
-          if (state.items.some((i) => i.trackingId === trackingId)) {
+          const incoming: ColectaSessionItem = {
+            trackingId,
+            source,
+            ...(pkg != null
+              ? { packageCode: pkg.code, packageIndex: pkg.index, packageTotal: pkg.total }
+              : {}),
+          };
+          const key = colectaItemKey(incoming);
+          if (state.items.some((i) => colectaItemKey(i) === key)) {
             return state;
           }
-          return { items: [...state.items, { trackingId, source }] };
+          return { items: [...state.items, incoming] };
         }),
-      removeScannedItem: (trackingId) =>
+      removeScannedItem: (key) =>
         set((state) => ({
-          items: state.items.filter((i) => i.trackingId !== trackingId),
+          items: state.items.filter((i) => colectaItemKey(i) !== key),
         })),
       clearSession: () => set({ ...emptySession }),
       markCollectionStartedEmitted: () => set({ collectionStartedEmitted: true }),

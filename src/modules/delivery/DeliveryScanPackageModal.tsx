@@ -14,7 +14,11 @@ import { QrScanner } from '@components/QrScanner';
 import { AssignScanError, assignShipmentByTracking } from '@core/api/shipments';
 import { playScanFeedback } from '@core/feedback/scanFeedback';
 import { showToast } from '@core/feedback/toastStore';
-import { resolveTrackingIdForAssign } from '@core/scanner/resolveTrackingIdForAssign';
+import {
+  type AssignScanPackageInfo,
+  resolveTrackingIdForAssign,
+  takeLastAssignPackageInfo,
+} from '@core/scanner/resolveTrackingIdForAssign';
 import { useTheme, type AppTheme } from '@theme';
 
 import { DeliveryFailedModal } from './DeliveryFailedModal';
@@ -56,6 +60,8 @@ type ScannedItemStatus =
   | 'error';
 
 type ScannedItem = {
+  /** Cantidad de bultos del envío, cuando son varios. */
+  packageTotal?: number;
   id: string;
   trackingKey: string;
   status: ScannedItemStatus;
@@ -115,7 +121,7 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
   );
 
   const performAssign = useCallback(
-    async (trackingKey: string, forceReassign: boolean) => {
+    async (trackingKey: string, forceReassign: boolean, packageTotal: number | null = null) => {
       try {
         const result = await assignShipmentByTracking({
           trackingId: trackingKey,
@@ -129,6 +135,7 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
         pushItem({
           trackingKey,
           status: result.reassigned ? 'reassigned' : 'assigned',
+          ...(packageTotal != null && packageTotal > 1 ? { packageTotal } : {}),
         });
         playScanFeedback('success');
         setError(null);
@@ -161,7 +168,12 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
           setError({ message: errorMessage, tone: 'critical' });
         }
         if (addErrorItem) {
-          pushItem({ trackingKey, status: 'error', errorMessage });
+          pushItem({
+            trackingKey,
+            status: 'error',
+            errorMessage,
+            ...(packageTotal != null && packageTotal > 1 ? { packageTotal } : {}),
+          });
           playScanFeedback('error');
         }
         return false;
@@ -236,8 +248,10 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
 
       void (async () => {
         let trackingKey: string;
+        let packageInfo: AssignScanPackageInfo | null = null;
         try {
           trackingKey = normalizeAssignKey(await resolveTrackingIdForAssign(raw));
+          packageInfo = takeLastAssignPackageInfo();
         } catch (e) {
           const msg =
             e instanceof Error ? e.message : 'No se pudo leer el código. Probá de nuevo.';
@@ -250,7 +264,11 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
           return;
         }
         if (successKeysRef.current.has(trackingKey)) {
-          pushItem({ trackingKey, status: 'already_scanned' });
+          pushItem({
+            trackingKey,
+            status: 'already_scanned',
+            ...(packageInfo != null ? { packageTotal: packageInfo.total } : {}),
+          });
           showToast('Ya escaneado en esta sesión');
           playScanFeedback('success');
           return;
@@ -261,7 +279,7 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
         setError(null);
 
         try {
-          await performAssign(trackingKey, false);
+          await performAssign(trackingKey, false, packageInfo?.total ?? null);
         } finally {
           inFlightKeysRef.current.delete(trackingKey);
           postingRef.current = false;
@@ -468,6 +486,7 @@ function ScannedItemsList({
           </Text>
           <Text style={styles.historyKey} numberOfLines={1}>
             {it.trackingKey}
+            {it.packageTotal != null && it.packageTotal > 1 ? ` · ${it.packageTotal} bultos` : ''}
           </Text>
           <Text style={styles.historyStatus} numberOfLines={1}>
             {statusLabelFor(it)}
