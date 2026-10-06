@@ -85,6 +85,15 @@ type ShipmentEventPayload = {
 
 /**
  * Persists domain events via `POST /events` (append + projection). Uses {@link QueueEvent.id} as `id` and idempotency.
+ *
+ * `occurred_at` es la hora en que el repartidor hizo la accion, no la hora en
+ * que el evento llega al servidor. Importa porque la cola es offline-first: una
+ * entrega hecha a las 14:05 sin senal puede sincronizarse recien a las 17:30, y
+ * sin este campo el backend solo ve las 17:30. Peor: al vaciarse la cola, todas
+ * las entregas de la tarde quedan con el mismo horario.
+ *
+ * El backend valida esta hora contra la de recepcion y la descarta si el reloj
+ * del dispositivo esta claramente mal, asi que mandarla siempre es seguro.
  */
 async function postDomainEvent(
   eventId: string,
@@ -92,6 +101,7 @@ async function postDomainEvent(
   aggregateId: string,
   type: string,
   payload: Record<string, unknown>,
+  occurredAtMs: number,
 ): Promise<void> {
   await apiClient.post(
     '/events',
@@ -101,6 +111,7 @@ async function postDomainEvent(
       aggregate_id: aggregateId,
       type,
       payload,
+      occurred_at: new Date(occurredAtMs).toISOString(),
     },
     idempotencyHeaders(eventId),
   );
@@ -110,7 +121,7 @@ async function postDomainEvent(
  * Maps queued {@link QueueEvent.type} values to API calls.
  */
 export async function handleEvent(event: QueueEvent): Promise<void> {
-  const { type, payload, id: eventId } = event;
+  const { type, payload, id: eventId, createdAt: occurredAtMs } = event;
 
   switch (type) {
     case EventType.COLLECTION_STARTED: {
@@ -123,7 +134,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       if (p.warehouseName != null && p.warehouseName !== '') body.warehouseName = p.warehouseName;
       if (p.driverUserId != null && p.driverUserId !== '') body.driverUserId = p.driverUserId;
       if (p.driverName != null && p.driverName !== '') body.driverName = p.driverName;
-      await postDomainEvent(eventId, 'collection', collectionId, type, body);
+      await postDomainEvent(eventId, 'collection', collectionId, type, body, occurredAtMs);
       return;
     }
 
@@ -134,7 +145,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       const body: Record<string, unknown> = {};
       if (p.trackingId != null && p.trackingId !== '') body.trackingId = p.trackingId;
       if (p.raw != null && p.raw !== '') body.raw = p.raw;
-      await postDomainEvent(eventId, 'collection', collectionId, type, body);
+      await postDomainEvent(eventId, 'collection', collectionId, type, body, occurredAtMs);
       return;
     }
 
@@ -145,7 +156,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
         throw new Error(`${EventType.COLLECTION_FINISHED}: expected items array`);
       }
       const items = await Promise.all(p.items.map(normalizeCollectionItem));
-      await postDomainEvent(eventId, 'collection', collectionId, type, { items });
+      await postDomainEvent(eventId, 'collection', collectionId, type, { items }, occurredAtMs);
       return;
     }
 
@@ -195,7 +206,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
         }
       }
 
-      await postDomainEvent(eventId, 'shipment', sid, type, body);
+      await postDomainEvent(eventId, 'shipment', sid, type, body, occurredAtMs);
       return;
     }
 
@@ -208,7 +219,7 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
       if (!Array.isArray(p.points) || p.points.length === 0) {
         throw new Error(`${EventType.GPS_LOCATION}: expected non-empty payload.points`);
       }
-      await postDomainEvent(eventId, 'shipment', sid, type, { points: p.points });
+      await postDomainEvent(eventId, 'shipment', sid, type, { points: p.points }, occurredAtMs);
       return;
     }
 
