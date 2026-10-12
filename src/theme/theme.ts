@@ -27,6 +27,17 @@ export type Palette = {
   danger: string;
   /** Texto sobre `danger`. */
   dangerOn: string;
+  /**
+   * Atencion: ni confirmacion ni error.
+   *
+   * El caso que lo hizo falta: un re-escaneo de crossdocking devuelve la misma
+   * jaula y el operario tiene que llevar el paquete igual. Pintarlo de verde lo
+   * hace creer que sumo trabajo; de rojo, que algo fallo. Ninguna de las dos es
+   * cierta.
+   */
+  warning: string;
+  /** Texto sobre `warning`. */
+  warningOn: string;
 };
 
 const darkPalette: Palette = {
@@ -43,6 +54,8 @@ const darkPalette: Palette = {
   successOn: '#062b14',
   danger: '#ef4444',
   dangerOn: '#ffffff',
+  warning: '#f59e0b',
+  warningOn: '#2a1a02',
 };
 
 const lightPalette: Palette = {
@@ -59,6 +72,8 @@ const lightPalette: Palette = {
   successOn: '#ffffff',
   danger: '#dc2626',
   dangerOn: '#ffffff',
+  warning: '#d97706',
+  warningOn: '#ffffff',
 };
 
 const spacing = {

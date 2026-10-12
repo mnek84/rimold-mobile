@@ -22,6 +22,7 @@ import { ScreenContainer } from '@components/ui';
 import {
   crossdockAllocate,
   listCrossdockingLocations,
+  newClientScanId,
   type CrossdockAllocateResult,
   type CrossdockingLocation,
 } from '@core/api/crossdockAllocate';
@@ -36,7 +37,7 @@ const HISTORY_LIMIT = 6;
 type HistoryRow = {
   id: string;
   barcode: string;
-  outcome: 'ok' | 'error';
+  outcome: 'ok' | 'duplicate' | 'error';
   grid: number;
   cageName: string | null;
   detail: string;
@@ -44,7 +45,9 @@ type HistoryRow = {
 
 function messageForResult(result: CrossdockAllocateResult): string {
   if (result.success) {
-    return `Grid ${result.grid} — ${result.cage?.name ?? ''}`;
+    return result.duplicate
+      ? `Ya sorteado — ${result.cage?.name ?? `grid ${result.grid}`}`
+      : `${result.cage?.name ?? `Grid ${result.grid}`}`;
   }
   switch (result.error_code) {
     case 'shipment_not_found':
@@ -85,6 +88,10 @@ export function CrossdockManualScreen() {
 
   const lastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanInFlightRef = useRef(false);
+  /** Resultado por codigo ya resuelto en esta pantalla, para el dedupe local. */
+  const scannedRef = useRef<Map<string, CrossdockAllocateResult & { barcode: string }>>(
+    new Map(),
+  );
   const successFlash = useSharedValue(0);
   const errorFlash = useSharedValue(0);
 
@@ -107,6 +114,11 @@ export function CrossdockManualScreen() {
     }
   }, [locationsQuery.data, locationId]);
 
+  // Otro deposito es otra operacion: lo sorteado antes no aplica.
+  useEffect(() => {
+    scannedRef.current.clear();
+  }, [locationId]);
+
   const currentLocation: CrossdockingLocation | null = useMemo(() => {
     if (locationId === null || !locationsQuery.data) return null;
     return locationsQuery.data.find((l: CrossdockingLocation) => l.id === locationId) ?? null;
@@ -120,7 +132,9 @@ export function CrossdockManualScreen() {
     (barcode: string, result: CrossdockAllocateResult) => {
       const detail = messageForResult(result);
       if (result.success) {
-        playScanFeedback('success');
+        // Un re-escaneo suena distinto a propósito: el operario tiene que poder
+        // distinguir "este es nuevo" de "este ya lo pasaste" sin mirar.
+        playScanFeedback(result.duplicate ? 'error' : 'success');
         successFlash.value = withSequence(
           withTiming(1, { duration: 60 }),
           withTiming(0, { duration: 380 }),
@@ -138,7 +152,7 @@ export function CrossdockManualScreen() {
       pushHistory({
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         barcode,
-        outcome: result.success ? 'ok' : 'error',
+        outcome: result.success ? (result.duplicate ? 'duplicate' : 'ok') : 'error',
         grid: result.grid,
         cageName: result.cage?.name ?? null,
         detail,
@@ -148,9 +162,34 @@ export function CrossdockManualScreen() {
   );
 
   const scanMutation = useMutation({
-    mutationFn: ({ barcode, cdlId }: { barcode: string; cdlId: string }) =>
-      crossdockAllocate({ barcode, crossdocking_location_id: cdlId }),
+    mutationFn: ({
+      barcode,
+      cdlId,
+      clientScanId,
+    }: {
+      barcode: string;
+      cdlId: string;
+      clientScanId: string;
+    }) =>
+      crossdockAllocate({
+        barcode,
+        crossdocking_location_id: cdlId,
+        client_scan_id: clientScanId,
+      }),
     onSuccess: (result, vars) => {
+      // Solo se cachean los exitos. Un fallo puede dejar de serlo en cuanto
+      // alguien configure el CP que faltaba, y el operario tiene que poder
+      // reintentar sin reiniciar la pantalla.
+      if (result.success) {
+        const key = normalizeShipmentScanToLookupKey(vars.barcode);
+        if (key !== '') {
+          scannedRef.current.set(key, {
+            ...result,
+            duplicate: true,
+            barcode: vars.barcode,
+          });
+        }
+      }
       showResult(vars.barcode, result);
     },
     onSettled: () => {
@@ -164,10 +203,28 @@ export function CrossdockManualScreen() {
       if (locationId === null) return;
       const normalized = normalizeShipmentScanToLookupKey(raw);
       if (normalized === '') return;
+
+      // Dedupe local, igual que CageWorkspaceScreen: la camara lee el mismo QR
+      // varias veces si el operario lo deja en cuadro. El backend lo resolveria
+      // igual como duplicado, pero ahorrarse el viaje hace que la pantalla
+      // responda al instante en vez de parpadear "Resolviendo…".
+      const already = scannedRef.current.get(normalized);
+      if (already !== undefined) {
+        showResult(raw, already);
+        return;
+      }
+
       scanInFlightRef.current = true;
-      scanMutation.mutate({ barcode: raw, cdlId: locationId });
+      // Un id por intento de escaneo. Los reintentos internos de
+      // `crossdockAllocate` lo reusan, asi que una respuesta perdida no
+      // termina contando el bulto dos veces.
+      scanMutation.mutate({
+        barcode: raw,
+        cdlId: locationId,
+        clientScanId: newClientScanId(),
+      });
     },
-    [locationId, scanMutation],
+    [locationId, scanMutation, showResult],
   );
 
   const ready = locationId !== null && !locationsQuery.isLoading;
@@ -240,27 +297,66 @@ export function CrossdockManualScreen() {
         <View
           style={[
             styles.resultBanner,
-            last.success ? styles.resultBannerOk : styles.resultBannerError,
+            last.success
+              ? last.duplicate
+                ? styles.resultBannerDuplicate
+                : styles.resultBannerOk
+              : styles.resultBannerError,
           ]}
         >
-          <Ionicons
-            name={last.success ? 'checkmark-circle' : 'close-circle'}
-            size={26}
-            color={last.success ? theme.colors.success : theme.colors.danger}
-          />
-          <View style={styles.resultTextWrap}>
-            <Text style={styles.resultLabel}>
-              {last.success
-                ? `Jaula ${last.cage?.name ?? ''}`
-                : (last.error_code ?? 'Error')}
-            </Text>
-            <Text style={styles.resultGrid}>
-              {last.success ? `Grid ${last.grid}` : messageForResult(last)}
-            </Text>
-            <Text style={styles.resultDetail}>
-              {last.shipment?.tracking ?? last.barcode}
-            </Text>
-          </View>
+          {last.success ? (
+            // LA JAULA es lo primero y lo mas grande: el operario tiene el
+            // paquete en la mano y lo unico que necesita decidir es a donde lo
+            // lleva. El grid y el tracking son para verificar, no para decidir.
+            <View style={styles.resultTextWrap}>
+              <View style={styles.resultHeaderRow}>
+                <Ionicons
+                  name={last.duplicate ? 'repeat' : 'checkmark-circle'}
+                  size={22}
+                  color={last.duplicate ? theme.colors.warning : theme.colors.success}
+                />
+                <Text
+                  style={[
+                    styles.resultLabel,
+                    { color: last.duplicate ? theme.colors.warning : theme.colors.success },
+                  ]}
+                >
+                  {last.duplicate ? 'YA SORTEADO' : 'CROSSDOCKING OK'}
+                </Text>
+              </View>
+              <Text style={styles.resultCage} numberOfLines={1} adjustsFontSizeToFit>
+                {last.cage?.name ?? `GRID ${last.grid}`}
+              </Text>
+              <View style={styles.resultMetaRow}>
+                <Text style={styles.resultMeta}>Grid {last.grid}</Text>
+                {last.destination_label !== null ? (
+                  <Text style={styles.resultMeta}>{last.destination_label}</Text>
+                ) : null}
+                {last.cage?.session_count !== null && last.cage?.session_count !== undefined ? (
+                  <Text style={styles.resultMeta}>
+                    {last.cage.session_count}
+                    {last.cage.capacity !== null ? ` / ${last.cage.capacity}` : ''} en jaula
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.resultDetail}>
+                {last.shipment?.tracking ?? last.barcode}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.resultTextWrap}>
+              <View style={styles.resultHeaderRow}>
+                <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
+                <Text style={[styles.resultLabel, { color: theme.colors.danger }]}>
+                  SIN JAULA
+                </Text>
+              </View>
+              <Text style={styles.resultGrid}>{messageForResult(last)}</Text>
+              <Text style={styles.resultDetail}>
+                {last.shipment?.tracking ?? last.barcode}
+              </Text>
+            </View>
+          )}
         </View>
       ) : null}
 
@@ -273,13 +369,27 @@ export function CrossdockManualScreen() {
         renderItem={({ item }) => (
           <View style={styles.histRow}>
             <Ionicons
-              name={item.outcome === 'ok' ? 'checkmark-circle' : 'close-circle'}
+              name={
+                item.outcome === 'error'
+                  ? 'close-circle'
+                  : item.outcome === 'duplicate'
+                    ? 'repeat'
+                    : 'checkmark-circle'
+              }
               size={20}
-              color={item.outcome === 'ok' ? theme.colors.success : theme.colors.danger}
+              color={
+                item.outcome === 'error'
+                  ? theme.colors.danger
+                  : item.outcome === 'duplicate'
+                    ? theme.colors.warning
+                    : theme.colors.success
+              }
             />
             <View style={styles.histTextWrap}>
               <Text style={styles.histTitle}>
-                {item.outcome === 'ok' ? `Grid ${item.grid} — ${item.cageName}` : item.detail}
+                {item.outcome === 'error'
+                  ? item.detail
+                  : `${item.cageName ?? `Grid ${item.grid}`} · grid ${item.grid}`}
               </Text>
               <Text style={styles.histSubtitle}>{item.barcode}</Text>
             </View>
@@ -369,7 +479,7 @@ function createStyles(t: AppTheme) {
     },
     resultBanner: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: spacing.sm,
       padding: spacing.md,
       borderRadius: spacing.radiusMd,
@@ -384,10 +494,42 @@ function createStyles(t: AppTheme) {
       backgroundColor: 'rgba(239, 68, 68, 0.12)',
       borderColor: 'rgba(239, 68, 68, 0.45)',
     },
+    resultBannerDuplicate: {
+      backgroundColor: 'rgba(245, 158, 11, 0.12)',
+      borderColor: 'rgba(245, 158, 11, 0.45)',
+    },
     resultTextWrap: { flex: 1, minWidth: 0 },
+    resultHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
     resultLabel: {
       ...typography.captionStrong,
       color: colors.text,
+      letterSpacing: 1.1,
+    },
+    /**
+     * El nombre de la jaula es el dato dominante de la pantalla. 44pt se lee de
+     * un vistazo con el paquete en la mano; `adjustsFontSizeToFit` baja solo si
+     * la jaula tiene un nombre largo.
+     */
+    resultCage: {
+      fontSize: 44,
+      lineHeight: 50,
+      fontWeight: '900',
+      color: colors.text,
+      marginTop: 2,
+    },
+    resultMetaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+      marginTop: 2,
+    },
+    resultMeta: {
+      ...typography.captionStrong,
+      color: colors.muted,
     },
     resultGrid: {
       ...typography.title,
