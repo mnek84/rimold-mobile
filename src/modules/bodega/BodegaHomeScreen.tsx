@@ -39,6 +39,23 @@ export function BodegaHomeScreen() {
 
         <Pressable
           style={styles.card}
+          onPress={() => navigation.navigate('AssignShipment')}
+          accessibilityRole="button"
+        >
+          <View style={styles.cardIconWrap}>
+            <Ionicons name="albums-outline" size={28} color={theme.colors.primary} />
+          </View>
+          <View style={styles.cardTextWrap}>
+            <Text style={styles.cardTitle}>Asignar a jaula</Text>
+            <Text style={styles.cardHint}>
+              Elegí jaula o chofer sin tener que escanear el bulto adentro.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color={theme.colors.muted} />
+        </Pressable>
+
+        <Pressable
+          style={styles.card}
           onPress={() => navigation.navigate('CrossdockManual')}
           accessibilityRole="button"
         >

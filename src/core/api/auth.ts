@@ -24,8 +24,18 @@ function mapRolesToAuthRoles(roles: string[]): AuthRole[] {
   const lower = roles.map((r) => r.toLowerCase());
   const mapped = new Set<AuthRole>();
 
-  if (lower.includes('warehouse_operator') || lower.includes('warehouse')) {
+  if (
+    lower.includes('warehouse_operator') ||
+    lower.includes('warehouse') ||
+    lower.includes('warehouse_supervisor')
+  ) {
     mapped.add('WAREHOUSE');
+  }
+  // El supervisor suma un rol, no lo reemplaza: tambien opera. Antes caia en el
+  // fallback de abajo y entraba a la app como chofer, sin acceso a su propia
+  // operacion.
+  if (lower.includes('warehouse_supervisor')) {
+    mapped.add('WAREHOUSE_SUPERVISOR');
   }
   if (lower.includes('driver')) {
     mapped.add('DRIVER');
@@ -41,6 +51,8 @@ function mapRolesToAuthRoles(roles: string[]): AuthRole[] {
 
 function pickPrimaryRole(roles: AuthRole[]): AuthRole {
   if (roles.includes('DRIVER')) return 'DRIVER';
+  // WAREHOUSE_SUPERVISOR nunca es el rol primario: la pantalla inicial de un
+  // supervisor es la de deposito, y lo de supervisor son permisos extra.
   return 'WAREHOUSE';
 }
 
@@ -69,7 +81,7 @@ function normalizeUser(raw: unknown): AuthUser | null {
     return buildUser(String(id), normalizedRoles, name);
   }
 
-  if (o.role === 'DRIVER' || o.role === 'WAREHOUSE') {
+  if (o.role === 'DRIVER' || o.role === 'WAREHOUSE' || o.role === 'WAREHOUSE_SUPERVISOR') {
     const name = pickDisplayName(o);
     return buildUser(String(id), [o.role], name);
   }

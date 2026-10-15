@@ -20,6 +20,8 @@ import { fetchActiveCageSession } from '@core/api/cageSessions';
 import {
   fetchWarehouseCages,
   resolveWarehouseCageQr,
+  assignShipmentsToCage,
+  CAGE_SPECIAL_PURPOSE_LABELS,
   scanPackageIntoCage,
   type WarehouseCageListItem,
 } from '@core/api/cagesWarehouse';
@@ -55,6 +57,7 @@ export function CageListScreen() {
     route.params?.mode === 'transfer'
       ? {
           tracking: route.params.transferTracking ?? '',
+          shipmentId: route.params.transferShipmentId ?? null,
           excludeCageId: route.params.excludeCageId,
           fromLabel: route.params.transferFromLabel ?? '',
         }
@@ -95,9 +98,44 @@ export function CageListScreen() {
     });
   }, [query.data, search]);
 
+  /**
+   * Mover un bulto de jaula.
+   *
+   * ANTES esto llamaba a `scanPackageIntoCage`, o sea registraba un ESCANEO en
+   * la jaula destino. Mientras asignar y escanear eran el mismo acto no se
+   * notaba; desde que se cuentan por separado, mover un bulto inflaba el
+   * contador de escaneados sin que nadie hubiera escaneado nada, y el gate de
+   * salida dejaba salir jaulas incompletas.
+   *
+   * Ahora usa la asignacion explicita con `force`: el backend mueve la etiqueta
+   * Y el pivot fisico, que es exactamente lo que esta pasando —el operario tiene
+   * el bulto en la mano y lo esta cambiando de lugar.
+   */
   const transferMutation = useMutation({
-    mutationFn: async ({ cage, tracking }: { cage: WarehouseCageListItem; tracking: string }) => {
-      await scanPackageIntoCage(cage.id, tracking);
+    mutationFn: async ({
+      cage,
+      tracking,
+      shipmentId,
+    }: {
+      cage: WarehouseCageListItem;
+      tracking: string;
+      shipmentId: string | null;
+    }) => {
+      const locationId = cage.crossdocking_location_id ?? null;
+
+      if (shipmentId === null || locationId === null) {
+        // Build vieja o jaula sin deposito: se cae al camino anterior en vez de
+        // dejar al operario sin poder mover nada.
+        await scanPackageIntoCage(cage.id, tracking);
+        return cage;
+      }
+
+      await assignShipmentsToCage({
+        shipment_ids: [shipmentId],
+        cage_id: cage.id,
+        crossdocking_location_id: locationId,
+        force: true,
+      });
       return cage;
     },
     onSuccess: async (cage) => {
@@ -125,7 +163,11 @@ export function CageListScreen() {
         if (t === '') return;
         playScanFeedback('success');
         setCageScannerOpen(false);
-        transferMutation.mutate({ cage: { id: cage.id, name: cage.name }, tracking: t });
+        transferMutation.mutate({
+          cage: { id: cage.id, name: cage.name },
+          tracking: t,
+          shipmentId: transfer.shipmentId,
+        });
         return;
       }
       playScanFeedback('success');
@@ -144,7 +186,7 @@ export function CageListScreen() {
         if (c.id === transfer.excludeCageId) return;
         const t = transfer.tracking.trim();
         if (t === '' || transferMutation.isPending) return;
-        transferMutation.mutate({ cage: c, tracking: t });
+        transferMutation.mutate({ cage: c, tracking: t, shipmentId: transfer.shipmentId });
         return;
       }
       navigation.navigate('CageWorkspace', { cageId: c.id, cageName: c.name });
@@ -193,8 +235,18 @@ export function CageListScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: WarehouseCageListItem }) => {
-      const count = item.shipments_count ?? 0;
-      const sub = [item.zone?.name].filter(Boolean).join(' · ');
+      const count = item.scanned_count ?? item.shipments_count ?? 0;
+      const assigned = item.assigned_count ?? count;
+      const missing = item.missing_count ?? Math.max(0, assigned - count);
+      const special = item.kind === 'special';
+      const sub = [
+        item.zone?.name,
+        special && item.special_purpose != null
+          ? CAGE_SPECIAL_PURPOSE_LABELS[item.special_purpose]
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
       const disabledTransfer =
         transfer !== null && (item.id === transfer.excludeCageId || transferMutation.isPending);
       return (
@@ -210,8 +262,14 @@ export function CageListScreen() {
           <Text style={styles.cardTitle}>{item.name}</Text>
           {sub !== '' ? <Text style={styles.cardSub}>{sub}</Text> : null}
           <Text style={styles.cardCount}>
-            {count === 1 ? '1 paquete en jaula' : `${count} paquetes en jaula`}
+            {count} / {assigned} escaneados
           </Text>
+          {/* El candado no es decoracion: mientras este, el transportista no se
+              puede retirar. Las especiales guardan lo que NO sale hoy, asi que
+              no bloquean. */}
+          {missing > 0 && !special ? (
+            <Text style={styles.cardMissing}>🔒 falta {missing}</Text>
+          ) : null}
         </Pressable>
       );
     },
@@ -649,6 +707,12 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.muted,
       marginTop: 2,
+    },
+    cardMissing: {
+      marginTop: 2,
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: '600',
     },
     cardCount: {
       ...typography.captionStrong,

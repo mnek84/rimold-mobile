@@ -6,6 +6,7 @@ import { CageSessionGateScreen } from '@modules/bodega/CageSessionGateScreen';
 import { CageWorkspaceScreen } from '@modules/bodega/CageWorkspaceScreen';
 import { CloseCageSessionScreen } from '@modules/bodega/CloseCageSessionScreen';
 import { CageDepartureGateScreen } from '@modules/bodega/CageDepartureGateScreen';
+import { AssignShipmentScreen } from '@modules/bodega/AssignShipmentScreen';
 import { CrossdockManualScreen } from '@modules/bodega/CrossdockManualScreen';
 import { WarehouseEntryScreen } from '@modules/bodega/WarehouseEntryScreen';
 
@@ -51,6 +52,11 @@ export function BodegaStack() {
         name="CrossdockManual"
         component={CrossdockManualScreen}
         options={{ title: 'Crossdocking manual' }}
+      />
+      <Stack.Screen
+        name="AssignShipment"
+        component={AssignShipmentScreen}
+        options={{ title: 'Asignar a jaula' }}
       />
       <Stack.Screen
         name="CageDepartureGate"

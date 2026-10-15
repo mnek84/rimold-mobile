@@ -101,9 +101,24 @@ export function CloseCageSessionScreen() {
     setDriverSearch('');
   }, []);
 
-  const missingCount = cagesWithPackages.filter((c) => !assignments[c.id]).length;
+  // Renombrado: antes se llamaba `missingCount` y contaba jaulas SIN CHOFER.
+  // Ahora conviven dos faltantes distintos y confundirlos haria que el boton
+  // diga "falta chofer" cuando lo que falta es un bulto.
+  const missingDriverCount = cagesWithPackages.filter((c) => !assignments[c.id]).length;
+
+  // Jaulas con bultos asignados que nadie escaneo. El backend rechaza el cierre
+  // igual; esto es solo para no dejar que el operario lo descubra despues de
+  // elegir los choferes de todo el turno.
+  const blockedCages = cagesWithPackages.filter(
+    (c) => (c.missing_count ?? 0) > 0 && c.kind !== 'special',
+  );
+
   const canSubmit =
-    session !== null && cagesWithPackages.length > 0 && missingCount === 0 && !closeMut.isPending;
+    session !== null &&
+    cagesWithPackages.length > 0 &&
+    missingDriverCount === 0 &&
+    blockedCages.length === 0 &&
+    !closeMut.isPending;
 
   if (sessionQ.isLoading) {
     return (
@@ -153,9 +168,15 @@ export function CloseCageSessionScreen() {
               <View style={styles.cageRowMain}>
                 <Text style={styles.cageName}>{item.name}</Text>
                 <Text style={styles.cageMeta}>
-                  {item.shipments_count} paquete{item.shipments_count === 1 ? '' : 's'}
+                  {item.scanned_count ?? item.shipments_count} / {item.assigned_count ?? item.shipments_count}{' '}
+                  escaneados
                   {item.zone ? ` · ${item.zone.name}` : ''}
                 </Text>
+                {(item.missing_count ?? 0) > 0 && item.kind !== 'special' ? (
+                  <Text style={styles.cageBlocked}>
+                    🔒 faltan {item.missing_count} por escanear
+                  </Text>
+                ) : null}
               </View>
               <Pressable
                 style={styles.pickBtn}
@@ -182,9 +203,11 @@ export function CloseCageSessionScreen() {
         loading={closeMut.isPending}
         style={styles.confirmBtn}
       >
-        {missingCount > 0
-          ? `Falta chofer en ${missingCount} jaula${missingCount === 1 ? '' : 's'}`
-          : 'Cerrar y planificar'}
+        {blockedCages.length > 0
+          ? `Faltan bultos en ${blockedCages.length} jaula${blockedCages.length === 1 ? '' : 's'}`
+          : missingDriverCount > 0
+            ? `Falta chofer en ${missingDriverCount} jaula${missingDriverCount === 1 ? '' : 's'}`
+            : 'Cerrar y planificar'}
       </Button>
 
       <Modal
@@ -284,6 +307,12 @@ function createStyles(t: AppTheme) {
     cageName: {
       ...typography.bodyStrong,
       color: colors.text,
+    },
+    cageBlocked: {
+      marginTop: 2,
+      color: colors.danger,
+      fontSize: 12,
+      fontWeight: '600',
     },
     cageMeta: {
       ...typography.caption,

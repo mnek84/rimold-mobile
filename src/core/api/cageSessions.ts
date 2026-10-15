@@ -17,6 +17,12 @@ export type CageSessionCage = {
   name: string;
   zone: { id: string; name: string; business_id: string | null } | null;
   shipments_count: number;
+  kind?: 'zone' | 'special' | null;
+  special_purpose?: string | null;
+  /** El par que decide si la jaula puede salir. Ver `CageDepartureStatus`. */
+  assigned_count?: number;
+  scanned_count?: number;
+  missing_count?: number;
 };
 
 export type CageSessionView = {

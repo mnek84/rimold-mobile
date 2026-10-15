@@ -154,6 +154,14 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
   const shipments: WarehouseCageShipment[] = detailQuery.data?.shipments ?? [];
   const okCount = shipments.length;
 
+  // El par que decide si el transportista puede retirarse: asignados es lo que
+  // ALGUIEN decidio que va a esta jaula, escaneados lo que esta adentro. El
+  // faltante es el bulto que esta en algun lado del deposito y nadie cargo.
+  const assignedCount = detailQuery.data?.assigned_count ?? okCount;
+  const scannedCount = detailQuery.data?.scanned_count ?? okCount;
+  const missingCount = detailQuery.data?.missing_count ?? Math.max(0, assignedCount - scannedCount);
+  const missingShipments = detailQuery.data?.missing_shipments ?? [];
+
   /** Bultos ya registrados en esta sesión de escaneo, para no repetir el request. */
   const scannedPackageCodesRef = useRef<Set<string>>(new Set());
 
@@ -340,7 +348,11 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         <View style={styles.shipRowMain}>
           <Text style={styles.shipTracking}>{item.tracking}</Text>
           <Text style={styles.shipStatus}>
-            {item.status_code === 'in_cage' ? 'En jaula' : (item.status_code ?? '—')}
+            {item.status_code === 'in_cage'
+              ? 'En jaula'
+              : item.pending_scan === true
+                ? 'Asignado · sin escanear'
+                : (item.status_code ?? '—')}
           </Text>
         </View>
         {item.status_code === 'in_cage' ? (
@@ -350,6 +362,7 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
               navigation.navigate('CageList', {
                 mode: 'transfer',
                 transferTracking: item.tracking,
+                transferShipmentId: item.id,
                 excludeCageId: cageId,
                 transferFromLabel: cageName,
               })
@@ -411,15 +424,31 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
       )}
 
       <View style={styles.statsRow}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{assignedCount}</Text>
+          <Text style={styles.statLabel}>Asignados</Text>
+        </View>
         <Animated.View style={[styles.statBox, counterStyle]}>
-          <Text style={[styles.statValue, styles.statOk]}>{okCount}</Text>
-          <Text style={styles.statLabel}>OK en jaula</Text>
+          <Text style={[styles.statValue, styles.statOk]}>{scannedCount}</Text>
+          <Text style={styles.statLabel}>Escaneados</Text>
         </Animated.View>
         <View style={styles.statBox}>
-          <Text style={[styles.statValue, styles.statBad]}>{scanErrors.length}</Text>
-          <Text style={styles.statLabel}>Rechazos</Text>
+          <Text style={[styles.statValue, missingCount > 0 ? styles.statBad : null]}>
+            {missingCount}
+          </Text>
+          <Text style={styles.statLabel}>Faltan</Text>
         </View>
       </View>
+
+      {missingShipments.length > 0 ? (
+        // Con nombre y apellido: "29 de 30" no manda a nadie a buscar nada.
+        <View style={styles.missingBanner}>
+          <Ionicons name="alert-circle-outline" size={16} color={theme.colors.danger} />
+          <Text style={styles.missingText}>
+            Falta escanear: {missingShipments.map((m) => m.tracking).join(', ')}
+          </Text>
+        </View>
+      ) : null}
 
       {hasActiveSession ? (
         <View style={styles.sessionLockedBanner}>
@@ -676,6 +705,22 @@ function createStyles(t: AppTheme) {
     },
 
     // ── Stats ──────────────────────────────────────────────────────────
+    missingBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      marginBottom: spacing.md,
+    },
+    missingText: {
+      flex: 1,
+      color: colors.danger,
+      fontSize: 12,
+    },
     statsRow: {
       flexDirection: 'row',
       gap: spacing.sm,
