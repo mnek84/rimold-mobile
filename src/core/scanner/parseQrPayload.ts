@@ -38,6 +38,73 @@ function asPositiveInt(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : fallback;
 }
 
+function asStrictPositiveInt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1) {
+    return value;
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const n = Number(value.trim());
+    return n >= 1 ? n : null;
+  }
+  return null;
+}
+
+function asTrackingId(value: unknown): string | null {
+  if (typeof value === 'string') {
+    return asTrimmedString(value);
+  }
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+    return String(value);
+  }
+  return null;
+}
+
+/** Same padding as `ShipmentPackageCodeGenerator::forSequence` (`TRACK-01`). */
+function legacyPackageCode(tracking: string, index: number): string {
+  return `${tracking}-${String(index).padStart(2, '0')}`;
+}
+
+/**
+ * Etiqueta vieja de `label.blade.php`: `{"id":"GVQ113","bulk":1,"bulks":1}`.
+ *
+ * `id` es nuestro tracking. `bulk` / `bulks` son la posición 1-based y el total.
+ * No es el JSON de Mercado Libre Flex (ese trae `sender_id` + `hash_code`).
+ * Debe coincidir con `ShipmentQrPayload::tryDecodeLegacyLabel`.
+ */
+function tryDecodeLegacyLabel(trimmed: string): ShipmentQrPayload | null {
+  if (trimmed === '' || trimmed[0] !== '{') {
+    return null;
+  }
+  try {
+    const data = JSON.parse(trimmed) as unknown;
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      return null;
+    }
+    const d = data as Record<string, unknown>;
+    if (!('id' in d) || !('bulk' in d) || !('bulks' in d)) {
+      return null;
+    }
+    const tracking = asTrackingId(d.id);
+    const index = asStrictPositiveInt(d.bulk);
+    const total = asStrictPositiveInt(d.bulks);
+    if (tracking == null || index == null || total == null) {
+      return null;
+    }
+    return {
+      tracking,
+      reference: null,
+      package: {
+        code: legacyPackageCode(tracking, index),
+        id: null,
+        index,
+        total,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Decodifica el payload `LGST1:` completo.
  *
@@ -82,6 +149,8 @@ function tryDecodeShipmentQr(trimmed: string): ShipmentQrPayload | null {
 /**
  * Classify a scanned QR string. LGST1 payloads decode to internal tracking (`t`)
  * plus, when present, the physical bulto they identify (`p`).
+ * The legacy Blade QR `{"id","bulk","bulks"}` is also internal: `id` is the
+ * tracking and `bulk`/`bulks` identify the bulto.
  * Legacy internal codes start with `TRK_`; the tracking id is the remainder.
  */
 export function parseQrPayload(raw: string): ScannerParseResult {
@@ -107,6 +176,17 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       trackingId: fromLgst.tracking,
       reference: fromLgst.reference,
       package: fromLgst.package,
+    };
+  }
+
+  const fromLegacy = tryDecodeLegacyLabel(trimmed);
+  if (fromLegacy !== null) {
+    return {
+      raw: trimmed,
+      type: 'internal',
+      trackingId: fromLegacy.tracking,
+      reference: fromLegacy.reference,
+      package: fromLegacy.package,
     };
   }
 

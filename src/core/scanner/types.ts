@@ -1,10 +1,11 @@
 /**
  * Identidad del bulto físico embebida en el QR de la etiqueta.
  *
- * Viene de las claves `p` / `pid` / `n` / `nt` del payload `LGST1:`. Es `null`
- * cuando el código no identifica un bulto concreto: etiquetas impresas antes de
- * que existieran los bultos, o un tracking tipeado a mano. En ese caso el flujo
- * sigue tratando al envío como una unidad, igual que antes.
+ * Viene de las claves `p` / `pid` / `n` / `nt` del payload `LGST1:`, o de
+ * `bulk` / `bulks` en el QR viejo `{"id","bulk","bulks"}` (el código se arma
+ * como `{tracking}-{NN}`, igual que en el backend). Es `null` cuando el código
+ * no identifica un bulto concreto: un tracking tipeado a mano. En ese caso el
+ * flujo sigue tratando al envío como una unidad, igual que antes.
  */
 export type ScannedPackage = {
   /** Identificador único y permanente, ej. "KQX042-03". */

@@ -27,7 +27,8 @@ import {
   type CrossdockingLocation,
 } from '@core/api/crossdockAllocate';
 import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
-import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
+import { parseQrPayload } from '@core/scanner/parseQrPayload';
+import { scanDedupeKey } from '@core/scanner/types';
 import { useTheme, type AppTheme } from '@theme';
 
 const SCAN_COOLDOWN_MS = 1500;
@@ -181,7 +182,7 @@ export function CrossdockManualScreen() {
       // alguien configure el CP que faltaba, y el operario tiene que poder
       // reintentar sin reiniciar la pantalla.
       if (result.success) {
-        const key = normalizeShipmentScanToLookupKey(vars.barcode);
+        const key = scanDedupeKey(parseQrPayload(vars.barcode));
         if (key !== '') {
           scannedRef.current.set(key, {
             ...result,
@@ -201,11 +202,13 @@ export function CrossdockManualScreen() {
     (raw: string) => {
       if (scanInFlightRef.current) return;
       if (locationId === null) return;
-      const normalized = normalizeShipmentScanToLookupKey(raw);
+      const normalized = scanDedupeKey(parseQrPayload(raw));
       if (normalized === '') return;
 
       // Dedupe local, igual que CageWorkspaceScreen: la camara lee el mismo QR
-      // varias veces si el operario lo deja en cuadro. El backend lo resolveria
+      // varias veces si el operario lo deja en cuadro. La clave es el bulto
+      // (codigo LGST1, o TRACK-NN del QR viejo), no el tracking: si no, el
+      // bulto 2 se descarta como repetido del 1. El backend lo resolveria
       // igual como duplicado, pero ahorrarse el viaje hace que la pantalla
       // responda al instante en vez de parpadear "Resolviendo…".
       const already = scannedRef.current.get(normalized);
