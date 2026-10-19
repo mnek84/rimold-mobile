@@ -100,7 +100,11 @@ export function createMobileEcho(jwt: string): EchoLike | null {
       wsPort: port,
       wssPort: port,
       forceTLS: scheme === 'https',
-      enabledTransports: scheme === 'https' ? ['wss'] : ['ws', 'wss'],
+      // Pusher llama "ws" al transporte que abre wss:// cuando la página es HTTPS
+      // o forceTLS está prendido. El nombre "wss" es solo el fallback de una
+      // página HTTP. Dejar únicamente "wss" deshabilita el único transporte que
+      // funciona y la conexión nace en `failed` sin llegar a abrir el socket.
+      enabledTransports: ['ws', 'wss'],
       disableStats: true,
       authEndpoint,
       auth: {
