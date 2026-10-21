@@ -45,3 +45,7 @@ GoogleService-Info.plist
 # generated native folders
 /ios
 /android
+
+# Artefactos de build descargados de EAS (>100 MB cada uno).
+*.apk
+*.aab
