@@ -6,8 +6,21 @@ export type WarehouseEntryScanReason =
   | 'not_found'
   | 'invalid_qr'
   | 'invalid_state'
+  // Desde que el ingreso tambien sortea, el escaneo puede fallar por el
+  // crossdocking y no por el estado del envio. Mezclarlos le mostraria al
+  // operario "este envio no se puede ingresar" cuando el problema es que al
+  // deposito le falta cargar un CP.
+  | 'missing_destination'
+  | 'no_cage_for_cp'
   | 'network'
   | 'unknown';
+
+/** La jaula a la que va el bulto, tal como la resolvio el backend. */
+export type WarehouseEntryCage = {
+  id: string;
+  name: string;
+  position: number | null;
+};
 
 /** Progreso por bulto del envío en este hito, tal como lo informa el backend. */
 export type WarehouseEntryPackages = {
@@ -28,6 +41,21 @@ export type WarehouseEntryScanSuccess = {
   shipment: { id: string; tracking: string; status: string };
   /** Ausente si el backend todavía no expone el progreso por bulto. */
   packages: WarehouseEntryPackages | null;
+  /**
+   * La jaula donde hay que dejar el bulto. Null cuando el depósito no tiene
+   * crossdocking resoluble, o cuando nadie decidió jaula todavía.
+   */
+  cage: WarehouseEntryCage | null;
+  /**
+   * `false` => `cage` es null y la jaula real viaja en `suggestedCage`. La
+   * pantalla NO puede pintar una como la otra: gritarle al operario una jaula
+   * que nadie asignó es la peor forma de mentirle con un paquete en la mano.
+   */
+  applied: boolean;
+  suggestedCage: WarehouseEntryCage | null;
+  grid: number | null;
+  /** El ingreso no se pudo registrar (estado raro), pero la jaula sí se resolvió. */
+  warning: string | null;
 };
 
 export type WarehouseEntryScanFailure = {
@@ -52,6 +80,25 @@ function parseSuccess(payload: unknown): WarehouseEntryScanSuccess | null {
     duplicate: Boolean(p.duplicate),
     shipment: { id: ship.id, tracking: ship.tracking, status: ship.status },
     packages: parsePackages(p.packages),
+    cage: parseCage(p.cage),
+    // Un backend anterior no manda el campo y siempre aplicaba: asumir `true`
+    // mantiene la pantalla honesta contra las dos versiones.
+    applied: p.applied === undefined ? true : p.applied === true,
+    suggestedCage: parseCage(p.suggested_cage),
+    grid: typeof p.grid === 'number' ? p.grid : null,
+    warning: typeof p.warning === 'string' && p.warning !== '' ? p.warning : null,
+  };
+}
+
+function parseCage(value: unknown): WarehouseEntryCage | null {
+  if (value === null || typeof value !== 'object') return null;
+  const c = value as Record<string, unknown>;
+  if (typeof c.id !== 'string' || typeof c.name !== 'string') return null;
+
+  return {
+    id: c.id,
+    name: c.name,
+    position: typeof c.position === 'number' ? c.position : null,
   };
 }
 
@@ -97,7 +144,11 @@ function parseFailureBody(body: unknown, fallbackReason: WarehouseEntryScanReaso
   const b = body as Record<string, unknown>;
   const rawReason = typeof b.reason === 'string' ? b.reason : fallbackReason;
   const reason: WarehouseEntryScanReason =
-    rawReason === 'not_found' || rawReason === 'invalid_qr' || rawReason === 'invalid_state'
+    rawReason === 'not_found' ||
+    rawReason === 'invalid_qr' ||
+    rawReason === 'invalid_state' ||
+    rawReason === 'missing_destination' ||
+    rawReason === 'no_cage_for_cp'
       ? rawReason
       : fallbackReason;
 
@@ -110,12 +161,26 @@ function parseFailureBody(body: unknown, fallbackReason: WarehouseEntryScanReaso
 }
 
 /**
- * Escanea un envío ya colectado para marcarlo como ingresado al depósito. Idempotente:
- * si ya está en `in_warehouse` retorna `duplicate: true` sin error.
+ * Escanea un envío ya colectado para ingresarlo al depósito y, cuando el
+ * depósito tiene jaulas, sortearlo en el mismo paso: la respuesta trae la jaula
+ * donde hay que dejarlo.
+ *
+ * Idempotente: si ya está en `in_warehouse` retorna `duplicate: true` sin error.
  */
-export async function warehouseEntryScan(raw: string): Promise<WarehouseEntryScanResult> {
+export async function warehouseEntryScan(
+  raw: string,
+  options: { clientScanId?: string; crossdockingLocationId?: string } = {},
+): Promise<WarehouseEntryScanResult> {
   try {
-    const { data } = await apiClient.post<unknown>('/app/warehouse/entry/scan', { raw: raw.trim() });
+    const { data } = await apiClient.post<unknown>('/app/warehouse/entry/scan', {
+      raw: raw.trim(),
+      // Un id por INTENTO: si la respuesta se pierde y el operario vuelve a
+      // escanear, el backend devuelve la misma jaula en vez de contar dos.
+      ...(options.clientScanId === undefined ? {} : { client_scan_id: options.clientScanId }),
+      ...(options.crossdockingLocationId === undefined
+        ? {}
+        : { crossdocking_location_id: options.crossdockingLocationId }),
+    });
     const ok = parseSuccess(data);
     if (ok !== null) return ok;
     return parseFailureBody(data, 'unknown');

@@ -13,7 +13,12 @@ import Animated, {
 import { PackageProgress } from '@components/PackageProgress';
 import { QrScanner } from '@components/QrScanner';
 import { ScreenContainer } from '@components/ui';
-import { warehouseEntryScan, type WarehouseEntryScanResult } from '@core/api/warehouseEntry';
+import { newClientScanId } from '@core/api/crossdockAllocate';
+import {
+  warehouseEntryScan,
+  type WarehouseEntryCage,
+  type WarehouseEntryScanResult,
+} from '@core/api/warehouseEntry';
 import { playScanFeedback, prepareScanAudio } from '@core/feedback/scanFeedback';
 import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmentScan';
 import { useTheme, type AppTheme } from '@theme';
@@ -50,7 +55,16 @@ type HistoryRow = {
   detail: string;
 };
 
-type LastScanned = { tracking: string; duplicate: boolean };
+type LastScanned = {
+  tracking: string;
+  duplicate: boolean;
+  /** La jaula donde dejarlo. Null si este deposito no sortea, o si nadie decidio. */
+  cage: WarehouseEntryCage | null;
+  /** `false` => `cage` es null y `suggested` es una propuesta sin aplicar. */
+  applied: boolean;
+  suggested: WarehouseEntryCage | null;
+  warning: string | null;
+};
 
 function formatTrackingDisplay(t: string): string {
   if (t.startsWith('TRK_')) return '#' + t.slice(4, 14).toUpperCase();
@@ -69,6 +83,15 @@ function messageForFailure(result: WarehouseEntryScanResult & { valid: false }):
         return `Este envío está en "${result.currentStatus}" y no se puede ingresar.`;
       }
       return 'Este envío no está en un estado que permita el ingreso.';
+    // El envio esta bien; lo que falta es configuracion del deposito. Decirle
+    // "no se puede ingresar" mandaria al operario a buscar el problema donde no
+    // esta.
+    case 'missing_destination':
+      return 'El envío no tiene código postal: no podemos darle jaula.';
+    case 'no_cage_for_cp':
+      return result.message !== undefined && result.message !== ''
+        ? result.message
+        : 'No hay jaula configurada para ese código postal.';
     case 'network':
       return 'Sin conexión, reintentá.';
     default:
@@ -114,7 +137,7 @@ export function WarehouseEntryScreen() {
   }, []);
 
   const triggerSuccessVisuals = useCallback(
-    (tracking: string, duplicate: boolean) => {
+    (next: LastScanned) => {
       playScanFeedback('success');
       successFlash.value = withSequence(
         withTiming(1, { duration: 60 }),
@@ -125,7 +148,7 @@ export function WarehouseEntryScreen() {
         withSpring(1, { damping: 8, stiffness: 180 }),
       );
       if (lastScannedTimerRef.current !== null) clearTimeout(lastScannedTimerRef.current);
-      setLastScanned({ tracking, duplicate });
+      setLastScanned(next);
       lastScannedTimerRef.current = setTimeout(() => setLastScanned(null), LAST_SCANNED_TTL_MS);
       if (errorTimerRef.current !== null) clearTimeout(errorTimerRef.current);
       setTransientError(null);
@@ -157,13 +180,22 @@ export function WarehouseEntryScreen() {
   } | null>(null);
 
   const scanMutation = useMutation({
-    mutationFn: (raw: string) => warehouseEntryScan(raw),
+    // Un id por INTENTO de escaneo: un reintento por timeout devuelve la misma
+    // jaula en vez de contar el bulto dos veces.
+    mutationFn: (raw: string) => warehouseEntryScan(raw, { clientScanId: newClientScanId() }),
     onSuccess: (result, raw) => {
       const scannedKey = normalizeShipmentScanToLookupKey(raw);
       if (result.valid) {
         const tracking = result.shipment.tracking;
         const pkgs = result.packages;
-        triggerSuccessVisuals(tracking, result.duplicate);
+        triggerSuccessVisuals({
+          tracking,
+          duplicate: result.duplicate,
+          cage: result.cage,
+          applied: result.applied,
+          suggested: result.suggestedCage,
+          warning: result.warning,
+        });
 
         // Progreso del envío recién escaneado: cuántos bultos ingresaron y cuál falta.
         setLastProgress(
@@ -183,12 +215,21 @@ export function WarehouseEntryScreen() {
             ? ` · Bulto ${pkgs.package.sequence}/${pkgs.total}`
             : '';
 
+        // La jaula le gana al "Ingresado a depósito": cuando el depósito
+        // sortea, eso es lo que el operario necesita releer de la lista.
+        const headline =
+          result.cage !== null
+            ? result.cage.name
+            : result.duplicate
+              ? 'Ya estaba ingresado'
+              : 'Ingresado a depósito';
+
         pushHistory({
           id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           tracking,
           outcome: result.duplicate ? 'duplicate' : 'ingressed',
           detail:
-            (result.duplicate ? 'Ya estaba ingresado' : 'Ingresado a depósito') +
+            headline +
             bultoLabel +
             (pkgs !== null && pkgs.total > 1 ? ` (${pkgs.scanned}/${pkgs.total})` : ''),
         });
@@ -253,7 +294,7 @@ export function WarehouseEntryScreen() {
     <ScreenContainer>
       <Text style={styles.headline}>Ingreso a depósito</Text>
       <Text style={styles.hint}>
-        Escaneá los paquetes que llegan de la colecta para dejarlos ingresados.
+        Escaneá los paquetes que llegan de la colecta: te decimos a qué jaula va cada uno.
       </Text>
 
       <View style={styles.scannerWrap}>
@@ -282,13 +323,51 @@ export function WarehouseEntryScreen() {
           <Text style={styles.errorText}>{transientError}</Text>
         </View>
       ) : lastScanned !== null ? (
-        <View style={styles.successBanner}>
-          <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+        <View style={lastScanned.cage !== null ? styles.cageBanner : styles.successBanner}>
+          <Ionicons
+            name={lastScanned.cage !== null ? 'albums' : 'checkmark-circle'}
+            size={lastScanned.cage !== null ? 28 : 22}
+            color={theme.colors.success}
+          />
           <View style={styles.successTextWrap}>
             <Text style={styles.successLabel}>
-              {lastScanned.duplicate ? 'Ya estaba ingresado' : 'Ingresado a depósito'}
+              {lastScanned.cage !== null
+                ? lastScanned.duplicate
+                  ? 'Ya ingresado · dejalo en'
+                  : 'Dejalo en'
+                : lastScanned.duplicate
+                  ? 'Ya estaba ingresado'
+                  : 'Ingresado a depósito'}
             </Text>
+
+            {/*
+              La jaula va en el tamaño que se lee de reojo con el paquete en la
+              mano: es el unico dato que decide que hace el operario ahora.
+            */}
+            {lastScanned.cage !== null ? (
+              <Text style={styles.cageName} numberOfLines={2}>
+                {lastScanned.cage.name}
+              </Text>
+            ) : null}
+
+            {/*
+              Sugerida sin aplicar: la maquina no decidio y nadie la asigno.
+              Pintarla como la jaula real mandaria el bulto a un lugar que el
+              sistema no registro.
+            */}
+            {lastScanned.cage === null && lastScanned.suggested !== null ? (
+              <Text style={styles.cageSuggested} numberOfLines={2}>
+                Sugerida: {lastScanned.suggested.name} · sin asignar
+              </Text>
+            ) : null}
+
             <Text style={styles.successId}>{formatTrackingDisplay(lastScanned.tracking)}</Text>
+
+            {lastScanned.warning !== null ? (
+              <Text style={styles.cageWarning} numberOfLines={2}>
+                {lastScanned.warning}
+              </Text>
+            ) : null}
           </View>
         </View>
       ) : (
@@ -421,6 +500,36 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
       minHeight: 52,
+    },
+    // Mismo marco que `successBanner` pero mas alto: cuando hay jaula, el
+    // nombre es el protagonista de la pantalla.
+    cageBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      backgroundColor: 'rgba(34, 197, 94, 0.12)',
+      borderWidth: 2,
+      borderColor: 'rgba(34, 197, 94, 0.55)',
+      borderRadius: spacing.radiusMd,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      minHeight: 84,
+    },
+    cageName: {
+      ...typography.title,
+      color: colors.text,
+      marginTop: 2,
+    },
+    cageSuggested: {
+      ...typography.bodyStrong,
+      color: colors.muted,
+      marginTop: 2,
+    },
+    cageWarning: {
+      ...typography.caption,
+      color: colors.danger,
+      marginTop: 4,
     },
     successTextWrap: { flex: 1, minWidth: 0 },
     successLabel: {

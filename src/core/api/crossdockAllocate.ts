@@ -19,6 +19,8 @@ export type CrossdockAllocateReason =
   | 'network'
   | 'unknown';
 
+export type CrossdockSuggestedCage = { id: string; name: string; position: number | null };
+
 export type CrossdockAllocateResult = {
   success: boolean;
   grid: number;
@@ -26,6 +28,16 @@ export type CrossdockAllocateResult = {
   error_code: CrossdockAllocateReason | null;
   /** Re-escaneo del mismo bulto. La jaula es la misma; no es un error. */
   duplicate: boolean;
+  /**
+   * `false` => `cage` es null y la jaula real viaja en `suggested_cage`.
+   *
+   * Pasa cuando el depósito está en manual y quien escaneó fue la MÁQUINA: la
+   * jaula la decide una persona desde el panel. La pantalla no puede pintar una
+   * sugerencia como un hecho — mandaría el bulto a una jaula que el sistema no
+   * registró.
+   */
+  applied: boolean;
+  suggested_cage: CrossdockSuggestedCage | null;
   cage: {
     id: string;
     name: string;
@@ -143,6 +155,8 @@ export async function crossdockAllocate(input: {
     msg: 'Sin conexión, reintentá.',
     error_code: 'network',
     duplicate: false,
+    applied: true,
+    suggested_cage: null,
     cage: null,
     shipment: null,
     destination_label: null,
@@ -155,6 +169,14 @@ function sleep(ms: number): Promise<void> {
 
 function asNumberOrNull(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
+}
+
+function parseSuggestedCage(value: unknown): CrossdockSuggestedCage | null {
+  if (value === null || typeof value !== 'object') return null;
+  const c = value as Record<string, unknown>;
+  if (typeof c.id !== 'string' || typeof c.name !== 'string') return null;
+
+  return { id: c.id, name: c.name, position: asNumberOrNull(c.position) };
 }
 
 function normalizeResult(body: Record<string, unknown>): CrossdockAllocateResult {
@@ -180,6 +202,9 @@ function normalizeResult(body: Record<string, unknown>): CrossdockAllocateResult
     msg: typeof body.msg === 'string' ? body.msg : '',
     error_code: normalizeReason(body.error_code),
     duplicate: body.duplicate === true,
+    // Un backend anterior no manda el campo y siempre aplicaba.
+    applied: body.applied === undefined ? true : body.applied === true,
+    suggested_cage: parseSuggestedCage(body.suggested_cage),
     cage:
       cage != null && typeof cage.id === 'string'
         ? {

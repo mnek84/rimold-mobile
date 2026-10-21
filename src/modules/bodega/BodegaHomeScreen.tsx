@@ -31,7 +31,8 @@ export function BodegaHomeScreen() {
           <View style={styles.cardTextWrap}>
             <Text style={styles.cardTitle}>Ingreso a depósito</Text>
             <Text style={styles.cardHint}>
-              Escaneá los paquetes que llegan de la colecta para dejarlos ingresados.
+              Escaneá los paquetes que llegan de la colecta: los ingresa y te dice a qué jaula
+              llevarlos.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color={theme.colors.muted} />

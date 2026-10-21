@@ -41,11 +41,21 @@ type HistoryRow = {
   outcome: 'ok' | 'duplicate' | 'error';
   grid: number;
   cageName: string | null;
+  /** `false` => `cageName` es una sugerencia y `grid` es el de excepcion. */
+  applied: boolean;
   detail: string;
 };
 
 function messageForResult(result: CrossdockAllocateResult): string {
   if (result.success) {
+    // Sin jaula aplicada el escaneo fue OK pero NO hay destino: decir
+    // "Grid 0" seria inventarle uno al operario.
+    if (!result.applied) {
+      return result.suggested_cage !== null
+        ? `Sugerida ${result.suggested_cage.name} — falta asignar`
+        : 'Ingresado — todavía sin jaula';
+    }
+
     return result.duplicate
       ? `Ya sorteado — ${result.cage?.name ?? `grid ${result.grid}`}`
       : `${result.cage?.name ?? `Grid ${result.grid}`}`;
@@ -155,7 +165,10 @@ export function CrossdockManualScreen() {
         barcode,
         outcome: result.success ? (result.duplicate ? 'duplicate' : 'ok') : 'error',
         grid: result.grid,
-        cageName: result.cage?.name ?? null,
+        cageName: result.applied
+          ? (result.cage?.name ?? null)
+          : (result.suggested_cage?.name ?? null),
+        applied: result.applied,
         detail,
       });
     },
@@ -314,9 +327,15 @@ export function CrossdockManualScreen() {
             <View style={styles.resultTextWrap}>
               <View style={styles.resultHeaderRow}>
                 <Ionicons
-                  name={last.duplicate ? 'repeat' : 'checkmark-circle'}
+                  name={
+                    !last.applied ? 'help-circle' : last.duplicate ? 'repeat' : 'checkmark-circle'
+                  }
                   size={22}
-                  color={last.duplicate ? theme.colors.warning : theme.colors.success}
+                  color={
+                    !last.applied || last.duplicate
+                      ? theme.colors.warning
+                      : theme.colors.success
+                  }
                 />
                 <Text
                   style={[
@@ -324,14 +343,26 @@ export function CrossdockManualScreen() {
                     { color: last.duplicate ? theme.colors.warning : theme.colors.success },
                   ]}
                 >
-                  {last.duplicate ? 'YA SORTEADO' : 'CROSSDOCKING OK'}
+                  {!last.applied
+                    ? 'SUGERIDA · SIN ASIGNAR'
+                    : last.duplicate
+                      ? 'YA SORTEADO'
+                      : 'CROSSDOCKING OK'}
                 </Text>
               </View>
               <Text style={styles.resultCage} numberOfLines={1} adjustsFontSizeToFit>
-                {last.cage?.name ?? `GRID ${last.grid}`}
+                {/*
+                  Sin jaula aplicada se muestra la sugerencia, y el rotulo de
+                  arriba aclara que nadie la asigno. El `GRID n` de fallback
+                  solo aplica cuando SI hay asignacion: anunciar un grid que el
+                  sistema no registro manda el bulto a una jaula fantasma.
+                */}
+                {last.applied
+                  ? (last.cage?.name ?? `GRID ${last.grid}`)
+                  : (last.suggested_cage?.name ?? 'SIN JAULA')}
               </Text>
               <View style={styles.resultMetaRow}>
-                <Text style={styles.resultMeta}>Grid {last.grid}</Text>
+                {last.applied ? <Text style={styles.resultMeta}>Grid {last.grid}</Text> : null}
                 {last.destination_label !== null ? (
                   <Text style={styles.resultMeta}>{last.destination_label}</Text>
                 ) : null}
@@ -390,9 +421,15 @@ export function CrossdockManualScreen() {
             />
             <View style={styles.histTextWrap}>
               <Text style={styles.histTitle}>
+                {/*
+                  Sin asignacion, `grid` es el de EXCEPCION: repetirlo al lado
+                  del nombre leeria como un destino valido.
+                */}
                 {item.outcome === 'error'
                   ? item.detail
-                  : `${item.cageName ?? `Grid ${item.grid}`} · grid ${item.grid}`}
+                  : item.applied
+                    ? `${item.cageName ?? `Grid ${item.grid}`} · grid ${item.grid}`
+                    : `${item.cageName ?? 'Sin jaula'} · sin asignar`}
               </Text>
               <Text style={styles.histSubtitle}>{item.barcode}</Text>
             </View>
