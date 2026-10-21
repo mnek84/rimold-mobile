@@ -1,3 +1,5 @@
+export type { EventGeo } from './captureEventGeo';
+export { captureEventGeo } from './captureEventGeo';
 export { DriverLocationPermissionGate } from './DriverLocationPermissionGate';
 export { DriverTrackingBootstrap } from './DriverTrackingBootstrap';
 export { postDriverLocationBatch } from './driverLocationApi';

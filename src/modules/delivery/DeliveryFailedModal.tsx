@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
+import { captureEventGeo } from '@core/location/captureEventGeo';
 import { enqueueEvent, EventType } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -93,7 +94,7 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
       return;
     }
 
-    const payload: Record<string, string> = {
+    const payload: Record<string, unknown> = {
       shipmentId: sid,
       failed_reason: opt.label,
       failed_reason_code: opt.code,
@@ -104,10 +105,19 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
       payload.failure_reason = noteTrim;
     }
 
-    void enqueueEvent({
-      type: EventType.SHIPMENT_FAILED,
-      payload,
-    })
+    // El GPS no bloquea el registro: si el fix no llega, `captureEventGeo`
+    // devuelve null y la no-entrega se encola igual. Un chofer frente a un
+    // portón cerrado no puede quedarse esperando a que enganche el satélite.
+    void captureEventGeo()
+      .then((geo) => {
+        if (geo != null) {
+          payload.geo = geo;
+        }
+        return enqueueEvent({
+          type: EventType.SHIPMENT_FAILED,
+          payload,
+        });
+      })
       .then(() => {
         onQueued();
         onClose();

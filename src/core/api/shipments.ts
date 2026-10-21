@@ -351,6 +351,13 @@ export type ShipmentDestinationJson = {
   state?: string | null;
   postal_code?: string | null;
   country_code?: string | null;
+  /**
+   * Clasificación canónica del domicilio (`DestinationAddressType` en el
+   * backend). `unknown` para el histórico sin clasificar; ausente en respuestas
+   * de un backend anterior a la columna, que es por qué se trata como opcional
+   * y nunca se asume residencial.
+   */
+  address_type_code?: 'residential' | 'commercial' | 'store' | 'unknown' | null;
 };
 
 export type ShipmentDetailJson = {
@@ -358,8 +365,28 @@ export type ShipmentDetailJson = {
   tracking?: string | null;
   status_code?: string | null;
   delivery_visit_count?: number | null;
+  /**
+   * `flex` | `internal`. Decide si la entrega pide datos del receptor: en Flex
+   * el nombre, el DNI y la firma los registra la app de Mercado Libre, y
+   * volvérselos a pedir al chofer es pedir dos veces lo mismo en la puerta del
+   * comprador.
+   */
+  execution_type?: string | null;
   destination?: ShipmentDestinationJson | null;
 };
+
+/**
+ * Si este envío lo registra Mercado Libre Flex.
+ *
+ * Se mira `execution_type` y no `integration_provider`: lo que define el flujo
+ * es quién toma la constancia de entrega, y eso es Flex. Un envío de Mercado
+ * Libre que mueve la flota propia sí necesita nuestra constancia.
+ */
+export function isFlexShipment(
+  shipment: Pick<ShipmentDetailJson, 'execution_type'> | null | undefined,
+): boolean {
+  return shipment?.execution_type?.trim().toLowerCase() === 'flex';
+}
 
 export function formatShipmentAddress(destination: ShipmentDestinationJson | null | undefined): string {
   if (destination == null) {

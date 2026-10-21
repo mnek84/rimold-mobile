@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+
 import { Card } from '@components/ui';
 import {
   formatDriverShipmentStatusLabel,
@@ -9,11 +11,32 @@ import {
 } from '../deliveryStatus';
 import { useTheme, type AppTheme } from '@theme';
 
+type AddressTypeCode = 'residential' | 'commercial' | 'store' | 'unknown';
+
 type Props = {
   trackingLabel: string;
   addressText: string;
   statusCode: string | null;
   deliveryVisitCount: number;
+  /** Clase de domicilio del destino; `null` cuando el backend no la informa. */
+  addressTypeCode?: AddressTypeCode | null;
+};
+
+/**
+ * Casa, comercio o tienda, con el ícono que lo dice de un vistazo.
+ *
+ * Al chofer le cambia la parada: en un comercio hay que preguntar por el
+ * encargado y puede haber horario de corte; en una casa, no. "Sin clasificar"
+ * no se muestra — una etiqueta que dice que no sabemos nada ocupa lugar sin
+ * decir nada.
+ */
+const ADDRESS_TYPE_PRESENTATION: Record<
+  Exclude<AddressTypeCode, 'unknown'>,
+  { label: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  residential: { label: 'Domicilio', icon: 'home-outline' },
+  commercial: { label: 'Comercio', icon: 'briefcase-outline' },
+  store: { label: 'Tienda', icon: 'storefront-outline' },
 };
 
 function showStatusBadge(statusLabel: string): boolean {
@@ -26,6 +49,7 @@ export function DeliveryShipmentDetailHeader({
   addressText,
   statusCode,
   deliveryVisitCount,
+  addressTypeCode = null,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -56,6 +80,18 @@ export function DeliveryShipmentDetailHeader({
       <Text style={styles.address} numberOfLines={4}>
         {addressText.trim() !== '' ? addressText : 'Sin dirección'}
       </Text>
+      {addressTypeCode != null && addressTypeCode !== 'unknown' ? (
+        <View style={styles.addressTypeRow}>
+          <Ionicons
+            name={ADDRESS_TYPE_PRESENTATION[addressTypeCode].icon}
+            size={14}
+            color={theme.colors.muted}
+          />
+          <Text style={styles.addressTypeLabel} numberOfLines={1}>
+            {ADDRESS_TYPE_PRESENTATION[addressTypeCode].label}
+          </Text>
+        </View>
+      ) : null}
       {deliveryVisitCount > 0 ? (
         <Text style={styles.visitLine} numberOfLines={1}>
           Visita de reparto: {deliveryVisitCount}
@@ -70,6 +106,16 @@ function createStyles(t: AppTheme) {
   return StyleSheet.create({
     card: {
       marginBottom: 0,
+    },
+    addressTypeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: spacing.xs,
+    },
+    addressTypeLabel: {
+      ...typography.caption,
+      color: colors.muted,
     },
     topRow: {
       flexDirection: 'row',

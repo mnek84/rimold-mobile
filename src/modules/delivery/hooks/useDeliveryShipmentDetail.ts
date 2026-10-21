@@ -4,6 +4,7 @@ import { messageForShipmentDetailError } from '@core/api/userFacingErrors';
 import {
   fetchShipment,
   formatShipmentAddress,
+  isFlexShipment,
   type ShipmentDetailJson,
 } from '@core/api/shipments';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
@@ -128,6 +129,12 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
     shipment,
     loading,
     error,
+    /**
+     * Flex no vuelve a pedir los datos del receptor: los registra la app de
+     * Mercado Libre. Ver {@link isFlexShipment}.
+     */
+    isFlex: isFlexShipment(shipment),
+    addressTypeCode: shipment?.destination?.address_type_code ?? null,
     effectiveStatusCode,
     timelineSteps,
     trackingLabel,

@@ -44,6 +44,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               addressText={detail.addressText}
               statusCode={detail.effectiveStatusCode}
               deliveryVisitCount={detail.deliveryVisitCount}
+              addressTypeCode={detail.addressTypeCode}
             />
             <View style={shell.headerDivider} />
             <DeliveryShipmentTimeline steps={detail.timelineSteps} />
@@ -60,6 +61,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
       <DeliveryDeliveredModal
         visible={detail.deliveredModal.visible}
         shipmentId={detail.shipmentId}
+        isFlex={detail.isFlex}
         onClose={detail.deliveredModal.close}
         onQueued={detail.deliveredModal.onQueued}
       />

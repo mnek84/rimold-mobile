@@ -18,6 +18,7 @@ import { PhotoPreview } from '@components/PhotoPreview';
 import { SignaturePad, type SignaturePadHandle } from '@components/SignaturePad';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
+import { captureEventGeo } from '@core/location/captureEventGeo';
 import { enqueueEvent, EventType } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -32,12 +33,26 @@ type RelationshipValue = (typeof RELATIONSHIP_OPTIONS)[number]['value'];
 type Props = {
   visible: boolean;
   shipmentId: string;
+  /**
+   * Mercado Libre Flex. En Flex, el nombre del receptor, el DNI y la firma los
+   * toma la app de Mercado Libre: volver a pedirlos acá es hacerle al chofer el
+   * mismo trámite dos veces en la puerta del comprador, con el paquete en la
+   * mano y diez entregas más esperando. Lo que nuestra plataforma necesita
+   * registrar es el resultado operativo de la parada, y eso es un botón.
+   */
+  isFlex?: boolean;
   onClose: () => void;
   /** Called after the event is persisted to the local queue (non-blocking for sync). */
   onQueued: () => void;
 };
 
-export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued }: Props) {
+export function DeliveryDeliveredModal({
+  visible,
+  shipmentId,
+  isFlex = false,
+  onClose,
+  onQueued,
+}: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -48,6 +63,10 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
   const [cameraOpen, setCameraOpen] = useState(false);
   const sigRef = useRef<SignaturePadHandle>(null);
   const submitIntentRef = useRef(false);
+  // Doble tap en "Entregado" encolaba dos eventos. El backend los deduplica por
+  // idempotency key, pero el chofer veía dos toasts y no sabía cuál valía.
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -57,6 +76,8 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
       setPhoto(null);
       setCameraOpen(false);
       submitIntentRef.current = false;
+      submittingRef.current = false;
+      setSubmitting(false);
       sigRef.current?.clear();
     }
   }, [visible]);
@@ -70,25 +91,47 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
 
   const clearPhoto = useCallback(() => setPhoto(null), []);
 
+  /**
+   * Encola el evento de entrega.
+   *
+   * `signatureDataUrl` llega vacío en Flex, donde no hay firma que pedir. El
+   * GPS se adjunta en los dos casos y nunca bloquea: `captureEventGeo` devuelve
+   * `null` si el fix no llega a tiempo, y la entrega se registra igual.
+   */
   const finalizeSubmit = useCallback(
     (signatureDataUrl: string) => {
       const sid = shipmentId.trim();
       if (sid === '') {
         return;
       }
-      const payload = {
-        shipmentId: sid,
-        dni: dni.trim(),
-        receiver_name: receiverName.trim(),
-        relationship,
-        signature: signatureDataUrl.trim(),
-        ...(photo != null ? { photo: photo.dataUrl } : {}),
-      };
+      if (submittingRef.current) {
+        return;
+      }
+      submittingRef.current = true;
+      setSubmitting(true);
 
-      void enqueueEvent({
-        type: EventType.SHIPMENT_DELIVERED,
-        payload,
-      })
+      void captureEventGeo()
+        .then((geo) => {
+          const signature = signatureDataUrl.trim();
+          const payload = {
+            shipmentId: sid,
+            ...(isFlex
+              ? {}
+              : {
+                  dni: dni.trim(),
+                  receiver_name: receiverName.trim(),
+                  relationship,
+                }),
+            ...(signature !== '' ? { signature } : {}),
+            ...(photo != null ? { photo: photo.dataUrl } : {}),
+            ...(geo != null ? { geo } : {}),
+          };
+
+          return enqueueEvent({
+            type: EventType.SHIPMENT_DELIVERED,
+            payload,
+          });
+        })
         .then(() => {
           showToast(TOAST_DELIVERY.marked);
           onQueued();
@@ -96,9 +139,13 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
         })
         .catch(() => {
           showToast(TOAST_DELIVERY.sendError);
+        })
+        .finally(() => {
+          submittingRef.current = false;
+          setSubmitting(false);
         });
     },
-    [dni, onClose, onQueued, photo, receiverName, relationship, shipmentId],
+    [dni, isFlex, onClose, onQueued, photo, receiverName, relationship, shipmentId],
   );
 
   const onSignature = useCallback(
@@ -121,6 +168,11 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
   }, []);
 
   const handleSubmit = useCallback(() => {
+    if (isFlex) {
+      // Sin firma que leer: se encola directo.
+      finalizeSubmit('');
+      return;
+    }
     if (dni.trim() === '') {
       Alert.alert('Datos', 'Ingresá el DNI.');
       return;
@@ -131,7 +183,7 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
     }
     submitIntentRef.current = true;
     sigRef.current?.readSignature();
-  }, [dni, receiverName]);
+  }, [dni, finalizeSubmit, isFlex, receiverName]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -156,57 +208,69 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.sectionTitle}>Datos del receptor</Text>
+            {isFlex ? (
+              <View style={styles.flexNotice}>
+                <Text style={styles.flexNoticeTitle}>Envío Flex</Text>
+                <Text style={styles.flexNoticeBody}>
+                  Mercado Libre ya registra el receptor y la firma. Acá sólo confirmás que la
+                  entrega se hizo.
+                </Text>
+              </View>
+            ) : (
+              <>
+              <Text style={styles.sectionTitle}>Datos del receptor</Text>
 
-            <Text style={styles.label}>DNI</Text>
-            <TextInput
-              style={styles.input}
-              value={dni}
-              onChangeText={setDni}
-              placeholder="Número de documento"
-              placeholderTextColor={theme.colors.muted}
-              keyboardType="default"
-            />
+              <Text style={styles.label}>DNI</Text>
+              <TextInput
+                style={styles.input}
+                value={dni}
+                onChangeText={setDni}
+                placeholder="Número de documento"
+                placeholderTextColor={theme.colors.muted}
+                keyboardType="default"
+              />
 
-            <Text style={styles.label}>Nombre</Text>
-            <TextInput
-              style={styles.input}
-              value={receiverName}
-              onChangeText={setReceiverName}
-              placeholder="Nombre completo"
-              placeholderTextColor={theme.colors.muted}
-            />
+              <Text style={styles.label}>Nombre</Text>
+              <TextInput
+                style={styles.input}
+                value={receiverName}
+                onChangeText={setReceiverName}
+                placeholder="Nombre completo"
+                placeholderTextColor={theme.colors.muted}
+              />
 
-            <Text style={styles.label}>Vínculo</Text>
-            <View style={styles.relationshipRow}>
-              {RELATIONSHIP_OPTIONS.map((opt) => {
-                const selected = relationship === opt.value;
-                return (
-                  <Pressable
-                    key={opt.value}
-                    onPress={() => setRelationship(opt.value)}
-                    style={({ pressed }) => [
-                      styles.relChip,
-                      selected && styles.relChipSelected,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Text style={[styles.relChipLabel, selected && styles.relChipLabelSelected]}>
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+              <Text style={styles.label}>Vínculo</Text>
+              <View style={styles.relationshipRow}>
+                {RELATIONSHIP_OPTIONS.map((opt) => {
+                  const selected = relationship === opt.value;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => setRelationship(opt.value)}
+                      style={({ pressed }) => [
+                        styles.relChip,
+                        selected && styles.relChipSelected,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={[styles.relChipLabel, selected && styles.relChipLabelSelected]}>
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-            <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Firma</Text>
-            <SignaturePad ref={sigRef} onSignature={onSignature} onEmpty={onSignatureEmpty} />
-            <Pressable
-              style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
-              onPress={() => sigRef.current?.clear()}
-            >
-              <Text style={styles.secondaryBtnLabel}>Limpiar firma</Text>
-            </Pressable>
+              <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Firma</Text>
+              <SignaturePad ref={sigRef} onSignature={onSignature} onEmpty={onSignatureEmpty} />
+              <Pressable
+                style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+                onPress={() => sigRef.current?.clear()}
+              >
+                <Text style={styles.secondaryBtnLabel}>Limpiar firma</Text>
+              </Pressable>
+              </>
+            )}
 
             <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Foto</Text>
             <View style={styles.photoRow}>
@@ -234,10 +298,19 @@ export function DeliveryDeliveredModal({ visible, shipmentId, onClose, onQueued 
             ) : null}
 
             <Pressable
-              style={({ pressed }) => [styles.submitBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: submitting }}
+              disabled={submitting}
+              style={({ pressed }) => [
+                styles.submitBtn,
+                submitting && styles.submitBtnDisabled,
+                pressed && styles.pressed,
+              ]}
               onPress={handleSubmit}
             >
-              <Text style={styles.submitBtnLabel}>Registrar entrega</Text>
+              <Text style={styles.submitBtnLabel}>
+                {submitting ? 'Registrando…' : 'Registrar entrega'}
+              </Text>
             </Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -257,6 +330,27 @@ function createStyles(t: AppTheme) {
     safe: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    flexNotice: {
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.surfaceMuted,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: spacing.lg,
+      gap: spacing.xs,
+    },
+    flexNoticeTitle: {
+      ...typography.captionStrong,
+      color: colors.text,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    flexNoticeBody: {
+      ...typography.caption,
+      color: colors.muted,
+    },
+    submitBtnDisabled: {
+      opacity: 0.5,
     },
     flex: {
       flex: 1,

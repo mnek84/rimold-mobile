@@ -204,6 +204,12 @@ export async function handleEvent(event: QueueEvent): Promise<void> {
         if (photoRaw !== '') {
           body.photo = normalizePhotoPayload(photoRaw);
         }
+        // "Domicilio cerrado" sin una coordenada no se puede distinguir de un
+        // envio que nunca salio del deposito, y es justo el motivo que mas se
+        // discute. El backend lo guarda en `proof_of_failure.geo`.
+        if (p.geo != null && typeof p.geo === 'object' && !Array.isArray(p.geo)) {
+          body.geo = p.geo;
+        }
       }
 
       await postDomainEvent(eventId, 'shipment', sid, type, body, occurredAtMs);
