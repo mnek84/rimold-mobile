@@ -65,11 +65,15 @@ type ScanError = {
 
 function describeInvalidReason(
   reason: ColectaScanInvalidReason,
-  details: { currentStatus?: string; mlSenderId?: number },
+  details: { currentStatus?: string; mlSenderId?: number; source?: ColectaScanSource },
 ): string {
   switch (reason) {
     case 'not_found':
-      return 'El paquete no existe.';
+      // Con una etiqueta de ML el chofer necesita saber que el número no aparece en ML,
+      // no un "no existe" genérico que suena a código mal leído.
+      return details.source === 'flex'
+        ? 'No encontramos un envío de Mercado Libre asociado a este número.'
+        : 'El paquete no existe.';
     case 'wrong_business':
       return 'Este paquete pertenece a otro cliente.';
     case 'invalid_status':
@@ -80,6 +84,8 @@ function describeInvalidReason(
       return details.mlSenderId !== undefined
         ? `Sender ML ${details.mlSenderId} no autorizado para este depósito.`
         : 'Sender ML no autorizado para este depósito.';
+    case 'ml_unavailable':
+      return 'No pudimos validar con Mercado Libre. Reintentá en unos segundos.';
     case 'network':
       return 'Sin conexión. Reintentá cuando vuelvas a tener red.';
   }
@@ -324,19 +330,22 @@ export function ColectaScanScreen({ navigation, route }: Props) {
             warehouseId,
           });
 
+          const scanSource = scanSourceFromParse(trimmed);
+
           if (!result.valid) {
             triggerScanError({
               reason: result.reason,
               message: describeInvalidReason(result.reason, {
                 currentStatus: result.currentStatus,
                 mlSenderId: result.mlSenderId,
+                source: scanSource,
               }),
             });
             return;
           }
 
           const trackingId = result.trackingId;
-          const source = scanSourceFromParse(trimmed);
+          const source = scanSource;
           const scannedPackage = result.package;
 
           // Los N bultos de un envío comparten tracking: deduplicar por tracking

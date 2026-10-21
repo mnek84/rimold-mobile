@@ -3,6 +3,7 @@ import { parseQrPayload } from './parseQrPayload';
 /**
  * Convierte un QR / texto de envío al valor que usamos para APIs y estado local:
  * - QR JSON MercadoLibre Flex (`id` + `sender_id` + …) → `id`
+ * - Número de envío de MercadoLibre (etiqueta Flex actual) → el mismo número
  * - `LGST1:` (JSON Base64) → tracking embebido (`t`)
  * - QR viejo `{"id","bulk","bulks"}` → `id` (nuestro tracking)
  * - `TRK_…` → sufijo sin prefijo (mismo criterio que {@link parseQrPayload})

@@ -1,4 +1,4 @@
-import { parseMercadoLibreQR } from './parseMercadoLibreQR';
+import { isMercadoLibreShipmentNumber, parseMercadoLibreQR } from './parseMercadoLibreQR';
 import type { ScannedPackage, ScannerParseResult } from './types';
 
 export const INTERNAL_QR_PREFIX = 'TRK_' as const;
@@ -147,7 +147,9 @@ function tryDecodeShipmentQr(trimmed: string): ShipmentQrPayload | null {
 }
 
 /**
- * Classify a scanned QR string. LGST1 payloads decode to internal tracking (`t`)
+ * Classify a scanned QR string. Mercado Libre llega en dos formas: el JSON viejo de la etiqueta
+ * Flex y el número de envío pelado que emite hoy (`mlFormat` distingue cuál).
+ * LGST1 payloads decode to internal tracking (`t`)
  * plus, when present, the physical bulto they identify (`p`).
  * The legacy Blade QR `{"id","bulk","bulks"}` is also internal: `id` is the
  * tracking and `bulk`/`bulks` identify the bulto.
@@ -163,6 +165,7 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       type: 'mercadolibre',
       trackingId: ml.id,
       clientId: ml.sender_id,
+      mlFormat: 'flex_json',
       reference: null,
       package: null,
     };
@@ -195,6 +198,21 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       raw: trimmed,
       type: 'internal',
       trackingId: trimmed.slice(INTERNAL_QR_PREFIX.length),
+      reference: null,
+      package: null,
+    };
+  }
+
+  // Etiqueta Flex actual: el QR es el número de envío y nada más. Va último a propósito —
+  // ningún formato interno es todo dígitos— y es una hipótesis, no un hecho: quien resuelve
+  // busca primero en la base, así que una referencia numérica sigue resolviendo como siempre.
+  if (isMercadoLibreShipmentNumber(trimmed)) {
+    return {
+      raw: trimmed,
+      type: 'mercadolibre',
+      trackingId: trimmed,
+      clientId: null,
+      mlFormat: 'shipment_number',
       reference: null,
       package: null,
     };

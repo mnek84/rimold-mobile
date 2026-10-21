@@ -39,7 +39,15 @@ export async function resolveTrackingIdForAssign(raw: string): Promise<string> {
 
   lastPackageInfo = null;
 
+  // Los intentos de abajo se solapan: un número de envío de ML, por ejemplo, es a la vez el raw
+  // y el tracking parseado. Sin esto se repetiría la misma petición fallida.
+  const tried = new Set<string>();
+
   const tryResolve = async (value: string): Promise<string | null> => {
+    if (tried.has(value)) {
+      return null;
+    }
+    tried.add(value);
     try {
       const res = await resolveExternalQR(value);
       const t = res.tracking_id.trim();

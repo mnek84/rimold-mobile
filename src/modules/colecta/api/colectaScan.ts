@@ -7,12 +7,15 @@ import { apiClient } from '@core/api';
  * `App\Domains\Collections\Actions\ValidateColectaScanResult::REASON_*`.
  *
  * `network` is mobile-only: surfaced when the request itself failed (offline / timeout / 5xx).
+ * `ml_unavailable` es "no pudimos preguntarle a Mercado Libre", distinto de "no existe": el
+ * paquete puede ser válido y decirle al chofer que no existe es el peor de los dos errores.
  */
 export type ColectaScanInvalidReason =
   | 'not_found'
   | 'wrong_business'
   | 'invalid_status'
   | 'sender_not_authorized'
+  | 'ml_unavailable'
   | 'network';
 
 export type ColectaScanSourceKind = 'existing' | 'flex_stub';
@@ -137,7 +140,8 @@ function parseFailResponse(data: RawScanResponse): ColectaScanValidationFail {
     reasonRaw === 'not_found' ||
     reasonRaw === 'wrong_business' ||
     reasonRaw === 'invalid_status' ||
-    reasonRaw === 'sender_not_authorized'
+    reasonRaw === 'sender_not_authorized' ||
+    reasonRaw === 'ml_unavailable'
       ? reasonRaw
       : 'not_found';
 

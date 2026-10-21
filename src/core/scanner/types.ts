@@ -39,7 +39,13 @@ export type ScannerParseResult =
       raw: string;
       type: 'mercadolibre';
       trackingId: string;
-      clientId: number;
+      /**
+       * `sender_id` del vendedor, cuando el QR lo trae. La etiqueta Flex actual es sólo el
+       * número de envío, así que acá viene `null` y el backend resuelve el sender contra ML.
+       */
+      clientId: number | null;
+      /** Cómo se reconoció la etiqueta. Debe coincidir con `ScanPayloadClassification::ML_FORMAT_*`. */
+      mlFormat: 'flex_json' | 'shipment_number';
       reference: null;
       package: null;
     };

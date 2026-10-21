@@ -1,3 +1,16 @@
+/**
+ * Número de envío pelado: la etiqueta Flex actual trae sólo eso en el QR.
+ *
+ * Hoy ML emite 11 dígitos; las cotas son anchas para sobrevivir un cambio de largo y angostas
+ * para no pisar referencias numéricas cortas de clientes. Debe coincidir con
+ * `ScanPayloadClassifier::ML_SHIPMENT_NUMBER` en el backend.
+ */
+const ML_SHIPMENT_NUMBER = /^\d{8,20}$/;
+
+export function isMercadoLibreShipmentNumber(raw: string): boolean {
+  return ML_SHIPMENT_NUMBER.test(raw.trim());
+}
+
 export function parseMercadoLibreQR(raw: string): { id: string; sender_id: number } | null {
   try {
     const trimmed = raw.trim();
