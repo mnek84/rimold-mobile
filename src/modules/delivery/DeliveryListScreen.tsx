@@ -64,6 +64,7 @@ export function DeliveryListScreen({ navigation }: Props) {
         nextShipmentId={list.nextShipmentId}
         flexBatchId={list.flexBatchId}
         pendingCount={list.pendingCount}
+        failedCount={list.failedCount}
         deliveredTodayCount={list.deliveredTodayCount}
         onPressFlexMap={
           list.flexBatchId != null

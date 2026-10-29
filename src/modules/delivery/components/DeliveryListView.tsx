@@ -52,6 +52,7 @@ type Props = {
   nextShipmentId: string | null;
   flexBatchId: string | null;
   pendingCount: number;
+  failedCount: number;
   deliveredTodayCount: number;
   onPressFlexMap?: () => void;
   onRefresh: () => void;
@@ -69,6 +70,7 @@ export function DeliveryListView({
   nextShipmentId,
   flexBatchId,
   pendingCount,
+  failedCount,
   deliveredTodayCount,
   onPressFlexMap,
   onRefresh,
@@ -81,8 +83,8 @@ export function DeliveryListView({
 
   const scanDisabled = loading || refreshing;
   const showFlexMap = flexBatchId != null && onPressFlexMap != null;
-  const showCount = pendingCount > 0 || deliveredTodayCount > 0;
-  const countLabel = buildCountLabel(pendingCount, deliveredTodayCount);
+  const showCount = pendingCount > 0 || deliveredTodayCount > 0 || failedCount > 0;
+  const countLabel = buildCountLabel(pendingCount, deliveredTodayCount, failedCount);
 
   const listChrome = useMemo(
     () => (
@@ -283,7 +285,7 @@ export function DeliveryListView({
   );
 }
 
-function buildCountLabel(pending: number, deliveredToday: number): string {
+function buildCountLabel(pending: number, deliveredToday: number, failed: number): string {
   const parts: string[] = [];
   if (pending > 0) {
     parts.push(`${pending} ${pending === 1 ? 'envío por entregar' : 'envíos por entregar'}`);
@@ -292,6 +294,11 @@ function buildCountLabel(pending: number, deliveredToday: number): string {
     parts.push(
       `${deliveredToday} ${deliveredToday === 1 ? 'entregado hoy' : 'entregados hoy'}`,
     );
+  }
+  // `failed` no entra en `pending`: son dos cuentas disjuntas (ver
+  // statusDeliveryGroup), así que los tres fragmentos suman la lista completa.
+  if (failed > 0) {
+    parts.push(`${failed} ${failed === 1 ? 'fallida' : 'fallidas'}`);
   }
   return parts.join(' · ');
 }
@@ -532,7 +539,9 @@ function createStyles(t: AppTheme) {
     },
     statusBadge: {
       flexShrink: 0,
-      maxWidth: '40%',
+      // 40% cortaba etiquetas de una sola línea ('Entrega fallida',
+      // 'Pendiente de ruta'); el tracking_id de al lado es corto y tiene flex: 1.
+      maxWidth: '48%',
       paddingHorizontal: spacing.sm + 2,
       paddingVertical: spacing.xs + 1,
       borderRadius: spacing.radiusMd,

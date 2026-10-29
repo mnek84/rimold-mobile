@@ -3,7 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
 
-import { groupShipmentsForSections, pickNextShipmentId, statusDeliveryGroup } from '../deliveryStatus';
+import {
+  groupShipmentsForSections,
+  pickNextShipmentId,
+  statusDeliveryGroup,
+  type DeliveryGroup,
+} from '../deliveryStatus';
 
 export type DeliveryListSection = { title: string; data: TodayShipmentRow[] };
 
@@ -65,8 +70,13 @@ export function useDeliveryList() {
   );
 
   const pendingCount = useMemo(
-    () => sections.reduce((acc, s) => acc + s.data.length, 0),
-    [sections],
+    () => shipments.filter((r) => isPendingDeliveryGroup(statusDeliveryGroup(r.status))).length,
+    [shipments],
+  );
+
+  const failedCount = useMemo(
+    () => shipments.filter((r) => statusDeliveryGroup(r.status) === 'fallidos').length,
+    [shipments],
   );
 
   const deliveredTodayCount = useMemo(
@@ -84,11 +94,17 @@ export function useDeliveryList() {
     nextShipmentId,
     flexBatchId,
     pendingCount,
+    failedCount,
     deliveredTodayCount,
     onRefresh,
     reloadSilent,
     showInitialLoader,
   };
+}
+
+/** Still owed on this pass: everything that is neither closed nor failed. */
+function isPendingDeliveryGroup(group: DeliveryGroup): boolean {
+  return group === 'pendientes' || group === 'en_ruta';
 }
 
 /** Counts shipments delivered/returned today (local timezone), based on `delivered_at`. */

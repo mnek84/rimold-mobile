@@ -1,12 +1,21 @@
 import type { TodayShipmentRow } from '@core/api/shipments';
 import type { AppTheme } from '@theme';
 
-export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados';
+export type DeliveryGroup = 'pendientes' | 'en_ruta' | 'entregados' | 'fallidos';
 
 const ENTREGADOS = new Set(['delivered', 'returned', 'cancelled']);
 // `near_destination` is the driver-side "Cerca" sub-state; it sits between
 // `out_for_delivery` and the final state, so it lists as "En ruta".
 const EN_RUTA = new Set(['out_for_delivery', 'in_transit', 'near_destination']);
+// Al fallar una entrega el backend no deja el envío en `failed`: el listener
+// MoveFailedShipmentToReturnIntake lo pasa enseguida a `return_pending_intake`,
+// que es el estado de reposo real (el paquete vuelve al depósito). Para el
+// conductor las dos cosas significan lo mismo, así que comparten etiqueta y color.
+const ENTREGA_FALLIDA = new Set(['failed', 'return_pending_intake']);
+
+export function isFailedDeliveryStatus(status: string | null | undefined): boolean {
+  return ENTREGA_FALLIDA.has((status ?? '').trim().toLowerCase());
+}
 
 /** Bucket for list grouping (Spanish UI labels). */
 export function statusDeliveryGroup(status: string): DeliveryGroup {
@@ -14,18 +23,25 @@ export function statusDeliveryGroup(status: string): DeliveryGroup {
   if (ENTREGADOS.has(s)) {
     return 'entregados';
   }
+  // Una entrega fallida es reintentable, pero no es trabajo que el conductor
+  // siga debiendo en esta pasada: va a su propio grupo para que el contador de
+  // la cabecera diga lo que realmente queda por entregar.
+  if (isFailedDeliveryStatus(s)) {
+    return 'fallidos';
+  }
   if (EN_RUTA.has(s)) {
     return 'en_ruta';
   }
   return 'pendientes';
 }
 
-const GROUP_ORDER: DeliveryGroup[] = ['en_ruta', 'pendientes'];
+const GROUP_ORDER: DeliveryGroup[] = ['en_ruta', 'pendientes', 'fallidos'];
 
 const GROUP_LABEL: Record<DeliveryGroup, string> = {
   pendientes: 'Pendientes',
   en_ruta: 'En ruta',
   entregados: 'Entregados',
+  fallidos: 'Entregas fallidas',
 };
 
 /** Higher = closer to delivery attempt (for “next” pick within pendientes). */
@@ -37,8 +53,6 @@ const PENDING_PRIORITY: Record<string, number> = {
   picked: 30,
   created: 20,
   missing_zone: 15,
-  failed: 10,
-  cancelled: 5,
 };
 
 function pendingPriority(status: string): number {
@@ -68,6 +82,7 @@ export function groupShipmentsForSections(
     pendientes: [],
     en_ruta: [],
     entregados: [],
+    fallidos: [],
   };
   for (const r of rows) {
     buckets[statusDeliveryGroup(r.status)].push(r);
@@ -99,7 +114,11 @@ const DRIVER_STATUS_LABEL_ES: Record<string, string> = {
   assigned: 'Asignado',
   out_for_delivery: 'En camino',
   delivered: 'Entregado',
-  failed: 'Falla',
+  failed: 'Entrega fallida',
+  return_pending_intake: 'Entrega fallida',
+  return_received: 'Dev. en depósito',
+  return_to_seller: 'Dev. a cliente',
+  return_in_transit: 'Dev. en camino',
   returned: 'Devuelto',
   cancelled: 'Cancelado',
   in_transit: 'En camino',
@@ -118,7 +137,8 @@ export function formatDriverShipmentStatusLabel(code: string): string {
  *   0 = pre-delivery (assigned, picked, in_warehouse, in_cage, …)
  *   1 = "En camino" (out_for_delivery / integration in_transit) — driver left
  *   2 = "Cerca"     (near_destination)                         — driver arriving
- *   3 = terminal    (delivered, returned, failed, cancelled)
+ *   3 = terminal    (delivered, returned, cancelled, y el ciclo de devolución
+ *                   que abre una entrega fallida)
  */
 export function shipmentDriverPhaseIndex(statusCode: string | null | undefined): number {
   const s = (statusCode ?? '').trim().toLowerCase();
@@ -133,7 +153,18 @@ export function shipmentDriverPhaseIndex(statusCode: string | null | undefined):
   if (s === 'near_destination') {
     return 2;
   }
-  if (['delivered', 'returned', 'failed', 'cancelled'].includes(s)) {
+  if (
+    [
+      'delivered',
+      'returned',
+      'failed',
+      'cancelled',
+      'return_pending_intake',
+      'return_received',
+      'return_to_seller',
+      'return_in_transit',
+    ].includes(s)
+  ) {
     return 3;
   }
   return 0;
@@ -166,7 +197,7 @@ export function shipmentListBadgeKind(status: string): ShipmentListBadgeKind {
   if (s === 'delivered' || s === 'returned') {
     return 'delivered';
   }
-  if (s === 'failed' || s === 'cancelled') {
+  if (s === 'cancelled' || isFailedDeliveryStatus(s)) {
     return 'failed';
   }
   // `near_destination` is the driver-side "Cerca" sub-state, which is part of
@@ -223,7 +254,10 @@ export function isDriverActionEnabled(
   if (TERMINAL.has(s)) {
     return false;
   }
-  if (s === 'failed') {
+  // Una entrega fallida solo se puede reintentar: el backend admite
+  // `return_pending_intake -> out_for_delivery` (ver la migración del ciclo de
+  // devolución), no un segundo fallo ni una entrega directa.
+  if (isFailedDeliveryStatus(s)) {
     return action === 'en_camino';
   }
 
@@ -278,8 +312,8 @@ export function buildShipmentTimeline(statusCode: string | null | undefined): Ti
       ? 'Entregado'
       : s === 'returned'
         ? 'Devuelto'
-        : s === 'failed'
-          ? 'Falla'
+        : isFailedDeliveryStatus(s)
+          ? 'Entrega fallida'
           : s === 'cancelled'
             ? 'Cancelado'
             : 'Entregado';
@@ -293,7 +327,7 @@ export function buildShipmentTimeline(statusCode: string | null | undefined): Ti
       if (apiPhase < 3) {
         return 'upcoming';
       }
-      return s === 'failed' || s === 'cancelled' ? 'error' : 'done';
+      return s === 'cancelled' || isFailedDeliveryStatus(s) ? 'error' : 'done';
     }
     if (apiPhase < stepIdx) {
       return 'upcoming';
