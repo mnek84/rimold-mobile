@@ -1,25 +1,37 @@
 import { apiClient } from '@core/api';
 
+/** Desenlace de la visita, tal como lo resuelve el backend desde el evento. */
+export type DeliveryOutcome = 'delivered' | 'not_delivered';
+
 export type DeliveryHistoryItem = {
   id: string;
   trackingId: string;
   address: string;
-  /** 'delivered' | 'returned' (backend restringe a estos dos). */
+  outcome: DeliveryOutcome;
+  /** Código de estado del evento que cerró la visita ('delivered' | 'returned' | 'failed'). */
   status: string;
-  /** ISO timestamp del cierre (delivered_at o fallback a last_event_at). */
-  deliveredAt: string;
+  /** ISO timestamp del hecho (`shipment_history_events.occurred_at`). */
+  occurredAt: string;
+  /** Número de salida a reparto. 1 = primer intento. */
+  attempt: number;
+  /** Motivo del fallo, sólo cuando se registró ese mismo día. */
+  failureReason: string | null;
+  failureNote: string | null;
 };
 
 export type DeliveryHistoryDay = {
   /** Día local en formato YYYY-MM-DD. */
   date: string;
-  totalDeliveries: number;
+  deliveredCount: number;
+  notDeliveredCount: number;
   shipments: DeliveryHistoryItem[];
 };
 
 export type DeliveryHistoryResponse = {
   /** Mes efectivo devuelto por el server (YYYY-MM). Puede diferir del pedido si estaba mal formateado. */
   month: string;
+  /** Día efectivo (YYYY-MM-DD) si se pidió uno solo; null si se pidió el mes. */
+  day: string | null;
   days: DeliveryHistoryDay[];
 };
 
@@ -27,20 +39,30 @@ type RawItem = {
   id?: unknown;
   trackingId?: unknown;
   address?: unknown;
+  outcome?: unknown;
   status?: unknown;
+  occurredAt?: unknown;
   deliveredAt?: unknown;
+  attempt?: unknown;
+  failureReason?: unknown;
+  failureNote?: unknown;
 };
 
 type RawDay = {
   date?: unknown;
+  deliveredCount?: unknown;
+  notDeliveredCount?: unknown;
   totalDeliveries?: unknown;
   shipments?: unknown;
 };
 
 type RawResponse = {
   month?: unknown;
+  day?: unknown;
   days?: unknown;
 };
+
+const DELIVERED_STATUSES = new Set(['delivered', 'returned']);
 
 function stringOrNull(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -60,14 +82,32 @@ function parseItem(value: unknown): DeliveryHistoryItem | null {
   if (value === null || typeof value !== 'object') return null;
   const o = value as RawItem;
   const id = stringOrNull(o.id);
-  const deliveredAt = stringOrNull(o.deliveredAt);
-  if (id === null || deliveredAt === null) return null;
+  // `deliveredAt` es el nombre viejo del mismo instante; se acepta para que la
+  // app siga leyendo una respuesta de un backend sin desplegar.
+  const occurredAt = stringOrNull(o.occurredAt) ?? stringOrNull(o.deliveredAt);
+  if (id === null || occurredAt === null) return null;
+
+  const status = typeof o.status === 'string' ? o.status : 'delivered';
+  // Si el backend no manda `outcome`, se deriva del estado: un backend viejo
+  // sólo devolvía entregas, así que la derivación da el mismo resultado.
+  const rawOutcome = stringOrNull(o.outcome);
+  const outcome: DeliveryOutcome =
+    rawOutcome === 'delivered' || rawOutcome === 'not_delivered'
+      ? rawOutcome
+      : DELIVERED_STATUSES.has(status.trim().toLowerCase())
+        ? 'delivered'
+        : 'not_delivered';
+
   return {
     id,
     trackingId: stringOrNull(o.trackingId) ?? '',
     address: typeof o.address === 'string' ? o.address : '',
-    status: typeof o.status === 'string' ? o.status : 'delivered',
-    deliveredAt,
+    outcome,
+    status,
+    occurredAt,
+    attempt: Math.max(1, toNonNegativeInt(o.attempt)),
+    failureReason: stringOrNull(o.failureReason),
+    failureNote: stringOrNull(o.failureNote),
   };
 }
 
@@ -76,6 +116,7 @@ function parseDay(value: unknown): DeliveryHistoryDay | null {
   const o = value as RawDay;
   const date = stringOrNull(o.date);
   if (date === null) return null;
+
   const shipments: DeliveryHistoryItem[] = [];
   if (Array.isArray(o.shipments)) {
     for (const item of o.shipments) {
@@ -83,24 +124,36 @@ function parseDay(value: unknown): DeliveryHistoryDay | null {
       if (parsed !== null) shipments.push(parsed);
     }
   }
+
+  // Los contadores se recuentan sobre lo que efectivamente se pudo parsear, en
+  // vez de confiar en los del server: si una fila se descartó, el encabezado
+  // del día diría un número que no coincide con la lista que está debajo.
+  const deliveredCount = shipments.filter((s) => s.outcome === 'delivered').length;
+
   return {
     date,
-    totalDeliveries: toNonNegativeInt(o.totalDeliveries),
+    deliveredCount,
+    notDeliveredCount: shipments.length - deliveredCount,
     shipments,
   };
 }
 
 /**
- * GET /shipments/history — entregas cerradas (delivered + returned) del chofer
- * autenticado, agrupadas por día local (más reciente primero). Por defecto
- * devuelve el mes actual del server; pasar `month=YYYY-MM` para elegir otro.
+ * GET /shipments/history — reporte de la jornada del chofer autenticado:
+ * entregados y NO entregados, agrupados por día local (más reciente primero).
+ *
+ * Sin parámetros devuelve el mes actual del server. `day` tiene precedencia
+ * sobre `month` y acota a una sola jornada.
  */
 export async function fetchDeliveryHistory(params?: {
   month?: string;
+  day?: string;
   signal?: AbortSignal;
 }): Promise<DeliveryHistoryResponse> {
   const query: Record<string, string> = {};
-  if (params?.month != null && params.month !== '') {
+  if (params?.day != null && params.day !== '') {
+    query.day = params.day;
+  } else if (params?.month != null && params.month !== '') {
     query.month = params.month;
   }
 
@@ -110,7 +163,7 @@ export async function fetchDeliveryHistory(params?: {
   });
 
   if (data === null || typeof data !== 'object') {
-    return { month: params?.month ?? '', days: [] };
+    return { month: params?.month ?? '', day: params?.day ?? null, days: [] };
   }
 
   const days: DeliveryHistoryDay[] = [];
@@ -121,7 +174,9 @@ export async function fetchDeliveryHistory(params?: {
     }
   }
 
-  const month = stringOrNull(data.month) ?? params?.month ?? '';
-
-  return { month, days };
+  return {
+    month: stringOrNull(data.month) ?? params?.month ?? '',
+    day: stringOrNull(data.day) ?? params?.day ?? null,
+    days,
+  };
 }

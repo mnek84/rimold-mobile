@@ -44,7 +44,12 @@ const GROUP_LABEL: Record<DeliveryGroup, string> = {
   fallidos: 'Entregas fallidas',
 };
 
-/** Higher = closer to delivery attempt (for “next” pick within pendientes). */
+/**
+ * Higher = closer to delivery attempt (for “next” pick within pendientes).
+ * Solo lleva códigos del grupo `pendientes`: `failed` / `return_pending_intake`
+ * viven en `fallidos` y `cancelled` en `entregados`, así que pickNextShipmentId
+ * no los ve nunca.
+ */
 const PENDING_PRIORITY: Record<string, number> = {
   assigned: 60,
   pending_route: 48,

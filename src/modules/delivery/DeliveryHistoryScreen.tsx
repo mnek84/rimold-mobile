@@ -33,10 +33,13 @@ type Props = NativeStackScreenProps<DeliveryStackParamList, 'DeliveryHistory'>;
 
 type HistorySection = {
   title: string;
-  totalDeliveries: number;
+  deliveredCount: number;
+  notDeliveredCount: number;
   expanded: boolean;
   allShipments: DeliveryHistoryItem[];
   data: DeliveryHistoryItem[];
+  /** Índice del primer entregado dentro de `data`; -1 si no hay. Marca dónde va el separador. */
+  firstDeliveredIndex: number;
 };
 
 const STAGGER_MS = 28;
@@ -117,8 +120,29 @@ function formatDeliveredAtTime(iso: string): string {
   }
 }
 
-function pluralEntregas(n: number): string {
-  return n === 1 ? '1 entrega' : `${n} entregas`;
+/**
+ * Resumen de la jornada. Se nombran los dos desenlaces siempre que haya alguno
+ * de cada uno: el chofer rinde el día con los dos números, no sólo con el bueno.
+ */
+function buildOutcomeSummary(delivered: number, notDelivered: number): string {
+  const parts: string[] = [];
+  if (delivered > 0) {
+    parts.push(`${delivered} ${delivered === 1 ? 'entregado' : 'entregados'}`);
+  }
+  if (notDelivered > 0) {
+    parts.push(`${notDelivered} sin entregar`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'Sin movimientos';
+}
+
+/** No entregados primero: son los bultos que el chofer todavía tiene que rendir. */
+function sortByOutcomeThenTime(shipments: DeliveryHistoryItem[]): DeliveryHistoryItem[] {
+  return [...shipments].sort((a, b) => {
+    if (a.outcome !== b.outcome) {
+      return a.outcome === 'not_delivered' ? -1 : 1;
+    }
+    return a.occurredAt.localeCompare(b.occurredAt);
+  });
 }
 
 export function DeliveryHistoryScreen(_props: Props) {
@@ -166,23 +190,28 @@ export function DeliveryHistoryScreen(_props: Props) {
     const days: DeliveryHistoryDay[] = query.data?.days ?? [];
     return days.map((day) => {
       const expanded = expandedDays.has(day.date);
+      const ordered = sortByOutcomeThenTime(day.shipments);
       return {
         title: day.date,
-        totalDeliveries: day.totalDeliveries,
+        deliveredCount: day.deliveredCount,
+        notDeliveredCount: day.notDeliveredCount,
         expanded,
-        allShipments: day.shipments,
-        data: expanded ? day.shipments : [],
+        allShipments: ordered,
+        data: expanded ? ordered : [],
+        firstDeliveredIndex: ordered.findIndex((s) => s.outcome === 'delivered'),
       };
     });
   }, [query.data, expandedDays]);
 
   const monthTotals = useMemo(() => {
     const days = query.data?.days ?? [];
-    let deliveries = 0;
+    let delivered = 0;
+    let notDelivered = 0;
     for (const d of days) {
-      deliveries += d.totalDeliveries;
+      delivered += d.deliveredCount;
+      notDelivered += d.notDeliveredCount;
     }
-    return { days: days.length, deliveries };
+    return { days: days.length, delivered, notDelivered, total: delivered + notDelivered };
   }, [query.data]);
 
   const renderSectionHeader = useCallback(
@@ -190,7 +219,7 @@ export function DeliveryHistoryScreen(_props: Props) {
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: section.expanded }}
-        accessibilityLabel={`${formatDayLabel(section.title)}, ${pluralEntregas(section.totalDeliveries)}, ${section.expanded ? 'expandido' : 'colapsado'}`}
+        accessibilityLabel={`${formatDayLabel(section.title)}, ${buildOutcomeSummary(section.deliveredCount, section.notDeliveredCount)}, ${section.expanded ? 'expandido' : 'colapsado'}`}
         onPress={() => toggleDay(section.title)}
         style={({ pressed }) => [
           styles.sectionHeader,
@@ -206,9 +235,14 @@ export function DeliveryHistoryScreen(_props: Props) {
           <View style={styles.sectionHeaderText}>
             <Text style={styles.sectionTitle}>{formatDayLabel(section.title)}</Text>
             <Text style={styles.sectionSummary}>
-              {pluralEntregas(section.totalDeliveries)}
+              {buildOutcomeSummary(section.deliveredCount, section.notDeliveredCount)}
             </Text>
           </View>
+          {section.notDeliveredCount > 0 ? (
+            <View style={styles.sectionAlertDot}>
+              <Text style={styles.sectionAlertDotText}>{section.notDeliveredCount}</Text>
+            </View>
+          ) : null}
         </View>
       </Pressable>
     ),
@@ -219,21 +253,48 @@ export function DeliveryHistoryScreen(_props: Props) {
       styles.sectionHeaderText,
       styles.sectionSummary,
       styles.sectionTitle,
+      styles.sectionAlertDot,
+      styles.sectionAlertDotText,
       theme.colors.muted,
       toggleDay,
     ],
   );
 
   const renderItem = useCallback(
-    ({ item, index }: { item: DeliveryHistoryItem; index: number }) => {
+    ({
+      item,
+      index,
+      section,
+    }: {
+      item: DeliveryHistoryItem;
+      index: number;
+      section: HistorySection;
+    }) => {
       const delay = Math.min(index, MAX_STAGGER_INDEX) * STAGGER_MS;
-      const time = formatDeliveredAtTime(item.deliveredAt);
+      const time = formatDeliveredAtTime(item.occurredAt);
+      const notDelivered = item.outcome === 'not_delivered';
       const badgeKind = shipmentListBadgeKind(item.status);
       const badgeColors = shipmentListBadgeColors(theme, badgeKind);
       const statusLabel = formatDriverShipmentStatusLabel(item.status);
+      // El motivo es el dato por el que se abre esta pantalla. Si el backend no
+      // lo pudo atribuir a este intento se dice, en vez de dejar el hueco: un
+      // renglón vacío se lee como "no hubo motivo".
+      const reasonLine = notDelivered
+        ? (item.failureReason ?? 'Sin motivo registrado')
+        : null;
+
+      // Separador entre los dos bloques del día. Va dentro de renderItem porque
+      // SectionList no anida secciones, y partir el día en dos secciones
+      // rompería el plegado por día.
+      const groupHeader =
+        index === 0 && notDelivered
+          ? 'No entregados'
+          : index === section.firstDeliveredIndex && section.notDeliveredCount > 0
+            ? 'Entregados'
+            : null;
 
       const card = (
-        <Card padding="md" style={styles.itemCard}>
+        <Card padding="md" style={[styles.itemCard, notDelivered && styles.itemCardFailed]}>
           <View style={styles.itemHeaderRow}>
             <Text style={styles.itemTracking} numberOfLines={1}>
               {item.trackingId !== '' ? item.trackingId : '—'}
@@ -254,31 +315,70 @@ export function DeliveryHistoryScreen(_props: Props) {
               {item.address}
             </Text>
           ) : null}
-          {time !== '' ? (
+          {reasonLine !== null ? (
+            <View style={styles.reasonRow}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={14}
+                color={theme.colors.danger}
+                style={styles.reasonIcon}
+              />
+              <View style={styles.reasonTextWrapper}>
+                <Text style={styles.reasonText}>{reasonLine}</Text>
+                {item.failureNote !== null ? (
+                  <Text style={styles.reasonNote}>{item.failureNote}</Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+          {time !== '' || item.attempt > 1 ? (
             <View style={styles.itemMetaRow}>
-              <Ionicons name="time-outline" size={13} color={theme.colors.muted} />
-              <Text style={styles.itemMetaText}>{time}</Text>
+              {time !== '' ? (
+                <>
+                  <Ionicons name="time-outline" size={13} color={theme.colors.muted} />
+                  <Text style={styles.itemMetaText}>{time}</Text>
+                </>
+              ) : null}
+              {item.attempt > 1 ? (
+                <Text style={styles.itemMetaText}>{`Intento ${item.attempt}`}</Text>
+              ) : null}
             </View>
           ) : null}
         </Card>
       );
 
+      const body = (
+        <>
+          {groupHeader !== null ? (
+            <Text style={styles.groupHeader}>{groupHeader}</Text>
+          ) : null}
+          {card}
+        </>
+      );
+
       if (Platform.OS === 'web') {
-        return <View key={item.id}>{card}</View>;
+        return <View key={item.id}>{body}</View>;
       }
       return (
         <Animated.View key={item.id} entering={FadeInDown.duration(220).delay(delay)}>
-          {card}
+          {body}
         </Animated.View>
       );
     },
     [
+      styles.groupHeader,
       styles.itemAddress,
       styles.itemCard,
+      styles.itemCardFailed,
       styles.itemHeaderRow,
       styles.itemMetaRow,
       styles.itemMetaText,
       styles.itemTracking,
+      styles.reasonIcon,
+      styles.reasonNote,
+      styles.reasonRow,
+      styles.reasonText,
+      styles.reasonTextWrapper,
       styles.statusBadge,
       styles.statusBadgeText,
       theme,
@@ -300,9 +400,10 @@ export function DeliveryHistoryScreen(_props: Props) {
       </Pressable>
       <View style={styles.monthLabelWrapper}>
         <Text style={styles.monthLabel}>{formatMonthLabel(month)}</Text>
-        {monthTotals.deliveries > 0 ? (
+        {monthTotals.total > 0 ? (
           <Text style={styles.monthSummary}>
-            {pluralEntregas(monthTotals.deliveries)} en {monthTotals.days === 1 ? '1 día' : `${monthTotals.days} días`}
+            {buildOutcomeSummary(monthTotals.delivered, monthTotals.notDelivered)} en{' '}
+            {monthTotals.days === 1 ? '1 día' : `${monthTotals.days} días`}
           </Text>
         ) : null}
       </View>
@@ -394,9 +495,9 @@ export function DeliveryHistoryScreen(_props: Props) {
               color={theme.colors.muted}
               style={styles.emptyIcon}
             />
-            <Text style={styles.emptyTitle}>Sin entregas este mes</Text>
+            <Text style={styles.emptyTitle}>Sin actividad este mes</Text>
             <Text style={styles.emptyHint}>
-              Cuando cierres una entrega, la vas a ver acá agrupada por día.
+              Cuando cierres una visita —entregada o no— la vas a ver acá, agrupada por día.
             </Text>
           </View>
         }
@@ -489,8 +590,56 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
       marginTop: 2,
     },
+    sectionAlertDot: {
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 6,
+      borderRadius: 11,
+      backgroundColor: `${colors.danger}28`,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: `${colors.danger}88`,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sectionAlertDotText: {
+      ...typography.captionStrong,
+      color: colors.danger,
+    },
     itemCard: {
       marginBottom: spacing.md,
+    },
+    itemCardFailed: {
+      borderLeftWidth: 3,
+      borderLeftColor: colors.danger,
+    },
+    groupHeader: {
+      ...typography.captionStrong,
+      color: colors.muted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginBottom: spacing.sm,
+    },
+    reasonRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.xs,
+      marginTop: spacing.sm,
+    },
+    reasonIcon: {
+      marginTop: 1,
+    },
+    reasonTextWrapper: {
+      flex: 1,
+      minWidth: 0,
+    },
+    reasonText: {
+      ...typography.captionStrong,
+      color: colors.danger,
+    },
+    reasonNote: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: 2,
     },
     itemHeaderRow: {
       flexDirection: 'row',
