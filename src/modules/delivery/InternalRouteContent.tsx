@@ -1,9 +1,12 @@
-import * as Linking from 'expo-linking';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import axios from 'axios';
+import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Polyline } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, ScreenContainer } from '@components/ui';
 import {
   finishDriverRoute,
   optimizeRoute,
@@ -13,17 +16,42 @@ import {
 } from '@core/api/routes';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { showToast } from '@core/feedback/toastStore';
-import { isValidLatLng } from '@core/geo/coordinates';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
+import type { MainTabNav } from '@navigation/types';
 import { useTheme, type AppTheme } from '@theme';
-import axios from 'axios';
 
-import { isTerminalStopStatus, routeStopStatusLabel } from './routeStopStatus';
+import {
+  navigableStopCount,
+  openRouteInGoogleMaps,
+  openTurnByTurnNavigation,
+} from './map/externalNavigation';
+import { ON_PRIMARY_INK } from './map/onPrimaryInk';
+import { RouteActionsSheet, type RouteBusyAction } from './map/RouteActionsSheet';
+import { RouteProgressHeader } from './map/RouteProgressHeader';
+import { StopListSheet } from './map/StopListSheet';
+import { StopMarker } from './map/StopMarker';
+import { StopPreviewCard } from './map/StopPreviewCard';
+import {
+  formatStopAddress,
+  hasCoordinates,
+  isVisitedKind,
+  stopVisualKind,
+} from './map/stopPresentation';
 
 type Props = {
   route: DriverRouteView;
   onRefresh: () => Promise<void>;
 };
+
+/** Buenos Aires: sólo se usa si no hay ni una parada ni posición del equipo. */
+const FALLBACK_REGION = {
+  latitude: -34.6037,
+  longitude: -58.3816,
+  latitudeDelta: 0.12,
+  longitudeDelta: 0.12,
+};
+
+const FIT_PADDING = { top: 190, right: 64, bottom: 320, left: 64 };
 
 function formatDrivingDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) {
@@ -56,9 +84,19 @@ function pendingStopsCountFrom(err: unknown): number | null {
   return match !== null ? Number(match[1]) : null;
 }
 
+/**
+ * El reparto del día en un mapa a pantalla completa.
+ *
+ * Todas las paradas se dibujan siempre, cerradas incluidas: el tilde verde
+ * sobre lo entregado es la mitad de la información: dice cuánto falta y, sobre
+ * todo, por dónde ya se pasó. Esconder lo hecho —como hacía la versión en
+ * lista— obligaba a reconstruir de memoria el recorrido recién hecho.
+ */
 export function InternalRouteContent({ route, onRefresh }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<MainTabNav<'RutaMapa'>>();
   const mapRef = useRef<MapView>(null);
 
   const started = route.startedAt !== null && route.finishedAt === null;
@@ -67,13 +105,16 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
   const [polylineCoords, setPolylineCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [durationSec, setDurationSec] = useState<number | null>(null);
   const [distanceM, setDistanceM] = useState<number | null>(null);
-  const [busy, setBusy] = useState<null | 'start' | 'reoptimize' | 'finish'>(null);
+  const [busy, setBusy] = useState<RouteBusyAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showDone, setShowDone] = useState(false);
+  const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
-  // Only reset the visual cache (polyline / ETA) when the underlying route changes.
-  // Appended stops do NOT reset these — the server tracks started/finished state.
+  // El cache visual (polilínea / ETA) pertenece a una ruta concreta. Agregar
+  // paradas a la misma ruta no lo invalida: el estado start/finish lo lleva el
+  // servidor, no esta pantalla.
   useEffect(() => {
     setPolylineCoords([]);
     setDurationSec(null);
@@ -81,7 +122,7 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     setActionError(null);
   }, [route.id]);
 
-  // Notify the driver when new stops are appended after the route has started.
+  // Aviso cuando entran paradas nuevas con la ruta ya en curso.
   const previousStopsCount = useRef<number>(route.stops.length);
   useEffect(() => {
     const previous = previousStopsCount.current;
@@ -97,29 +138,99 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     previousStopsCount.current = current;
   }, [route.stops.length, started]);
 
-  // Una parada con novedad (entregada, fallida u omitida) ya no es trabajo
-  // pendiente: sale de la lista y del mapa para que el repartidor no la
-  // confunda con una visita que le falta. No se descarta — queda en el bloque
-  // desplegable de cerradas, con su desenlace.
-  const activeStops = useMemo(() => {
-    return route.stops.filter((s) => !isTerminalStopStatus(s.status));
-  }, [route.stops]);
+  const stopsWithCoords = useMemo(() => route.stops.filter(hasCoordinates), [route.stops]);
 
-  const doneStops = useMemo(() => {
-    return route.stops.filter((s) => isTerminalStopStatus(s.status));
-  }, [route.stops]);
+  const pendingStops = useMemo(
+    () => route.stops.filter((s) => !isVisitedKind(stopVisualKind(s))),
+    [route.stops],
+  );
 
-  const stopsWithCoords = useMemo(() => {
-    return activeStops.filter(
-      (s) => s.latitude !== null && s.longitude !== null && isValidLatLng(s.latitude, s.longitude),
-    );
-  }, [activeStops]);
+  const visitedCount = route.stops.length - pendingStops.length;
 
-  // La primera parada abierta, no la primera `pending`: una parada en
-  // `en_route` o `arrived` es la que el repartidor está haciendo ahora.
-  const nextStop: RouteStopView | null = useMemo(() => {
-    return activeStops[0] ?? null;
-  }, [activeStops]);
+  /** Primera parada abierta por secuencia: la que el chofer está haciendo ahora. */
+  const nextStop: RouteStopView | null = pendingStops[0] ?? null;
+
+  const selectedStop = useMemo(
+    () => route.stops.find((s) => s.id === selectedStopId) ?? null,
+    [route.stops, selectedStopId],
+  );
+
+  const pendingWithCoords = useMemo(() => pendingStops.filter(hasCoordinates), [pendingStops]);
+
+  // Encuadre inicial: una vez por ruta y por cambio en la cantidad de paradas
+  // dibujables. Re-encuadrar en cada recarga le movía el mapa bajo el dedo al
+  // chofer que acababa de hacer zoom sobre su manzana.
+  const fittedKey = useRef<string | null>(null);
+  useEffect(() => {
+    // La polilínea entra en la clave porque llega después del primer encuadre:
+    // sin eso, el recorrido recién optimizado quedaba medio fuera de pantalla.
+    const key = `${route.id}:${stopsWithCoords.length}:${polylineCoords.length > 0 ? 'p' : 'n'}`;
+    if (fittedKey.current === key || mapRef.current === null) {
+      return;
+    }
+    const coords = [
+      ...stopsWithCoords.map((s) => ({ latitude: s.latitude, longitude: s.longitude })),
+      ...polylineCoords,
+    ];
+    if (coords.length === 0) {
+      return;
+    }
+    fittedKey.current = key;
+    mapRef.current.fitToCoordinates(coords, { edgePadding: FIT_PADDING, animated: true });
+  }, [route.id, stopsWithCoords, polylineCoords]);
+
+  // Con la ruta ya en curso, la parada siguiente viene elegida: la ficha de
+  // abajo contesta "¿a dónde voy ahora?" sin pedir un toque. Antes de iniciar
+  // no se auto-elige nada, porque ahí el lugar de abajo lo ocupa "Iniciar ruta",
+  // que es lo único que hay para hacer.
+  const autoSelectedForRoute = useRef<string | null>(null);
+  useEffect(() => {
+    if (!started || autoSelectedForRoute.current === route.id || nextStop === null) {
+      return;
+    }
+    autoSelectedForRoute.current = route.id;
+    setSelectedStopId(nextStop.id);
+  }, [route.id, nextStop, started]);
+
+  const focusStop = useCallback(
+    (stopId: string) => {
+      setSelectedStopId(stopId);
+      const stop = route.stops.find((s) => s.id === stopId);
+      if (stop === undefined || !hasCoordinates(stop) || mapRef.current === null) {
+        return;
+      }
+      mapRef.current.animateCamera(
+        { center: { latitude: stop.latitude, longitude: stop.longitude } },
+        { duration: 350 },
+      );
+    },
+    [route.stops],
+  );
+
+  const navigateToStop = useCallback(
+    (stopId: string) => {
+      const stop = route.stops.find((s) => s.id === stopId);
+      if (stop === undefined || !hasCoordinates(stop)) {
+        return;
+      }
+      void openTurnByTurnNavigation({ latitude: stop.latitude, longitude: stop.longitude });
+    },
+    [route.stops],
+  );
+
+  const openShipmentDetail = useCallback(
+    (shipmentId: string | null) => {
+      if (shipmentId === null) {
+        showToast('Esta parada no tiene un envío asociado.');
+        return;
+      }
+      navigation.navigate('Entregas', {
+        screen: 'DeliveryDetail',
+        params: { shipmentId },
+      });
+    },
+    [navigation],
+  );
 
   const applyOptimizeResult = useCallback(
     (res: { polyline: string; duration: number; distance: number }) => {
@@ -138,6 +249,7 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
       applyOptimizeResult(res);
       await startDriverRoute(route.id);
       await onRefresh();
+      setActionsOpen(false);
     } catch (e) {
       setActionError(messageForShipmentListError(e));
     } finally {
@@ -151,6 +263,7 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     try {
       const res = await optimizeRoute(route.id);
       applyOptimizeResult(res);
+      setActionsOpen(false);
     } catch (e) {
       setActionError(messageForShipmentListError(e));
     } finally {
@@ -165,16 +278,23 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
       try {
         await finishDriverRoute(route.id, { force });
         await onRefresh();
+        setActionsOpen(false);
       } catch (e) {
         const pending = pendingStopsCountFrom(e);
         if (pending !== null) {
+          // El texto nombra la consecuencia, no sólo la cantidad: finalizar
+          // registra esas paradas como entregas fallidas y manda los paquetes a
+          // la cola de reingreso del depósito. Es la acción menos reversible de
+          // la jornada y antes se confirmaba con un "¿de todos modos?".
           Alert.alert(
             'Finalizar ruta',
-            `Quedan ${pending} paradas sin entregar. ¿Finalizar de todos modos?`,
+            pending === 1
+              ? 'Queda 1 parada sin entregar. Al finalizar se registra como entrega fallida y el paquete vuelve al depósito.'
+              : `Quedan ${pending} paradas sin entregar. Al finalizar se registran como entregas fallidas y esos paquetes vuelven al depósito.`,
             [
               { text: 'Cancelar', style: 'cancel' },
               {
-                text: 'Finalizar',
+                text: 'Finalizar y devolver',
                 style: 'destructive',
                 onPress: () => {
                   void finishNow(true);
@@ -192,28 +312,6 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     [route.id, onRefresh],
   );
 
-  const onFinishRoute = useCallback(() => {
-    void finishNow(false);
-  }, [finishNow]);
-
-  useEffect(() => {
-    const coords = [
-      ...stopsWithCoords.map((s) => ({ latitude: s.latitude!, longitude: s.longitude! })),
-      ...polylineCoords,
-    ];
-    if (coords.length === 0 || mapRef.current == null) return;
-    mapRef.current.fitToCoordinates(coords, {
-      edgePadding: { top: 48, right: 48, bottom: 48, left: 48 },
-      animated: true,
-    });
-  }, [stopsWithCoords, polylineCoords]);
-
-  const openGoogleMapsNext = useCallback(() => {
-    if (nextStop === null || nextStop.latitude === null || nextStop.longitude === null) return;
-    const { latitude, longitude } = nextStop;
-    void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`);
-  }, [nextStop]);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -223,315 +321,391 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     }
   }, [onRefresh]);
 
-  const routeColor = theme.colors.success;
+  const centerOnUser = useCallback(async () => {
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== Location.PermissionStatus.GRANTED) {
+        const asked = await Location.requestForegroundPermissionsAsync();
+        if (asked.status !== Location.PermissionStatus.GRANTED) {
+          showToast('Necesitamos tu ubicación para centrarte en el mapa.');
+          return;
+        }
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      mapRef.current?.animateCamera(
+        {
+          center: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          },
+          zoom: 15,
+        },
+        { duration: 400 },
+      );
+    } catch {
+      showToast('No pudimos leer tu ubicación.');
+    }
+  }, []);
+
+  const openMapsLabel = useMemo(() => {
+    const total = pendingWithCoords.length;
+    if (total === 0) {
+      return null;
+    }
+    const usable = navigableStopCount(total);
+    // Nada se recorta en silencio: si el link de Google Maps no entra entero,
+    // el rótulo dice cuántas de cuántas se van a abrir.
+    return usable < total
+      ? `Ver próximas ${usable} de ${total} en Google Maps`
+      : 'Ver en Google Maps';
+  }, [pendingWithCoords.length]);
+
+  const onPressOpenMaps = useCallback(() => {
+    if (pendingWithCoords.length === 0) {
+      return;
+    }
+    void openRouteInGoogleMaps(
+      pendingWithCoords.map((s) => ({ latitude: s.latitude, longitude: s.longitude })),
+    );
+  }, [pendingWithCoords]);
+
+  const etaLabel = useMemo(() => {
+    if (durationSec === null) {
+      return null;
+    }
+    const distance = distanceM !== null ? ` · ${(distanceM / 1000).toFixed(1)} km` : '';
+    return `ETA aprox.: ${formatDrivingDuration(durationSec)}${distance}`;
+  }, [durationSec, distanceM]);
+
+  const initialRegion = useMemo(() => {
+    const anchor = stopsWithCoords[0] ?? null;
+    if (anchor === null) {
+      return FALLBACK_REGION;
+    }
+    return {
+      latitude: anchor.latitude,
+      longitude: anchor.longitude,
+      latitudeDelta: 0.12,
+      longitudeDelta: 0.12,
+    };
+  }, [stopsWithCoords]);
+
   const startedAtLabel = formatStartedAt(route.startedAt);
 
-  const renderStop = (s: RouteStopView, isNext: boolean) => {
-    const done = isTerminalStopStatus(s.status);
-    const localityParts = [s.city, s.state].filter((v): v is string => v !== null);
-    const localityLine =
-      localityParts.length > 0 || s.postalCode !== null
-        ? [localityParts.join(', '), s.postalCode !== null ? `CP ${s.postalCode}` : null]
-            .filter((v): v is string => v !== null && v !== '')
-            .join(' · ')
-        : null;
-    return (
-      <View
-        key={s.id}
-        style={[styles.stopRow, isNext && styles.stopRowNext, done && styles.stopRowDone]}
-      >
-        <Text style={[styles.stopSeq, done && styles.stopSeqDone]}>{s.sequence}</Text>
-        <View style={styles.stopBody}>
-          <Text style={styles.stopTitle}>
-            {isNext ? 'Siguiente · ' : ''}Parada {s.sequence}
-          </Text>
-          <Text style={styles.muted} numberOfLines={2}>
-            {s.label ?? '—'}
-          </Text>
-          {localityLine !== null && (
-            <Text style={styles.mutedSmall} numberOfLines={1}>
-              {localityLine}
-            </Text>
-          )}
-          <Text style={[styles.stopStatus, done && styles.stopStatusDone]}>
-            {routeStopStatusLabel(s.status)}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  const mapBlock =
-    Platform.OS === 'web' ? (
-      <View style={styles.mapPlaceholder}>
-        <Text style={styles.muted}>El mapa no está disponible en web.</Text>
-      </View>
-    ) : (
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        showsUserLocation
-        showsMyLocationButton
-        initialRegion={{
-          latitude: stopsWithCoords[0]?.latitude ?? polylineCoords[0]?.latitude ?? -34.6037,
-          longitude: stopsWithCoords[0]?.longitude ?? polylineCoords[0]?.longitude ?? -58.3816,
-          latitudeDelta: 0.08,
-          longitudeDelta: 0.08,
-        }}
-      >
-        {polylineCoords.length >= 2 && (
-          <Polyline coordinates={polylineCoords} strokeColor={routeColor} strokeWidth={4} />
-        )}
-        {stopsWithCoords.map((s) => {
-          const isNext = nextStop !== null && s.id === nextStop.id;
-          return (
-            <Marker
-              key={s.id}
-              coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
-              title={isNext ? 'Siguiente parada' : `Parada ${s.sequence}`}
-              description={s.label ?? s.shipmentId?.slice(0, 8) ?? ''}
-              pinColor={Platform.OS === 'ios' ? (isNext ? 'red' : 'green') : undefined}
-            />
-          );
-        })}
-      </MapView>
-    );
-
-  const canShowEta = durationSec !== null && (started || finished);
-
   return (
-    <ScreenContainer
-      scroll
-      scrollViewProps={{
-        refreshControl: (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.colors.primary}
-            colors={[theme.colors.primary]}
+    <View style={styles.root}>
+      {Platform.OS === 'web' ? (
+        <View style={styles.webPlaceholder}>
+          <Ionicons name="map-outline" size={48} color={theme.colors.muted} />
+          <Text style={styles.webPlaceholderText}>El mapa no está disponible en web.</Text>
+        </View>
+      ) : (
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          initialRegion={initialRegion}
+          showsUserLocation
+          showsMyLocationButton={false}
+          showsCompass={false}
+          toolbarEnabled={false}
+          onPress={() => setSelectedStopId(null)}
+        >
+          {polylineCoords.length >= 2 ? (
+            <Polyline
+              coordinates={polylineCoords}
+              strokeColor={theme.colors.primary}
+              strokeWidth={5}
+            />
+          ) : null}
+          {stopsWithCoords.map((stop) => (
+            <StopMarker
+              key={stop.id}
+              stop={stop}
+              selected={stop.id === selectedStopId}
+              onPress={focusStop}
+            />
+          ))}
+        </MapView>
+      )}
+
+      <RouteProgressHeader
+        visited={visitedCount}
+        total={route.stops.length}
+        insetTop={insets.top}
+        openMapsLabel={openMapsLabel}
+        onPressOpenMaps={onPressOpenMaps}
+        onPressRefresh={() => void handleRefresh()}
+        refreshing={refreshing}
+      />
+
+      <View style={styles.sideControls} pointerEvents="box-none">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Centrar en mi ubicación"
+          onPress={() => void centerOnUser()}
+          style={({ pressed }) => [styles.fabLight, pressed && styles.pressed]}
+        >
+          <Ionicons name="locate" size={22} color={theme.colors.primary} />
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Acciones de la ruta"
+          onPress={() => setActionsOpen(true)}
+          style={({ pressed }) => [styles.fabLight, pressed && styles.pressed]}
+        >
+          <Ionicons
+            name={finished ? 'flag-outline' : started ? 'ellipsis-horizontal' : 'play'}
+            size={22}
+            color={theme.colors.primary}
           />
-        ),
-      }}
-    >
-      {started && startedAtLabel !== null && (
-        <View style={styles.statusChip}>
-          <Text style={styles.statusChipText}>En curso desde {startedAtLabel}</Text>
-        </View>
-      )}
-      {finished && (
-        <View style={[styles.statusChip, styles.statusChipFinished]}>
-          <Text style={styles.statusChipText}>Ruta finalizada</Text>
-        </View>
-      )}
+        </Pressable>
 
-      {mapBlock}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Ver la lista de ${route.stops.length} paradas`}
+          onPress={() => setListOpen(true)}
+          style={({ pressed }) => [styles.fabPrimary, pressed && styles.pressed]}
+        >
+          <Ionicons name="list" size={24} color={ON_PRIMARY_INK} />
+        </Pressable>
+      </View>
 
-      <View style={styles.actions}>
-        {!started && !finished && (
-          <Button
-            variant="primary"
-            loading={busy === 'start'}
+      {/*
+        Un solo lugar abajo, con precedencia: lo que el chofer acaba de tocar
+        gana siempre. Mirar una parada antes de arrancar es legítimo, y taparle
+        la ficha con "Iniciar ruta" sería contestarle otra cosa de la que
+        preguntó — iniciar sigue a mano en el botón lateral de acciones.
+      */}
+      {selectedStop !== null ? (
+        <StopPreviewCard
+          stop={selectedStop}
+          canNavigate={hasCoordinates(selectedStop)}
+          onPressNavigate={() => navigateToStop(selectedStop.id)}
+          onPressDetail={() => openShipmentDetail(selectedStop.shipmentId)}
+          onClose={() => setSelectedStopId(null)}
+          insetBottom={insets.bottom}
+        />
+      ) : !started && !finished ? (
+        <View style={[styles.startBar, { paddingBottom: theme.spacing.md + insets.bottom }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Iniciar ruta"
+            accessibilityState={{ disabled: busy !== null }}
             disabled={busy !== null}
             onPress={() => void onStartRoute()}
+            style={({ pressed }) => [
+              styles.startButton,
+              busy !== null && styles.startButtonBusy,
+              pressed && busy === null && styles.pressed,
+            ]}
           >
-            Iniciar ruta
-          </Button>
-        )}
-        {started && (
-          <>
-            <Button
-              variant="primary"
-              loading={busy === 'reoptimize'}
-              disabled={busy !== null}
-              onPress={() => void onReoptimize()}
-            >
-              Re-optimizar
-            </Button>
-            <Button
-              variant="outline"
-              loading={busy === 'finish'}
-              disabled={busy !== null}
-              onPress={onFinishRoute}
-            >
-              Finalizar ruta
-            </Button>
-          </>
-        )}
-        {canShowEta && (
-          <Text style={styles.eta}>
-            ETA aprox.: {formatDrivingDuration(durationSec!)}
-            {distanceM !== null ? ` · ${(distanceM / 1000).toFixed(1)} km` : ''}
-          </Text>
-        )}
-        {actionError != null && <Text style={styles.errorText}>{actionError}</Text>}
-        {nextStop !== null && nextStop.latitude !== null && nextStop.longitude !== null && started && (
-          <Button variant="outline" onPress={openGoogleMapsNext}>
-            Abrir siguiente en Google Maps
-          </Button>
-        )}
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Paradas</Text>
-        <Text style={styles.muted}>
-          {doneStops.length} de {route.stops.length} con novedad
-        </Text>
-      </View>
-
-      {activeStops.length === 0 ? (
-        <Text style={styles.allDone}>
-          Todas las paradas de esta ruta ya tienen novedad.
-        </Text>
-      ) : (
-        activeStops.map((s) => renderStop(s, nextStop !== null && s.id === nextStop.id))
-      )}
-
-      {doneStops.length > 0 && (
-        <>
-          <Pressable
-            onPress={() => setShowDone((v) => !v)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showDone }}
-            style={styles.doneToggle}
-          >
-            <Text style={styles.doneToggleText}>
-              {showDone ? 'Ocultar' : 'Ver'} paradas cerradas ({doneStops.length})
+            <Ionicons name="play" size={18} color={ON_PRIMARY_INK} />
+            <Text style={styles.startButtonLabel}>
+              {busy === 'start' ? 'Iniciando…' : 'Iniciar ruta'}
             </Text>
           </Pressable>
-          {showDone && doneStops.map((s) => renderStop(s, false))}
-        </>
-      )}
-    </ScreenContainer>
+          <Text style={styles.startHint}>
+            Saca a reparto los {route.stops.length} envíos de la ruta.
+          </Text>
+        </View>
+      ) : nextStop !== null ? (
+        <View style={[styles.nextBar, { paddingBottom: theme.spacing.md + insets.bottom }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Siguiente parada: ${formatStopAddress(nextStop)}`}
+            onPress={() => focusStop(nextStop.id)}
+            style={({ pressed }) => [styles.nextPill, pressed && styles.pressed]}
+          >
+            <Ionicons name="navigate" size={16} color={theme.colors.primary} />
+            <Text style={styles.nextPillText} numberOfLines={1}>
+              Siguiente: {formatStopAddress(nextStop)}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <StopListSheet
+        visible={listOpen}
+        stops={route.stops}
+        selectedStopId={selectedStopId}
+        onClose={() => setListOpen(false)}
+        onPressStop={(stopId) => {
+          setListOpen(false);
+          focusStop(stopId);
+        }}
+        onPressNavigate={navigateToStop}
+        insetTop={insets.top}
+        insetBottom={insets.bottom}
+      />
+
+      <RouteActionsSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        started={started}
+        finished={finished}
+        startedAtLabel={startedAtLabel}
+        busy={busy}
+        etaLabel={etaLabel}
+        error={actionError}
+        onStart={() => void onStartRoute()}
+        onReoptimize={() => void onReoptimize()}
+        onFinish={() => void finishNow(false)}
+        insetBottom={insets.bottom}
+      />
+    </View>
   );
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
-    map: {
-      width: '100%',
-      height: 260,
-      borderRadius: spacing.radiusLg,
-      overflow: 'hidden',
-      marginBottom: spacing.md,
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
     },
-    mapPlaceholder: {
-      width: '100%',
-      height: 260,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+    webPlaceholder: {
+      ...StyleSheet.absoluteFillObject,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: spacing.md,
+      gap: spacing.md,
+      backgroundColor: colors.surfaceMuted,
     },
-    actions: {
-      gap: spacing.sm,
-      marginBottom: spacing.lg,
-    },
-    eta: {
-      ...typography.caption,
-      color: colors.text,
-      textAlign: 'center',
-    },
-    sectionHeader: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      justifyContent: 'space-between',
-      marginBottom: spacing.sm,
-    },
-    sectionTitle: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    allDone: {
+    webPlaceholderText: {
       ...typography.body,
       color: colors.muted,
-      textAlign: 'center',
-      paddingVertical: spacing.lg,
     },
-    doneToggle: {
-      alignSelf: 'center',
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
+    sideControls: {
+      position: 'absolute',
+      right: spacing.lg,
+      bottom: 180,
+      gap: spacing.sm,
+      alignItems: 'flex-end',
     },
-    doneToggleText: {
-      ...typography.caption,
-      color: colors.primary,
-    },
-    muted: {
-      ...typography.caption,
-      color: colors.muted,
-    },
-    mutedSmall: {
-      ...typography.caption,
-      color: colors.muted,
-      fontSize: 11,
-      marginTop: 2,
-    },
-    errorText: {
-      ...typography.caption,
-      color: colors.danger,
-      textAlign: 'center',
-    },
-    statusChip: {
-      alignSelf: 'flex-start',
+    fabLight: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.surface,
-      borderColor: colors.primary,
-      borderWidth: 1,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
-      marginBottom: spacing.sm,
-    },
-    statusChipFinished: {
-      borderColor: colors.muted,
-    },
-    statusChipText: {
-      ...typography.caption,
-      color: colors.text,
-    },
-    stopRow: {
-      flexDirection: 'row',
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      marginBottom: spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOpacity: 0.2,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 2 },
+        },
+        android: { elevation: 5 },
+        default: {},
+      }),
     },
-    stopRowNext: {
-      borderColor: colors.primary,
-      borderWidth: 2,
+    fabPrimary: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.primary,
+          shadowOpacity: 0.45,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        android: { elevation: 8 },
+        default: {},
+      }),
     },
-    stopRowDone: {
-      opacity: 0.6,
+    startBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: spacing.radiusCard + 6,
+      borderTopRightRadius: spacing.radiusCard + 6,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOpacity: 0.22,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: -4 },
+        },
+        android: { elevation: 16 },
+        default: {},
+      }),
     },
-    stopSeq: {
+    startButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      minHeight: 54,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.primary,
+    },
+    startButtonBusy: {
+      opacity: 0.7,
+    },
+    startButtonLabel: {
       ...typography.bodyStrong,
-      color: colors.primary,
-      width: 28,
-      marginRight: spacing.sm,
+      fontSize: 17,
+      color: ON_PRIMARY_INK,
     },
-    stopSeqDone: {
-      color: colors.muted,
-    },
-    stopStatus: {
+    startHint: {
       ...typography.caption,
-      color: colors.primary,
-      marginTop: 2,
-    },
-    stopStatusDone: {
       color: colors.muted,
+      textAlign: 'center',
+      marginTop: spacing.sm,
     },
-    stopBody: {
-      flex: 1,
+    nextBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
     },
-    stopTitle: {
+    nextPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      minHeight: 48,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOpacity: 0.18,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 2 },
+        },
+        android: { elevation: 6 },
+        default: {},
+      }),
+    },
+    nextPillText: {
       ...typography.bodyStrong,
       color: colors.text,
+      flex: 1,
+      minWidth: 0,
+    },
+    pressed: {
+      opacity: motion.pressOpacitySoft,
+      transform: [{ scale: motion.pressScale }],
     },
   });
 }

@@ -10,6 +10,7 @@ import { DeliveryShipmentActions } from './components/DeliveryShipmentActions';
 import { DeliveryShipmentDetailHeader } from './components/DeliveryShipmentDetailHeader';
 import { DeliveryShipmentDetailSkeleton } from './components/DeliveryShipmentDetailSkeleton';
 import { DeliveryShipmentTimeline } from './components/DeliveryShipmentTimeline';
+import { FlexHandoffCard } from './components/FlexHandoffCard';
 import { DeliveryDeliveredModal } from './DeliveryDeliveredModal';
 import { DeliveryFailedModal } from './DeliveryFailedModal';
 import { useDeliveryShipmentDetail } from './hooks/useDeliveryShipmentDetail';
@@ -47,6 +48,11 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               addressTypeCode={detail.addressTypeCode}
             />
             <View style={shell.headerDivider} />
+            {detail.isFlex ? (
+              <View style={shell.flexHandoff}>
+                <FlexHandoffCard statusCode={detail.effectiveStatusCode} />
+              </View>
+            ) : null}
             <DeliveryShipmentTimeline steps={detail.timelineSteps} />
             <View style={shell.actionsSection}>
               <DeliveryShipmentActions
@@ -80,6 +86,9 @@ function createShellStyles(t: ReturnType<typeof useTheme>) {
   return StyleSheet.create({
     content: {
       paddingBottom: spacing.xxl + spacing.lg,
+    },
+    flexHandoff: {
+      marginBottom: spacing.xl,
     },
     headerDivider: {
       height: StyleSheet.hairlineWidth,

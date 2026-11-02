@@ -1,13 +1,44 @@
 import { apiClient } from './client';
 
+/**
+ * Clase de domicilio del destino. Espeja `App\Domains\Shipments\Enums\DestinationAddressType`.
+ *
+ * Nunca es `null`: un backend anterior a la columna `address_type_code` —o una
+ * fila histórica sin clasificar— cae en `'unknown'`, que es una respuesta, no
+ * una ausencia. El mapa lo usa para elegir el ícono de la parada, y "no
+ * sabemos" tiene que dibujarse distinto de "es una casa".
+ */
+export type StopAddressTypeCode = 'residential' | 'commercial' | 'store' | 'unknown';
+
+const ADDRESS_TYPE_CODES: ReadonlySet<string> = new Set([
+  'residential',
+  'commercial',
+  'store',
+  'unknown',
+]);
+
 export type RouteStopView = {
   id: string;
   sequence: number;
   status: string;
   shipmentId: string | null;
+  /** Tracking del envío: la etiqueta que el chofer lee sobre el paquete. */
+  tracking: string | null;
+  /**
+   * `status_code` del envío.
+   *
+   * No es lo mismo que `status` (el de la parada): la parada la cierra la ruta,
+   * el envío lo cierra la entrega, y entre un evento y el otro hay una cola de
+   * sincronización offline. En el mapa manda el estado del envío cuando existe,
+   * porque es el que el chofer acaba de tocar.
+   */
+  shipmentStatus: string | null;
   latitude: number | null;
   longitude: number | null;
   label: string | null;
+  addressLine2: string | null;
+  reference: string | null;
+  addressTypeCode: StopAddressTypeCode;
   city: string | null;
   state: string | null;
   postalCode: string | null;
@@ -40,6 +71,18 @@ function toFiniteNumber(v: unknown): number | null {
   return null;
 }
 
+function toTrimmedStringOrNull(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() !== '' ? v : null;
+}
+
+function toAddressTypeCode(v: unknown): StopAddressTypeCode {
+  if (typeof v !== 'string') {
+    return 'unknown';
+  }
+  const normalized = v.trim().toLowerCase();
+  return ADDRESS_TYPE_CODES.has(normalized) ? (normalized as StopAddressTypeCode) : 'unknown';
+}
+
 function normalizeRouteStop(raw: unknown): RouteStopView | null {
   if (raw === null || typeof raw !== 'object') {
     return null;
@@ -57,21 +100,31 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
   let lat: number | null = null;
   let lng: number | null = null;
   let label: string | null = null;
+  let addressLine2: string | null = null;
+  let reference: string | null = null;
+  let addressTypeCode: StopAddressTypeCode = 'unknown';
   let city: string | null = null;
   let state: string | null = null;
   let postalCode: string | null = null;
+  let tracking: string | null = null;
+  let shipmentStatus: string | null = null;
   const shipment = o.shipment;
   if (shipment !== null && typeof shipment === 'object') {
-    const dest = (shipment as Record<string, unknown>).destination;
+    const sh = shipment as Record<string, unknown>;
+    tracking = toTrimmedStringOrNull(sh.tracking);
+    shipmentStatus = toTrimmedStringOrNull(sh.status_code);
+    const dest = sh.destination;
     if (dest !== null && typeof dest === 'object') {
       const d = dest as Record<string, unknown>;
       lat = toFiniteNumber(d.latitude);
       lng = toFiniteNumber(d.longitude);
-      label = typeof d.address_line1 === 'string' ? d.address_line1 : null;
-      city = typeof d.city === 'string' && d.city.trim() !== '' ? d.city : null;
-      state = typeof d.state === 'string' && d.state.trim() !== '' ? d.state : null;
-      postalCode =
-        typeof d.postal_code === 'string' && d.postal_code.trim() !== '' ? d.postal_code : null;
+      label = toTrimmedStringOrNull(d.address_line1);
+      addressLine2 = toTrimmedStringOrNull(d.address_line2);
+      reference = toTrimmedStringOrNull(d.reference);
+      addressTypeCode = toAddressTypeCode(d.address_type_code);
+      city = toTrimmedStringOrNull(d.city);
+      state = toTrimmedStringOrNull(d.state);
+      postalCode = toTrimmedStringOrNull(d.postal_code);
     }
   }
   return {
@@ -79,9 +132,14 @@ function normalizeRouteStop(raw: unknown): RouteStopView | null {
     sequence: seq,
     status,
     shipmentId,
+    tracking,
+    shipmentStatus,
     latitude: lat,
     longitude: lng,
     label,
+    addressLine2,
+    reference,
+    addressTypeCode,
     city,
     state,
     postalCode,

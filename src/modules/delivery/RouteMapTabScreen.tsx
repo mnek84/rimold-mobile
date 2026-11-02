@@ -2,6 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from '@components/ui';
@@ -11,16 +12,20 @@ import { useTheme, type AppTheme } from '@theme';
 import { InternalRouteContent } from './InternalRouteContent';
 
 /**
- * Bottom tab "Ruta" for drivers.
+ * Bottom tab "Paradas" for drivers.
  *
  * Auto-syncs on focus: every time the tab gains focus we POST /driver/routes
  * (idempotent) so the backend adds any shipments assigned since the last sync
  * to today's active Route as new stops. The response is the full Route, which
  * we render directly — no separate "Crear ruta" CTA.
+ *
+ * The tab renders without a navigation header so the map reaches the top of the
+ * screen; every state below therefore pads for the status bar itself.
  */
 export function RouteMapTabScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
 
   const [route, setRoute] = useState<DriverRouteView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,9 +67,11 @@ export function RouteMapTabScreen() {
     await sync('refresh');
   }, [sync]);
 
+  const emptyPadding = { paddingTop: insets.top + theme.spacing.xxl };
+
   if (loading && route === null) {
     return (
-      <View style={styles.empty}>
+      <View style={[styles.empty, emptyPadding]}>
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
@@ -72,7 +79,7 @@ export function RouteMapTabScreen() {
 
   if (error !== null && route === null) {
     return (
-      <View style={styles.empty}>
+      <View style={[styles.empty, emptyPadding]}>
         <Ionicons name="alert-circle-outline" size={48} color={theme.colors.danger} />
         <Text style={styles.emptyTitle}>No pudimos cargar la ruta</Text>
         <Text style={styles.emptySubtitle}>{error}</Text>
@@ -87,12 +94,17 @@ export function RouteMapTabScreen() {
 
   if (empty || route === null || route.stops.length === 0) {
     return (
-      <View style={styles.empty}>
+      <View style={[styles.empty, emptyPadding]}>
         <Ionicons name="map-outline" size={48} color={theme.colors.muted} />
         <Text style={styles.emptyTitle}>Sin envíos asignados</Text>
         <Text style={styles.emptySubtitle}>
-          Cuando tengas envíos asignados vas a poder ver tu ruta desde acá.
+          Cuando tengas envíos asignados vas a ver todas tus paradas en el mapa.
         </Text>
+        <View style={styles.actions}>
+          <Button variant="outline" onPress={() => void sync('initial')}>
+            Actualizar
+          </Button>
+        </View>
       </View>
     );
   }

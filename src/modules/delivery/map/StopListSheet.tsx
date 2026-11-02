@@ -1,0 +1,298 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useMemo } from 'react';
+import { Modal, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+
+import type { RouteStopView } from '@core/api/routes';
+import { useTheme, type AppTheme } from '@theme';
+
+import {
+  formatStopAddress,
+  formatStopLocality,
+  hasCoordinates,
+  isVisitedKind,
+  stopStatusLabel,
+  stopVisualKind,
+  stopVisualStyle,
+} from './stopPresentation';
+
+type Section = { title: string; data: RouteStopView[] };
+
+type Props = {
+  visible: boolean;
+  stops: RouteStopView[];
+  selectedStopId: string | null;
+  onClose: () => void;
+  /** Centra el mapa en la parada y la selecciona. Cierra la hoja. */
+  onPressStop: (stopId: string) => void;
+  onPressNavigate: (stopId: string) => void;
+  insetTop: number;
+  insetBottom: number;
+};
+
+/**
+ * La lista completa, a un toque del mapa.
+ *
+ * Dos secciones y no cuatro: lo que falta y lo que ya tiene novedad. El mapa
+ * responde "dónde"; esta hoja responde "qué me queda", que es la pregunta que
+ * se hace con el auto detenido.
+ */
+export function StopListSheet({
+  visible,
+  stops,
+  selectedStopId,
+  onClose,
+  onPressStop,
+  onPressNavigate,
+  insetTop,
+  insetBottom,
+}: Props) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const sections = useMemo<Section[]>(() => {
+    const pending: RouteStopView[] = [];
+    const visited: RouteStopView[] = [];
+    for (const stop of stops) {
+      (isVisitedKind(stopVisualKind(stop)) ? visited : pending).push(stop);
+    }
+    return [
+      { title: `Por visitar (${pending.length})`, data: pending },
+      { title: `Con novedad (${visited.length})`, data: visited },
+    ].filter((section) => section.data.length > 0);
+  }, [stops]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: RouteStopView }) => {
+      const kind = stopVisualKind(item);
+      const visual = stopVisualStyle(theme, kind, item.addressTypeCode);
+      const locality = formatStopLocality(item);
+      const navigable = hasCoordinates(item);
+      const selected = item.id === selectedStopId;
+
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Parada ${item.sequence}. ${formatStopAddress(item)}. ${stopStatusLabel(item)}.`}
+          accessibilityHint="Centra la parada en el mapa"
+          onPress={() => onPressStop(item.id)}
+          style={({ pressed }) => [
+            styles.row,
+            selected && styles.rowSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={[styles.rowIcon, { backgroundColor: visual.fill, borderColor: visual.ring }]}>
+            <Ionicons name={visual.icon} size={17} color={visual.iconColor} />
+          </View>
+
+          <View style={styles.rowTexts}>
+            <Text style={styles.rowAddress} numberOfLines={1}>
+              {formatStopAddress(item)}
+            </Text>
+            {locality !== null ? (
+              <Text style={styles.rowLocality} numberOfLines={1}>
+                {locality}
+              </Text>
+            ) : null}
+            <Text style={styles.rowMeta} numberOfLines={1}>
+              Parada {item.sequence} · {stopStatusLabel(item)}
+            </Text>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Ir a la parada ${item.sequence}`}
+            accessibilityState={{ disabled: !navigable }}
+            disabled={!navigable}
+            hitSlop={8}
+            onPress={() => onPressNavigate(item.id)}
+            style={({ pressed }) => [
+              styles.rowGo,
+              !navigable && styles.rowGoDisabled,
+              pressed && navigable && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name="navigate"
+              size={18}
+              color={navigable ? theme.colors.primary : theme.colors.muted}
+            />
+          </Pressable>
+        </Pressable>
+      );
+    },
+    [onPressNavigate, onPressStop, selectedStopId, styles, theme],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: Section }) => (
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
+      </View>
+    ),
+    [styles],
+  );
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Cerrar la lista"
+        style={[styles.backdrop, { paddingTop: insetTop + 64 }]}
+        onPress={onClose}
+      >
+        {/* El panel detiene el toque: tocar la lista no cierra la hoja. */}
+        <Pressable style={styles.panel} onPress={() => undefined}>
+          <View style={styles.handle} />
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Paradas de hoy</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar"
+              onPress={onClose}
+              hitSlop={10}
+              style={({ pressed }) => [styles.headerClose, pressed && styles.pressed]}
+            >
+              <Ionicons name="close" size={20} color={theme.colors.muted} />
+            </Pressable>
+          </View>
+
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled={false}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insetBottom + theme.spacing.xxl },
+            ]}
+            ListEmptyComponent={
+              <Text style={styles.empty}>No tenés paradas asignadas para hoy.</Text>
+            }
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function createStyles(t: AppTheme) {
+  const { colors, spacing, typography, motion } = t;
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      justifyContent: 'flex-end',
+    },
+    panel: {
+      flex: 1,
+      backgroundColor: colors.background,
+      borderTopLeftRadius: spacing.radiusCard + 6,
+      borderTopRightRadius: spacing.radiusCard + 6,
+      overflow: 'hidden',
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      marginTop: spacing.sm,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    headerTitle: {
+      ...typography.subtitle,
+      color: colors.text,
+    },
+    headerClose: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 16,
+      backgroundColor: colors.surfaceMuted,
+    },
+    listContent: {
+      paddingHorizontal: spacing.lg,
+    },
+    sectionHeader: {
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.sm,
+    },
+    sectionTitle: {
+      ...typography.captionStrong,
+      color: colors.muted,
+      letterSpacing: 1.1,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      marginBottom: spacing.sm,
+    },
+    rowSelected: {
+      borderColor: colors.primary,
+      borderWidth: 2,
+    },
+    rowIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowTexts: {
+      flex: 1,
+      minWidth: 0,
+    },
+    rowAddress: {
+      ...typography.bodyStrong,
+      color: colors.text,
+    },
+    rowLocality: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: 1,
+    },
+    rowMeta: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: 2,
+    },
+    rowGo: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surfaceMuted,
+    },
+    rowGoDisabled: {
+      opacity: 0.45,
+    },
+    empty: {
+      ...typography.body,
+      color: colors.muted,
+      textAlign: 'center',
+      paddingVertical: spacing.xxl,
+    },
+    pressed: {
+      opacity: motion.pressOpacitySoft,
+    },
+  });
+}

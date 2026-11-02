@@ -2,7 +2,7 @@
   "expo": {
     "name": "mobile",
     "slug": "mobile",
-    "version": "1.8.0",
+    "version": "1.10.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mobile",
@@ -81,7 +81,8 @@
           "icon": "./assets/adaptive-icon.png",
           "color": "#0ea5e9"
         }
-      ]
+      ],
+      "./plugins/withFlexAppQuery"
     ],
     "extra": {
       "eas": {

@@ -33,8 +33,8 @@ function devolucionesTabBarIcon({ color, size }: { color: string; size: number }
   return <Ionicons name="return-down-back-outline" size={size} color={color} />;
 }
 
-function rutaMapaTabBarIcon({ color, size }: { color: string; size: number }) {
-  return <Ionicons name="map-outline" size={size} color={color} />;
+function paradasTabBarIcon({ color, size }: { color: string; size: number }) {
+  return <Ionicons name="location" size={size} color={color} />;
 }
 
 function bodegaTabBarIcon({ color, size }: { color: string; size: number }) {
@@ -115,6 +115,23 @@ export function AppNavigator() {
       <NotificationListener />
       {canSeeDriverTabs ? <DriverLocationPermissionGate /> : null}
       <Tab.Navigator screenOptions={tabScreenOptions}>
+        {/*
+          "Paradas" va primero a propósito: es el mapa con el reparto completo y
+          lo primero que el chofer mira al abrir la app, igual que en Flex. El
+          header va oculto para que el mapa llegue hasta el borde superior — la
+          franja de progreso de la pantalla hace de cabecera.
+        */}
+        {canSeeDriverTabs ? (
+          <Tab.Screen
+            name="RutaMapa"
+            component={RouteMapTabScreen}
+            options={{
+              headerShown: false,
+              title: 'Paradas',
+              tabBarIcon: paradasTabBarIcon,
+            }}
+          />
+        ) : null}
         {canSeeDriverTabs ? (
           <Tab.Screen
             name="Colecta"
@@ -142,16 +159,6 @@ export function AppNavigator() {
             options={{
               headerShown: false,
               tabBarIcon: devolucionesTabBarIcon,
-            }}
-          />
-        ) : null}
-        {canSeeDriverTabs ? (
-          <Tab.Screen
-            name="RutaMapa"
-            component={RouteMapTabScreen}
-            options={{
-              title: 'Ruta',
-              tabBarIcon: rutaMapaTabBarIcon,
             }}
           />
         ) : null}
