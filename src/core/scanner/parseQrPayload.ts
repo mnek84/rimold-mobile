@@ -1,4 +1,8 @@
-import { isMercadoLibreShipmentNumber, parseMercadoLibreQR } from './parseMercadoLibreQR';
+import {
+  isMercadoLibreShipmentNumber,
+  parseMercadoLibreJsonLoose,
+  parseMercadoLibreQR,
+} from './parseMercadoLibreQR';
 import type { ScannedPackage, ScannerParseResult } from './types';
 
 export const INTERNAL_QR_PREFIX = 'TRK_' as const;
@@ -198,6 +202,22 @@ export function parseQrPayload(raw: string): ScannerParseResult {
       raw: trimmed,
       type: 'internal',
       trackingId: trimmed.slice(INTERNAL_QR_PREFIX.length),
+      reference: null,
+      package: null,
+    };
+  }
+
+  // Otro JSON cuyo `id` es un número de envío de ML (p. ej. `{"id":"4…","t":"lm"}`). Antes caía
+  // en `external` y el chofer veía "El paquete no existe". Va después de los formatos internos
+  // para que nuestra etiqueta `{"id","bulk","bulks"}` siga ganando.
+  const mlLoose = parseMercadoLibreJsonLoose(trimmed);
+  if (mlLoose !== null) {
+    return {
+      raw: trimmed,
+      type: 'mercadolibre',
+      trackingId: mlLoose.id,
+      clientId: mlLoose.sender_id,
+      mlFormat: mlLoose.sender_id !== null ? 'flex_json' : 'shipment_number',
       reference: null,
       package: null,
     };
