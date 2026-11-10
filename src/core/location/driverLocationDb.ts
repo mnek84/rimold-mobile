@@ -101,7 +101,15 @@ export async function insertPendingLocation(input: Omit<PendingLocation, 'id' | 
   );
 }
 
-/** Oldest unsynced rows ready for upload (respects exponential backoff). */
+/**
+ * Newest unsynced rows ready for upload (respects exponential backoff).
+ *
+ * Newest first on purpose: with a backlog, oldest-first meant the server only
+ * ever saw where the driver was hours or days ago — the live map showed a
+ * position from a week back while the queue drained at 20 points / 10 s. The
+ * backend keeps `last_known_at` monotonic and sorts each batch, so sending the
+ * backlog in reverse is safe.
+ */
 export async function selectPendingBatchForSync(nowMs: number, limit: number): Promise<PendingLocationRow[]> {
   const db = await getDb();
   if (db === null) {
@@ -123,12 +131,25 @@ export async function selectPendingBatchForSync(nowMs: number, limit: number): P
     `SELECT id, lat, lng, heading, speed, accuracy, timestamp, pickup_order_id, synced, attempts, next_retry_at
      FROM pending_locations
      WHERE synced = 0 AND (next_retry_at IS NULL OR next_retry_at <= ?)
-     ORDER BY timestamp ASC
+     ORDER BY timestamp DESC
      LIMIT ?`,
     nowMs,
     limit,
   );
   return rows.map(rowToPending);
+}
+
+/**
+ * Drop queued fixes older than `cutoffMs`. The server purges its point history
+ * after 24 h, so anything older is never live and never history — only a
+ * backlog that keeps the queue from catching up.
+ */
+export async function deletePendingOlderThan(cutoffMs: number): Promise<void> {
+  const db = await getDb();
+  if (db === null) {
+    return;
+  }
+  await db.runAsync(`DELETE FROM pending_locations WHERE timestamp < ?`, cutoffMs);
 }
 
 export async function deletePendingByIds(ids: string[]): Promise<void> {
