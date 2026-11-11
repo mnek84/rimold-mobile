@@ -5,6 +5,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RouteStopView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
+import { ChannelBadge } from '../components/ChannelBadge';
+import { formatDriverShipmentStatusLabel } from '../deliveryStatus';
 import { ON_PRIMARY_INK } from './onPrimaryInk';
 import {
   addressTypeLabel,
@@ -25,7 +27,20 @@ type Props = {
   onClose: () => void;
   /** Alto de la barra de gestos del sistema. */
   insetBottom: number;
+  /** Abre el detalle de un envío puntual del grupo (vista unificada). */
+  onPressShipment?: (shipmentId: string) => void;
 };
+
+/**
+ * Rótulo de posición. Las secuencias ≥ 10000 las pone la vista unificada a los
+ * puntos que no están en la ruta interna (sólo Flex) y ≥ 20000 a los no
+ * ubicables: no son "Parada 10003", y decirlo así confundiría al chofer.
+ */
+export function stopPositionLabel(stop: RouteStopView): string {
+  if (stop.unlocatableReason != null) return 'Sin ubicación en el mapa';
+  if (stop.sequence >= 10_000) return 'Fuera de la ruta propia';
+  return `Parada ${stop.sequence}`;
+}
 
 function statusColor(t: AppTheme, kind: StopVisualKind): string {
   switch (kind) {
@@ -56,6 +71,7 @@ export function StopPreviewCard({
   onPressDetail,
   onClose,
   insetBottom,
+  onPressShipment,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -116,10 +132,48 @@ export function StopPreviewCard({
             </Text>
           ) : null}
           <Text style={styles.tracking} numberOfLines={1}>
-            {tracking !== null ? `Parada ${stop.sequence} · ${tracking}` : `Parada ${stop.sequence}`}
+            {tracking !== null ? `${stopPositionLabel(stop)} · ${tracking}` : stopPositionLabel(stop)}
           </Text>
+          {stop.groupShipments !== undefined && stop.groupShipments.length === 1 ? (
+            <ChannelBadge channel={stop.groupShipments[0].channel} compact />
+          ) : null}
         </View>
       </Pressable>
+
+      {stop.locationConflict === true ? (
+        <Text style={styles.noCoords}>
+          Hay envíos con esta misma dirección marcados a más de 30 m entre sí: revisá el número antes de entregar.
+        </Text>
+      ) : null}
+
+      {stop.groupShipments !== undefined && stop.groupShipments.length > 1 ? (
+        <View style={styles.groupList} accessibilityLabel={`${stop.groupShipments.length} envíos en este punto`}>
+          {stop.groupShipments.map((g) => {
+            const flex = g.channel.operator === 'mercadolibre_flex';
+            const status = flex && g.externalStatus !== null
+              ? `ML: ${g.externalStatus}`
+              : formatDriverShipmentStatusLabel(g.statusCode ?? '');
+            return (
+              <Pressable
+                key={g.shipmentId}
+                accessibilityRole="button"
+                accessibilityLabel={`Envío ${g.tracking ?? ''}, ${g.channel.label}, ${status}`}
+                onPress={() => onPressShipment?.(g.shipmentId)}
+                style={({ pressed }) => [styles.groupRow, pressed && styles.pressed]}
+              >
+                <View style={styles.groupRowTexts}>
+                  <Text style={[styles.groupTracking, g.isFinal && styles.groupTrackingDone]} numberOfLines={1}>
+                    {g.tracking ?? 'Sin tracking'}
+                    {g.addressLine2 !== null ? ` · ${g.addressLine2}` : ''}
+                  </Text>
+                  <Text style={styles.groupStatus} numberOfLines={1}>{status}</Text>
+                </View>
+                <ChannelBadge channel={g.channel} compact />
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
@@ -155,7 +209,9 @@ export function StopPreviewCard({
 
       {!canNavigate ? (
         <Text style={styles.noCoords}>
-          Este destino no tiene coordenadas cargadas, así que no se puede abrir la navegación.
+          {stop.unlocatableLabel != null
+            ? `${stop.unlocatableLabel}: no se puede abrir la navegación ni dibujar en el mapa.`
+            : 'Este destino no tiene coordenadas cargadas, así que no se puede abrir la navegación.'}
         </Text>
       ) : null}
     </View>
@@ -165,6 +221,34 @@ export function StopPreviewCard({
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
+    groupList: {
+      marginTop: spacing.sm,
+      gap: 6,
+    },
+    groupRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: 6,
+      paddingHorizontal: spacing.sm,
+      borderRadius: 8,
+      backgroundColor: colors.surfaceMuted,
+    },
+    groupRowTexts: {
+      flex: 1,
+    },
+    groupTracking: {
+      ...typography.bodyStrong,
+      color: colors.text,
+    },
+    groupTrackingDone: {
+      color: colors.muted,
+      textDecorationLine: 'line-through',
+    },
+    groupStatus: {
+      ...typography.caption,
+      color: colors.muted,
+    },
     card: {
       backgroundColor: colors.surface,
       borderTopLeftRadius: spacing.radiusCard + 6,

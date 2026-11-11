@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { isValidLatLng, toFiniteNumber } from '@core/geo/coordinates';
 
+import { parseShipmentChannel, type ShipmentChannel } from './channel';
 import { apiClient } from './client';
 
 export type TodayShipmentRow = {
@@ -16,6 +17,13 @@ export type TodayShipmentRow = {
   delivery_visit_count: number;
   /** ISO timestamp del evento delivered; null si el envío no fue entregado todavía. */
   delivered_at: string | null;
+  /** Clasificación de canal resuelta en el backend (propio / Flex residencial / Flex comercial…). */
+  channel: ShipmentChannel;
+  /** Coordenadas válidas del destino; null si faltan o son inválidas (ver `coords_assessment`). */
+  latitude: number | null;
+  longitude: number | null;
+  /** `valid` | `missing` | `invalid` | `out_of_service_area` | `suspected_swap`; null en backends viejos. */
+  coords_assessment: string | null;
 };
 
 function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
@@ -46,6 +54,10 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
     delivery_visit_count,
     delivered_at:
       typeof deliveredAtRaw === 'string' && deliveredAtRaw !== '' ? deliveredAtRaw : null,
+    channel: parseShipmentChannel(r.channel, r.execution_type),
+    latitude: toFiniteNumber(r.latitude),
+    longitude: toFiniteNumber(r.longitude),
+    coords_assessment: typeof r.coords_assessment === 'string' ? r.coords_assessment : null,
   };
 }
 
@@ -373,7 +385,26 @@ export type ShipmentDetailJson = {
    */
   execution_type?: string | null;
   destination?: ShipmentDestinationJson | null;
+  /** Objeto crudo del backend; usar {@link shipmentChannelOf}. */
+  channel?: unknown;
+  /** Último estado informado por Mercado Libre (sólo Flex). */
+  integration_state?: ShipmentIntegrationStateJson | null;
 };
+
+export type ShipmentIntegrationStateJson = {
+  external_status?: string | null;
+  external_substatus?: string | null;
+  external_updated_at?: string | null;
+  last_outcome?: string | null;
+};
+
+/** Canal del detalle, con fallback a `execution_type` para backends viejos. */
+export function shipmentChannelOf(shipment: ShipmentDetailJson | null | undefined): ShipmentChannel | null {
+  if (shipment == null) {
+    return null;
+  }
+  return parseShipmentChannel(shipment.channel, shipment.execution_type);
+}
 
 /**
  * Si este envío lo registra Mercado Libre Flex.
@@ -383,9 +414,12 @@ export type ShipmentDetailJson = {
  * Libre que mueve la flota propia sí necesita nuestra constancia.
  */
 export function isFlexShipment(
-  shipment: Pick<ShipmentDetailJson, 'execution_type'> | null | undefined,
+  shipment: Pick<ShipmentDetailJson, 'execution_type' | 'channel'> | null | undefined,
 ): boolean {
-  return shipment?.execution_type?.trim().toLowerCase() === 'flex';
+  if (shipment == null) {
+    return false;
+  }
+  return parseShipmentChannel(shipment.channel, shipment.execution_type).operator === 'mercadolibre_flex';
 }
 
 export function formatShipmentAddress(destination: ShipmentDestinationJson | null | undefined): string {

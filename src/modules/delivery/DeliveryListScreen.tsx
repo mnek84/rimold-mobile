@@ -66,6 +66,9 @@ export function DeliveryListScreen({ navigation }: Props) {
         pendingCount={list.pendingCount}
         failedCount={list.failedCount}
         deliveredTodayCount={list.deliveredTodayCount}
+        channelFilter={list.channelFilter}
+        onChangeChannelFilter={list.setChannelFilter}
+        channelCounts={list.channelCounts}
         onPressFlexMap={
           list.flexBatchId != null
             ? () => navigation.navigate('FlexBatchMap', { batchId: list.flexBatchId! })

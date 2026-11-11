@@ -251,10 +251,20 @@ export type DriverActionKey = 'en_camino' | 'cerca' | 'entregado' | 'fallido';
 
 const TERMINAL = new Set(['delivered', 'returned', 'cancelled']);
 
+/**
+ * @param driverActionsAllowed  `channel.driver_actions_allowed` del backend. En
+ *   un envío Flex es `false`: su estado de entrega lo informa Mercado Libre y el
+ *   servidor no aplica estos eventos. Default `true` para no cambiar llamadores
+ *   que todavía no conocen el canal.
+ */
 export function isDriverActionEnabled(
   action: DriverActionKey,
   statusCode: string | null | undefined,
+  driverActionsAllowed = true,
 ): boolean {
+  if (!driverActionsAllowed) {
+    return false;
+  }
   const s = (statusCode ?? '').trim().toLowerCase();
   if (TERMINAL.has(s)) {
     return false;

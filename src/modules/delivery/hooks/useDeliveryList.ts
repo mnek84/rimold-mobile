@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
+import { useSyncRejectionStore } from '@core/sync';
 
 import {
   groupShipmentsForSections,
@@ -12,11 +13,20 @@ import {
 
 export type DeliveryListSection = { title: string; data: TodayShipmentRow[] };
 
+/**
+ * Filtro por modalidad. `own` = lo opera nuestra app (propios + Tiendanube);
+ * `flex` = lo entrega la app de Mercado Libre. Es un filtro de VISTA: los
+ * contadores de arriba siempre muestran el total, para que filtrar nunca haga
+ * parecer más chica la jornada.
+ */
+export type ChannelFilter = 'all' | 'own' | 'flex';
+
 export function useDeliveryList() {
   const [shipments, setShipments] = useState<TodayShipmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
 
   const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent') => {
     if (mode === 'initial') {
@@ -53,6 +63,29 @@ export function useDeliveryList() {
     void load('silent');
   }, [load]);
 
+  // Un evento rechazado por el servidor (Flex) se relee enseguida: el listado
+  // no puede seguir mostrando lo que el chofer creyó haber hecho.
+  const rejectionSeq = useSyncRejectionStore((s) => s.seq);
+  useEffect(() => {
+    if (rejectionSeq > 0) {
+      void load('silent');
+    }
+  }, [rejectionSeq, load]);
+
+  const channelCounts = useMemo(() => {
+    let flex = 0;
+    for (const r of shipments) {
+      if (r.channel.operator === 'mercadolibre_flex') flex++;
+    }
+    return { all: shipments.length, flex, own: shipments.length - flex };
+  }, [shipments]);
+
+  const visibleShipments = useMemo(() => {
+    if (channelFilter === 'all') return shipments;
+    const wantFlex = channelFilter === 'flex';
+    return shipments.filter((r) => (r.channel.operator === 'mercadolibre_flex') === wantFlex);
+  }, [shipments, channelFilter]);
+
   const nextShipmentId = useMemo(() => pickNextShipmentId(shipments), [shipments]);
 
   const flexBatchId = useMemo(() => {
@@ -65,8 +98,8 @@ export function useDeliveryList() {
   }, [shipments]);
 
   const sections = useMemo<DeliveryListSection[]>(
-    () => groupShipmentsForSections(shipments),
-    [shipments],
+    () => groupShipmentsForSections(visibleShipments),
+    [visibleShipments],
   );
 
   const pendingCount = useMemo(
@@ -99,6 +132,9 @@ export function useDeliveryList() {
     onRefresh,
     reloadSilent,
     showInitialLoader,
+    channelFilter,
+    setChannelFilter,
+    channelCounts,
   };
 }
 

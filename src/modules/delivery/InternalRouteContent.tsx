@@ -8,12 +8,15 @@ import MapView, { Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  dispatchDriverDay,
   finishDriverRoute,
   optimizeRoute,
-  startDriverRoute,
+  type DispatchDayResult,
+  type DriverDayTotals,
   type DriverRouteView,
   type RouteStopView,
 } from '@core/api/routes';
+import { createEventUuid } from '@core/sync';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { showToast } from '@core/feedback/toastStore';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
@@ -41,7 +44,35 @@ import {
 type Props = {
   route: DriverRouteView;
   onRefresh: () => Promise<void>;
+  /** Hay ruta interna (propios). Sin ella no hay qué optimizar ni finalizar. */
+  hasInternalRoute?: boolean;
+  /** Totales de la vista unificada (null con un backend viejo). */
+  totals?: DriverDayTotals | null;
 };
+
+/** Resumen legible de "Poner todos en camino": incluidos y excluidos CON motivo. */
+function dispatchSummaryText(res: DispatchDayResult): string {
+  const lines: string[] = [];
+  const own = res.included.filter((r) => r.outcome === 'dispatched' || r.outcome === 'already_out_for_delivery').length;
+  const flex = res.included.filter((r) => r.reasonCode === 'flex_status_managed_by_ml').length;
+  lines.push(`En camino: ${own} propios.`);
+  if (flex > 0) {
+    lines.push(`Flex en tu recorrido: ${flex} (su estado lo informa Mercado Libre, no se modificó).`);
+  }
+  if (res.excluded.length > 0) {
+    lines.push('');
+    lines.push(`No salieron (${res.excluded.length}):`);
+    for (const r of res.excluded.slice(0, 8)) {
+      lines.push(`• ${r.tracking ?? r.shipmentId}: ${r.reasonLabel ?? r.reasonCode ?? 'sin motivo'}`);
+    }
+    if (res.excluded.length > 8) lines.push(`… y ${res.excluded.length - 8} más.`);
+  }
+  if (res.replayed) {
+    lines.push('');
+    lines.push('(Ya se había procesado: no se repitió nada.)');
+  }
+  return lines.join('\n');
+}
 
 /** Buenos Aires: sólo se usa si no hay ni una parada ni posición del equipo. */
 const FALLBACK_REGION = {
@@ -92,15 +123,21 @@ function pendingStopsCountFrom(err: unknown): number | null {
  * todo, por dónde ya se pasó. Esconder lo hecho —como hacía la versión en
  * lista— obligaba a reconstruir de memoria el recorrido recién hecho.
  */
-export function InternalRouteContent({ route, onRefresh }: Props) {
+export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true, totals = null }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<MainTabNav<'RutaMapa'>>();
   const mapRef = useRef<MapView>(null);
 
-  const started = route.startedAt !== null && route.finishedAt === null;
+  // Sin ruta interna (sólo Flex) no hay "iniciada": se recuerda localmente que
+  // el chofer ya despachó, para no seguir ofreciéndole el botón.
+  const [dispatchedLocally, setDispatchedLocally] = useState(false);
+  const started = (route.startedAt !== null && route.finishedAt === null) || (!hasInternalRoute && dispatchedLocally);
   const finished = route.finishedAt !== null;
+  // Misma key en los reintentos de UN toque (timeout, 409): el servidor
+  // devuelve el resumen guardado en vez de procesar dos veces.
+  const dispatchKey = useRef<string | null>(null);
 
   const [polylineCoords, setPolylineCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [durationSec, setDurationSec] = useState<number | null>(null);
@@ -241,23 +278,47 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     [],
   );
 
+  /**
+   * "Poner todos en camino" (POST /driver/dispatch). Propios a reparto; los
+   * Flex sólo quedan marcados en el recorrido (su estado es de ML).
+   *
+   * La optimización es best-effort: antes, si UNA parada no tenía coordenadas
+   * el optimize fallaba y no se podía iniciar la ruta en absoluto.
+   */
   const onStartRoute = useCallback(async () => {
     setBusy('start');
     setActionError(null);
+    if (hasInternalRoute && route.id !== '') {
+      try {
+        applyOptimizeResult(await optimizeRoute(route.id));
+      } catch {
+        // Sin polilínea igual se puede salir: el mapa y la lista siguen.
+      }
+    }
     try {
-      const res = await optimizeRoute(route.id);
-      applyOptimizeResult(res);
-      await startDriverRoute(route.id);
+      dispatchKey.current ??= createEventUuid();
+      const res = await dispatchDriverDay(dispatchKey.current);
+      dispatchKey.current = null;
+      setDispatchedLocally(true);
       await onRefresh();
       setActionsOpen(false);
+      Alert.alert('Poner todos en camino', dispatchSummaryText(res));
     } catch (e) {
-      setActionError(messageForShipmentListError(e));
+      if (axios.isAxiosError(e) && e.response?.status === 409) {
+        setActionError('Ya hay un despacho en curso. Reintentá en unos segundos.');
+      } else {
+        setActionError(messageForShipmentListError(e));
+      }
     } finally {
       setBusy(null);
     }
-  }, [route.id, applyOptimizeResult, onRefresh]);
+  }, [route.id, hasInternalRoute, applyOptimizeResult, onRefresh]);
 
   const onReoptimize = useCallback(async () => {
+    if (!hasInternalRoute || route.id === '') {
+      setActionError('No hay ruta propia para optimizar: sólo tenés envíos Flex.');
+      return;
+    }
     setBusy('reoptimize');
     setActionError(null);
     try {
@@ -269,10 +330,14 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
     } finally {
       setBusy(null);
     }
-  }, [route.id, applyOptimizeResult]);
+  }, [route.id, hasInternalRoute, applyOptimizeResult]);
 
   const finishNow = useCallback(
     async (force: boolean) => {
+      if (!hasInternalRoute || route.id === '') {
+        setActionError('No hay ruta propia para finalizar: los envíos Flex se cierran en la app de Mercado Libre.');
+        return;
+      }
       setBusy('finish');
       setActionError(null);
       try {
@@ -309,7 +374,12 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
         setBusy(null);
       }
     },
-    [route.id, onRefresh],
+    [route.id, hasInternalRoute, onRefresh],
+  );
+
+  const unlocatableCount = useMemo(
+    () => route.stops.filter((s) => !hasCoordinates(s)).length,
+    [route.stops],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -430,6 +500,27 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
         </MapView>
       )}
 
+      {/*
+        Nada desaparece en silencio: si hay envíos que no se pueden dibujar
+        (sin coordenadas, (0,0), fuera de zona, ejes invertidos) se dice
+        cuántos y la lista los muestra con el motivo.
+      */}
+      {unlocatableCount > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${unlocatableCount} envíos sin ubicación en el mapa. Ver lista.`}
+          onPress={() => setListOpen(true)}
+          style={[styles.unlocatableBanner, { top: insets.top + 96 }]}
+        >
+          <Ionicons name="warning-outline" size={16} color={theme.colors.warningOn} />
+          <Text style={styles.unlocatableBannerText} numberOfLines={2}>
+            {unlocatableCount === 1
+              ? '1 envío sin ubicación válida: no está en el mapa. Ver lista.'
+              : `${unlocatableCount} envíos sin ubicación válida: no están en el mapa. Ver lista.`}
+          </Text>
+        </Pressable>
+      ) : null}
+
       <RouteProgressHeader
         visited={visitedCount}
         total={route.stops.length}
@@ -485,6 +576,7 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
           canNavigate={hasCoordinates(selectedStop)}
           onPressNavigate={() => navigateToStop(selectedStop.id)}
           onPressDetail={() => openShipmentDetail(selectedStop.shipmentId)}
+          onPressShipment={(id) => openShipmentDetail(id)}
           onClose={() => setSelectedStopId(null)}
           insetBottom={insets.bottom}
         />
@@ -504,11 +596,13 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
           >
             <Ionicons name="play" size={18} color={ON_PRIMARY_INK} />
             <Text style={styles.startButtonLabel}>
-              {busy === 'start' ? 'Iniciando…' : 'Iniciar ruta'}
+              {busy === 'start' ? 'Despachando…' : 'Poner todos en camino'}
             </Text>
           </Pressable>
           <Text style={styles.startHint}>
-            Saca a reparto los {route.stops.length} envíos de la ruta.
+            {totals !== null
+              ? `Saca a reparto tus envíos propios. Los ${totals.byOperator.mercadolibre_flex ?? 0} Flex quedan en el recorrido con el estado que informe Mercado Libre.`
+              : `Saca a reparto los ${route.stops.length} envíos de la ruta.`}
           </Text>
         </View>
       ) : nextStop !== null ? (
@@ -562,6 +656,24 @@ export function InternalRouteContent({ route, onRefresh }: Props) {
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
+    unlocatableBanner: {
+      position: 'absolute',
+      left: spacing.md,
+      right: spacing.md,
+      zIndex: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: 12,
+      backgroundColor: colors.warning,
+    },
+    unlocatableBannerText: {
+      ...typography.captionStrong,
+      color: colors.warningOn,
+      flex: 1,
+    },
     root: {
       flex: 1,
       backgroundColor: colors.background,

@@ -12,6 +12,8 @@ import {
 
 import { Card } from '@components/ui';
 import type { TodayShipmentRow } from '@core/api/shipments';
+import type { ChannelFilter } from '../hooks/useDeliveryList';
+import { ChannelBadge } from './ChannelBadge';
 import { useTheme, type AppTheme } from '@theme';
 
 import {
@@ -59,7 +61,16 @@ type Props = {
   onPressScan: () => void;
   onPressReportFailure: () => void;
   onPressShipment: (shipmentId: string) => void;
+  channelFilter?: ChannelFilter;
+  onChangeChannelFilter?: (next: ChannelFilter) => void;
+  channelCounts?: { all: number; own: number; flex: number };
 };
+
+const CHANNEL_FILTERS: { key: ChannelFilter; label: string }[] = [
+  { key: 'all', label: 'Todos' },
+  { key: 'own', label: 'Propios' },
+  { key: 'flex', label: 'Flex' },
+];
 
 export function DeliveryListView({
   sections,
@@ -77,6 +88,9 @@ export function DeliveryListView({
   onPressScan,
   onPressReportFailure,
   onPressShipment,
+  channelFilter = 'all',
+  onChangeChannelFilter,
+  channelCounts,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -139,6 +153,30 @@ export function DeliveryListView({
             Reportar paquete fallido
           </Text>
         </Pressable>
+        {onChangeChannelFilter != null && channelCounts != null && channelCounts.flex > 0 ? (
+          <View style={styles.channelFilterRow} accessibilityRole="tablist">
+            {CHANNEL_FILTERS.map((f) => {
+              const active = channelFilter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => onChangeChannelFilter(f.key)}
+                  style={({ pressed }) => [
+                    styles.channelChip,
+                    active && styles.channelChipActive,
+                    pressed && styles.btnPressed,
+                  ]}
+                >
+                  <Text style={[styles.channelChipLabel, active && styles.channelChipLabelActive]}>
+                    {f.label} ({channelCounts[f.key]})
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {showFlexMap && (
           <Pressable
             accessibilityRole="button"
@@ -159,6 +197,9 @@ export function DeliveryListView({
       onPressFlexMap,
       showCount,
       countLabel,
+      channelFilter,
+      onChangeChannelFilter,
+      channelCounts,
       styles,
       theme.colors.muted,
       theme.colors.primary,
@@ -178,7 +219,7 @@ export function DeliveryListView({
         padding="none"
         onPress={() => onPressShipment(item.id)}
         style={[styles.shipmentCard, isNext && styles.shipmentCardNext]}
-        accessibilityLabel={`Envío ${item.tracking_id}. ${statusLabel}.`}
+        accessibilityLabel={`Envío ${item.tracking_id}. ${item.channel.label}. ${statusLabel}.`}
         accessibilityHint="Abre el detalle del envío"
       >
         <View style={styles.shipmentCardClip}>
@@ -204,6 +245,15 @@ export function DeliveryListView({
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.muted} />
+            </View>
+
+            <View style={styles.channelRow}>
+              <ChannelBadge channel={item.channel} compact />
+              {!item.channel.driverActionsAllowed ? (
+                <Text style={styles.channelHint} numberOfLines={1}>
+                  Se entrega con la app de Mercado Libre
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.phaseBar} importantForAccessibility="no-hide-descendants">
@@ -306,6 +356,41 @@ function buildCountLabel(pending: number, deliveredToday: number, failed: number
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
+    channelFilterRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 4,
+    },
+    channelChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surface,
+    },
+    channelChipActive: {
+      backgroundColor: t.colors.primary,
+      borderColor: t.colors.primary,
+    },
+    channelChipLabel: {
+      ...t.typography.captionStrong,
+      color: t.colors.text,
+    },
+    channelChipLabelActive: {
+      color: t.colors.primaryOn,
+    },
+    channelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    channelHint: {
+      ...t.typography.caption,
+      color: t.colors.muted,
+      flexShrink: 1,
+    },
     root: {
       flex: 1,
       backgroundColor: colors.background,

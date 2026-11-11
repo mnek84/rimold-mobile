@@ -11,6 +11,8 @@ import { shipmentDriverPhaseIndex } from '../deliveryStatus';
 type Props = {
   /** `status_code` efectivo del envío (incluye el optimista de la cola offline). */
   statusCode: string | null;
+  /** Último estado que informó Mercado Libre (`shipped`, `delivered`…), si llegó. */
+  externalStatus?: string | null;
 };
 
 /**
@@ -24,7 +26,7 @@ type Props = {
  * cuando llega: el momento en que el dato pasa de informativo a urgente es el
  * mismo en que el chofer está parado frente a la puerta.
  */
-export function FlexHandoffCard({ statusCode }: Props) {
+export function FlexHandoffCard({ statusCode, externalStatus = null }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [opening, setOpening] = useState(false);
@@ -71,6 +73,12 @@ export function FlexHandoffCard({ statusCode }: Props) {
         <View style={styles.headerTexts}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
+          {/* El estado que informó ML, tal cual: es la fuente de verdad de un Flex. */}
+          <Text style={styles.body}>
+            {externalStatus !== null
+              ? `Estado en Mercado Libre: ${externalStatus}`
+              : 'Mercado Libre todavía no informó un estado.'}
+          </Text>
         </View>
       </View>
 

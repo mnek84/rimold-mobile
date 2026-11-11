@@ -10,6 +10,8 @@ import { isDriverActionEnabled, type DriverActionKey } from '../deliveryStatus';
 type Props = {
   effectiveStatusCode: string | null;
   onAction: (key: DriverActionKey) => void;
+  /** `channel.driver_actions_allowed`; false en Flex (el estado lo informa Mercado Libre). */
+  driverActionsAllowed?: boolean;
 };
 
 type ActionVariant = 'primary' | 'secondary' | 'success' | 'danger';
@@ -78,16 +80,30 @@ function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): Acti
   }
 }
 
-export function DeliveryShipmentActions({ effectiveStatusCode, onAction }: Props) {
+export function DeliveryShipmentActions({ effectiveStatusCode, onAction, driverActionsAllowed = true }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Flex: no se ofrecen botones que el servidor no va a aplicar. Mostrarlos
+  // deshabilitados sin explicación sería peor que no mostrarlos.
+  if (!driverActionsAllowed) {
+    return (
+      <View accessibilityRole="text">
+        <Text style={styles.sectionLabel}>ACCIONES DEL ENVÍO</Text>
+        <Text style={styles.readOnlyNote}>
+          Este envío se entrega con la app de Mercado Libre Flex. El estado se actualiza solo cuando Mercado
+          Libre lo informa: desde esta app no se puede marcar en camino, entregado ni fallido.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View>
       <Text style={styles.sectionLabel}>ACCIONES DEL ENVÍO</Text>
       <View style={styles.buttonStack}>
         {DELIVERY_DETAIL_ACTIONS.map((action) => {
-          const enabled = isDriverActionEnabled(action.key, effectiveStatusCode);
+          const enabled = isDriverActionEnabled(action.key, effectiveStatusCode, driverActionsAllowed);
           const look = actionLook(theme, action.variant, enabled);
           const iconName = ACTION_ICONS[action.key];
 
@@ -153,6 +169,10 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
       letterSpacing: 1,
       marginBottom: spacing.md,
+    },
+    readOnlyNote: {
+      ...typography.body,
+      color: colors.muted,
     },
     buttonStack: {
       gap: spacing.sm,

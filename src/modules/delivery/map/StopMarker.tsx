@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { memo, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
 
 import type { RouteStopView } from '@core/api/routes';
@@ -45,7 +45,9 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
   const size = selected ? SELECTED_SIZE : BASE_SIZE;
 
   // Clave de contenido: cambia sólo cuando el pin realmente se ve distinto.
-  const contentKey = `${kind}|${stop.addressTypeCode}|${selected ? 's' : 'u'}|${theme.scheme}`;
+  const count = stop.shipmentCount ?? 1;
+  const hasFlex = stop.hasFlex === true;
+  const contentKey = `${kind}|${stop.addressTypeCode}|${selected ? 's' : 'u'}|${count}|${hasFlex ? 'f' : ''}|${theme.scheme}`;
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
 
   useEffect(() => {
@@ -77,6 +79,22 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
         ]}
       >
         <Ionicons name={visual.icon} size={selected ? 24 : 17} color={visual.iconColor} />
+        {/*
+          Dos marcas aparte en vez de otro color: el relleno ya es el estado y
+          el ícono el tipo de domicilio. Arriba a la derecha, cuántos envíos
+          hay en el punto; abajo a la izquierda, "F" si alguno es Flex (lo
+          entrega la app de Mercado Libre).
+        */}
+        {count > 1 ? (
+          <View style={styles.countBadge}>
+            <Text style={styles.countText}>{count}</Text>
+          </View>
+        ) : null}
+        {hasFlex ? (
+          <View style={styles.flexBadge}>
+            <Text style={styles.flexText}>F</Text>
+          </View>
+        ) : null}
       </View>
     </Marker>
   );
@@ -99,6 +117,43 @@ function createStyles(t: AppTheme) {
     pinSelected: {
       borderWidth: 3.5,
       borderColor: t.colors.text,
+    },
+    countBadge: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: t.colors.text,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: t.colors.surface,
+    },
+    countText: {
+      color: t.colors.surface,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    flexBadge: {
+      position: 'absolute',
+      bottom: -6,
+      left: -6,
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      backgroundColor: '#FFE600',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: t.colors.surface,
+    },
+    flexText: {
+      color: '#1F2937',
+      fontSize: 11,
+      fontWeight: '800',
     },
   });
 }

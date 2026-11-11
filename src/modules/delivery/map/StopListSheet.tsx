@@ -5,6 +5,9 @@ import { Modal, Pressable, SectionList, StyleSheet, Text, View } from 'react-nat
 import type { RouteStopView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
+import { ChannelBadge } from '../components/ChannelBadge';
+import { stopPositionLabel } from './StopPreviewCard';
+
 import {
   formatStopAddress,
   formatStopLocality,
@@ -72,7 +75,7 @@ export function StopListSheet({
       return (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Parada ${item.sequence}. ${formatStopAddress(item)}. ${stopStatusLabel(item)}.`}
+          accessibilityLabel={`${stopPositionLabel(item)}. ${formatStopAddress(item)}. ${stopStatusLabel(item)}.${item.unlocatableLabel != null ? ` ${item.unlocatableLabel}.` : ''}`}
           accessibilityHint="Centra la parada en el mapa"
           onPress={() => onPressStop(item.id)}
           style={({ pressed }) => [
@@ -95,8 +98,22 @@ export function StopListSheet({
               </Text>
             ) : null}
             <Text style={styles.rowMeta} numberOfLines={1}>
-              Parada {item.sequence} · {stopStatusLabel(item)}
+              {stopPositionLabel(item)} · {stopStatusLabel(item)}
+              {(item.shipmentCount ?? 1) > 1 ? ` · ${item.shipmentCount} envíos` : ''}
             </Text>
+            {item.unlocatableLabel != null ? (
+              <Text style={styles.rowWarning} numberOfLines={2}>
+                {item.unlocatableLabel}
+              </Text>
+            ) : null}
+            {item.groupShipments !== undefined && item.groupShipments.length > 0 ? (
+              <View style={styles.rowBadges}>
+                {/* Un badge por canal presente en el punto (sin repetir). */}
+                {Array.from(new Map(item.groupShipments.map((g) => [g.channel.label, g.channel])).values()).map((c) => (
+                  <ChannelBadge key={c.label} channel={c} compact />
+                ))}
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -180,6 +197,17 @@ export function StopListSheet({
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
+    rowWarning: {
+      ...t.typography.caption,
+      color: t.colors.danger,
+      marginTop: 2,
+    },
+    rowBadges: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+      marginTop: 4,
+    },
     backdrop: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.45)',

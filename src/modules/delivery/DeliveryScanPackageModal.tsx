@@ -203,15 +203,13 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
             return { message, addErrorItem: true };
           }
           case 'flex_not_supported': {
-            const failureTarget =
-              err.shipmentId !== null
-                ? { shipmentId: err.shipmentId, trackingId: err.trackingId }
-                : undefined;
+            // Antes se ofrecía "marcalo como fallido" desde acá. Desde 2026-11
+            // el estado de un Flex lo informa Mercado Libre y el servidor NO
+            // aplica un fallido enviado desde esta app: ofrecerlo sería
+            // invitar a una acción que no cuenta.
             const message =
-              failureTarget !== undefined
-                ? 'Los paquetes Flex se gestionan desde Mercado Libre. Si no podés entregarlo, marcalo como fallido.'
-                : 'Los paquetes Flex se gestionan desde la app de Mercado Libre.';
-            setError({ message, tone: 'warning', failureTarget });
+              'Los paquetes Flex se entregan y se marcan como fallidos en la app de Mercado Libre Flex. Igual los vas a ver en tus paradas.';
+            setError({ message, tone: 'warning' });
             return { message, addErrorItem: true };
           }
           case 'already_delivered':

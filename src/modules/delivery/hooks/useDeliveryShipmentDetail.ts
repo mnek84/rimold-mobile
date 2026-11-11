@@ -5,11 +5,12 @@ import {
   fetchShipment,
   formatShipmentAddress,
   isFlexShipment,
+  shipmentChannelOf,
   type ShipmentDetailJson,
 } from '@core/api/shipments';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
-import { enqueueEvent } from '@core/sync';
+import { enqueueEvent, useSyncRejectionStore } from '@core/sync';
 
 import { DELIVERY_ACTION_EVENT_MAP } from '../deliveryDetailActions';
 import {
@@ -56,6 +57,22 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
     void load();
   }, [load]);
 
+  // Reconciliación: si el servidor aceptó pero NO aplicó un evento de este
+  // envío (Flex, o ya no es del chofer), el optimista se descarta en el acto y
+  // se relee el estado real. Sin esto el chofer seguía viendo "Entregado".
+  const rejectionSeq = useSyncRejectionStore((s) => s.seq);
+  useEffect(() => {
+    const last = useSyncRejectionStore.getState().last;
+    if (rejectionSeq === 0 || last === null || last.shipmentId !== shipmentId) {
+      return;
+    }
+    setOptimisticStatusCode(null);
+    void load();
+  }, [rejectionSeq, shipmentId, load]);
+
+  const channel = useMemo(() => shipmentChannelOf(shipment), [shipment]);
+  const driverActionsAllowed = channel?.driverActionsAllowed ?? true;
+
   const effectiveStatusCode = optimisticStatusCode ?? shipment?.status_code ?? null;
 
   const timelineSteps = useMemo(
@@ -68,7 +85,7 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
       if (!UUID_V4.test(shipmentId)) {
         return;
       }
-      if (!isDriverActionEnabled(key, effectiveStatusCode)) {
+      if (!isDriverActionEnabled(key, effectiveStatusCode, driverActionsAllowed)) {
         return;
       }
       if (key === 'entregado') {
@@ -96,7 +113,7 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
         return cfg.optimisticCode;
       });
     },
-    [effectiveStatusCode, shipmentId],
+    [effectiveStatusCode, shipmentId, driverActionsAllowed],
   );
 
   const onDeliveredQueued = useCallback(() => {
@@ -134,6 +151,12 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
      * Mercado Libre. Ver {@link isFlexShipment}.
      */
     isFlex: isFlexShipment(shipment),
+    /** Clasificación de canal (backend); null mientras carga. */
+    channel,
+    /** false en Flex: el estado de entrega lo informa Mercado Libre. */
+    driverActionsAllowed,
+    /** Último estado que informó Mercado Libre (sólo Flex). */
+    externalStatus: shipment?.integration_state?.external_status ?? null,
     addressTypeCode: shipment?.destination?.address_type_code ?? null,
     effectiveStatusCode,
     timelineSteps,

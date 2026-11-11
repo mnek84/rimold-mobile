@@ -6,7 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button } from '@components/ui';
-import { createDriverRoute, type DriverRouteView } from '@core/api/routes';
+import {
+  createDriverRoute,
+  fetchDriverStops,
+  type DriverDayTotals,
+  type DriverRouteView,
+} from '@core/api/routes';
+import { useSyncRejectionStore } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
 import { InternalRouteContent } from './InternalRouteContent';
@@ -16,8 +22,13 @@ import { InternalRouteContent } from './InternalRouteContent';
  *
  * Auto-syncs on focus: every time the tab gains focus we POST /driver/routes
  * (idempotent) so the backend adds any shipments assigned since the last sync
- * to today's active Route as new stops. The response is the full Route, which
- * we render directly — no separate "Crear ruta" CTA.
+ * to today's active Route as new stops.
+ *
+ * En paralelo se pide GET /driver/stops: la jornada COMPLETA (propios + Flex)
+ * agrupada por punto de entrega. El mapa dibuja eso, no sólo la ruta interna:
+ * antes un chofer con sólo Flex veía "Sin envíos asignados" teniendo la
+ * camioneta llena. La ruta interna sigue siendo la que se inicia/finaliza.
+ * Si el backend es viejo (sin /driver/stops), se cae a las paradas de la ruta.
  *
  * The tab renders without a navigation header so the map reaches the top of the
  * screen; every state below therefore pads for the status bar itself.
@@ -28,6 +39,8 @@ export function RouteMapTabScreen() {
   const insets = useSafeAreaInsets();
 
   const [route, setRoute] = useState<DriverRouteView | null>(null);
+  const [hasInternalRoute, setHasInternalRoute] = useState(false);
+  const [totals, setTotals] = useState<DriverDayTotals | null>(null);
   const [loading, setLoading] = useState(true);
   const [empty, setEmpty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +54,38 @@ export function RouteMapTabScreen() {
     }
     setError(null);
     try {
-      const r = await createDriverRoute();
-      setRoute(r);
+      const [routeRes, stopsRes] = await Promise.allSettled([createDriverRoute(), fetchDriverStops()]);
+
+      const internal = routeRes.status === 'fulfilled' ? routeRes.value : null;
+      if (routeRes.status === 'rejected' && !isNoShipmentsError(routeRes.reason)) {
+        throw routeRes.reason;
+      }
+      const day = stopsRes.status === 'fulfilled' ? stopsRes.value : null;
+
+      const stops = day !== null ? day.stops : (internal?.stops ?? []);
+      if (stops.length === 0) {
+        setRoute(null);
+        setHasInternalRoute(false);
+        setTotals(day?.totals ?? null);
+        setEmpty(true);
+        return;
+      }
+
+      setRoute(
+        internal !== null
+          ? { ...internal, stops }
+          : {
+              id: '',
+              driverId: '',
+              status: 'flex_only',
+              date: day?.serviceDate ?? '',
+              startedAt: null,
+              finishedAt: null,
+              stops,
+            },
+      );
+      setHasInternalRoute(internal !== null);
+      setTotals(day?.totals ?? null);
       setEmpty(false);
     } catch (e) {
       if (isNoShipmentsError(e)) {
@@ -66,6 +109,14 @@ export function RouteMapTabScreen() {
   const onRefresh = useCallback(async () => {
     await sync('refresh');
   }, [sync]);
+
+  // Un evento rechazado (Flex) cambia lo que el mapa debería mostrar.
+  const rejectionSeq = useSyncRejectionStore((s) => s.seq);
+  const lastSeq = useRef(rejectionSeq);
+  if (lastSeq.current !== rejectionSeq) {
+    lastSeq.current = rejectionSeq;
+    void sync('refresh');
+  }
 
   const emptyPadding = { paddingTop: insets.top + theme.spacing.xxl };
 
@@ -109,7 +160,14 @@ export function RouteMapTabScreen() {
     );
   }
 
-  return <InternalRouteContent route={route} onRefresh={onRefresh} />;
+  return (
+    <InternalRouteContent
+      route={route}
+      onRefresh={onRefresh}
+      hasInternalRoute={hasInternalRoute}
+      totals={totals}
+    />
+  );
 }
 
 function isNoShipmentsError(e: unknown): boolean {

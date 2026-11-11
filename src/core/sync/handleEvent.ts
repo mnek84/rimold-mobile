@@ -3,6 +3,7 @@ import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmen
 
 import type { QueueEvent } from './eventQueue';
 import { EventType } from './eventTypes';
+import { useSyncRejectionStore } from './syncRejectionStore';
 
 async function normalizeCollectionItem(entry: string): Promise<string> {
   const trimmed = entry.trim();
@@ -103,7 +104,7 @@ async function postDomainEvent(
   payload: Record<string, unknown>,
   occurredAtMs: number,
 ): Promise<void> {
-  await apiClient.post(
+  const { data } = await apiClient.post<unknown>(
     '/events',
     {
       id: eventId,
@@ -115,6 +116,32 @@ async function postDomainEvent(
     },
     idempotencyHeaders(eventId),
   );
+  reportProjectionRejection(eventId, aggregateId, data);
+}
+
+/**
+ * El servidor responde 200 también cuando decide NO aplicar el evento
+ * (`projection: rejected_*`): así la cola lo saca y no lo reintenta para
+ * siempre. Pero la pantalla que puso un estado optimista tiene que enterarse
+ * en el momento, no en el próximo refresh. Un backend viejo no manda
+ * `projection` y esto es no-op.
+ */
+function reportProjectionRejection(eventId: string, aggregateId: string, data: unknown): void {
+  if (data === null || typeof data !== 'object') {
+    return;
+  }
+  const o = data as Record<string, unknown>;
+  const projection = typeof o.projection === 'string' ? o.projection : null;
+  if (projection === null || !projection.startsWith('rejected_')) {
+    return;
+  }
+  const shipmentId = typeof o.shipment_id === 'string' && o.shipment_id !== '' ? o.shipment_id : aggregateId;
+  useSyncRejectionStore.getState().report({
+    eventId,
+    shipmentId,
+    reason: projection,
+    statusCode: typeof o.status_code === 'string' ? o.status_code : null,
+  });
 }
 
 /**

@@ -1,4 +1,11 @@
-/** True when both values are finite numbers suitable for react-native-maps. */
+/**
+ * True when both values are finite numbers suitable for react-native-maps.
+ *
+ * (0,0) se rechaza: es el "no sé" de muchos clientes de mapas y de algunos
+ * payloads de Mercado Libre, no un punto real (está en el Golfo de Guinea). El
+ * backend aplica la misma regla en `CoordinateValidator`; además valida el área
+ * de servicio y ejes invertidos, que la app recibe ya resueltos.
+ */
 export function isValidLatLng(lat: unknown, lng: unknown): boolean {
   return (
     typeof lat === 'number' &&
@@ -8,7 +15,8 @@ export function isValidLatLng(lat: unknown, lng: unknown): boolean {
     lat >= -90 &&
     lat <= 90 &&
     lng >= -180 &&
-    lng <= 180
+    lng <= 180 &&
+    !(Math.abs(lat) < 1e-9 && Math.abs(lng) < 1e-9)
   );
 }
 

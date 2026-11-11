@@ -10,6 +10,7 @@ import { DeliveryShipmentActions } from './components/DeliveryShipmentActions';
 import { DeliveryShipmentDetailHeader } from './components/DeliveryShipmentDetailHeader';
 import { DeliveryShipmentDetailSkeleton } from './components/DeliveryShipmentDetailSkeleton';
 import { DeliveryShipmentTimeline } from './components/DeliveryShipmentTimeline';
+import { ChannelBadge } from './components/ChannelBadge';
 import { FlexHandoffCard } from './components/FlexHandoffCard';
 import { DeliveryDeliveredModal } from './DeliveryDeliveredModal';
 import { DeliveryFailedModal } from './DeliveryFailedModal';
@@ -48,9 +49,14 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               addressTypeCode={detail.addressTypeCode}
             />
             <View style={shell.headerDivider} />
+            {detail.channel !== null ? (
+              <View style={shell.flexHandoff}>
+                <ChannelBadge channel={detail.channel} />
+              </View>
+            ) : null}
             {detail.isFlex ? (
               <View style={shell.flexHandoff}>
-                <FlexHandoffCard statusCode={detail.effectiveStatusCode} />
+                <FlexHandoffCard statusCode={detail.effectiveStatusCode} externalStatus={detail.externalStatus} />
               </View>
             ) : null}
             <DeliveryShipmentTimeline steps={detail.timelineSteps} />
@@ -58,6 +64,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               <DeliveryShipmentActions
                 effectiveStatusCode={detail.effectiveStatusCode}
                 onAction={detail.handleStatusAction}
+                driverActionsAllowed={detail.driverActionsAllowed}
               />
             </View>
           </>
