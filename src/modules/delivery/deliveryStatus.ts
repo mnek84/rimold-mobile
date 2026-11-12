@@ -221,29 +221,13 @@ export function shipmentListBadgeColors(
   const { colors } = t;
   switch (kind) {
     case 'in_transit':
-      return {
-        bg: `${colors.primary}26`,
-        border: `${colors.primary}66`,
-        text: colors.primary,
-      };
+      return { bg: colors.primarySoft, border: colors.primary, text: colors.primary };
     case 'delivered':
-      return {
-        bg: `${colors.success}28`,
-        border: `${colors.success}88`,
-        text: colors.success,
-      };
+      return { bg: colors.successSoft, border: colors.success, text: colors.success };
     case 'failed':
-      return {
-        bg: `${colors.danger}28`,
-        border: `${colors.danger}88`,
-        text: colors.danger,
-      };
+      return { bg: colors.dangerSoft, border: colors.danger, text: colors.danger };
     default:
-      return {
-        bg: colors.surfaceMuted,
-        border: colors.border,
-        text: colors.muted,
-      };
+      return { bg: colors.surfaceMuted, border: colors.border, text: colors.muted };
   }
 }
 

@@ -5,7 +5,6 @@ import { useCallback, useMemo } from 'react';
 import {
   ActivityIndicator,
   Platform,
-  Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -14,7 +13,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Button, Card, ScreenContainer } from '@components/ui';
 import {
   fetchColectaHistory,
   type ColectaHistoryDay,
@@ -193,12 +192,9 @@ export function ColectaHistoryScreen(_props: Props) {
     return (
       <ScreenContainer contentContainerStyle={styles.centered}>
         <Text style={styles.error}>{errorMessage}</Text>
-        <Pressable
-          style={({ pressed }) => [styles.retry, pressed && styles.retryPressed]}
-          onPress={() => void query.refetch()}
-        >
-          <Text style={styles.retryLabel}>Reintentar</Text>
-        </Pressable>
+        <Button variant="primary" onPress={() => void query.refetch()}>
+          Reintentar
+        </Button>
       </ScreenContainer>
     );
   }
@@ -244,7 +240,7 @@ export function ColectaHistoryScreen(_props: Props) {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     screenBody: {
       flexGrow: 1,
@@ -295,7 +291,7 @@ function createStyles(t: AppTheme) {
       gap: spacing.xs,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.primarySoft,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.primary,
       borderRadius: spacing.radiusSm,
@@ -303,6 +299,7 @@ function createStyles(t: AppTheme) {
     itemQtyText: {
       ...typography.captionStrong,
       color: colors.primary,
+      fontVariant: ['tabular-nums'],
     },
     itemWarehouse: {
       ...typography.body,
@@ -336,20 +333,6 @@ function createStyles(t: AppTheme) {
       ...typography.body,
       color: colors.danger,
       textAlign: 'center',
-    },
-    retry: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.xl,
-      backgroundColor: colors.primary,
-      borderRadius: spacing.radiusLg,
-    },
-    retryPressed: {
-      opacity: motion.pressOpacityStrong,
-      transform: [{ scale: motion.pressScale }],
-    },
-    retryLabel: {
-      ...typography.bodyStrong,
-      color: colors.primaryOn,
     },
     emptyState: {
       alignItems: 'center',

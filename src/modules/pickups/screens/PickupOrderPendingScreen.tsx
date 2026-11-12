@@ -1,8 +1,8 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, ScreenContainer } from '@components/ui';
+import { Button, Card, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -16,6 +16,7 @@ import { usePickupOrderRealtime } from '../hooks/usePickupOrderRealtime';
 import { usePickupReminder } from '../hooks/usePickupReminder';
 import { formatShortDate, formatTimeRange } from '../lib/formatSchedule';
 import { PICKUP_ORDER_STATUS_LABEL } from '../lib/pickupOrderStatus';
+import { PICKUP_ORDER_STATUS_PRESENTATION } from '../lib/pickupStatusTone';
 
 type Props = NativeStackScreenProps<ColectaStackParamList, 'PickupOrderPending'>;
 
@@ -115,16 +116,21 @@ export function PickupOrderPendingScreen({ route, navigation }: Props) {
   if (query.isLoading || !order) {
     return (
       <ScreenContainer>
-        <Text style={{ color: theme.colors.muted, padding: 16 }}>Cargando…</Text>
+        <Text style={styles.loading}>Cargando…</Text>
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Card style={{ marginBottom: 12 }}>
-          <Text style={styles.badge}>{PICKUP_ORDER_STATUS_LABEL[order.status]}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Card style={styles.headerCard}>
+          <StatusBadge
+            label={PICKUP_ORDER_STATUS_LABEL[order.status]}
+            tone={PICKUP_ORDER_STATUS_PRESENTATION[order.status].tone}
+            icon={PICKUP_ORDER_STATUS_PRESENTATION[order.status].icon}
+            style={styles.badge}
+          />
           <Text style={styles.timeHero}>
             {formatTimeRange(order.scheduled_time_from, order.scheduled_time_to) || '—'}
           </Text>
@@ -137,7 +143,7 @@ export function PickupOrderPendingScreen({ route, navigation }: Props) {
 
         <Text style={styles.sectionTitle}>Paradas ({order.stops.length})</Text>
         {order.stops.map((stop) => (
-          <Card key={stop.id} style={{ marginBottom: 8 }}>
+          <Card key={stop.id} style={styles.stopCard}>
             <Text style={styles.stopTitle}>
               {stop.sequence}. {stop.warehouse?.name ?? stop.warehouse_id}
             </Text>
@@ -148,17 +154,27 @@ export function PickupOrderPendingScreen({ route, navigation }: Props) {
         ))}
 
         {rejecting ? (
-          <Card style={{ marginTop: 12 }}>
+          <Card style={styles.rejectCard}>
             <Text style={styles.sectionTitle}>¿Por qué la rechazás?</Text>
-            <TextInput
+            <Input
               style={styles.input}
+              containerStyle={styles.inputContainer}
               multiline
               value={rejectReason}
               onChangeText={setRejectReason}
               placeholder="Motivo…"
-              placeholderTextColor={theme.colors.muted}
+              accessibilityLabel="Motivo del rechazo"
             />
             <View style={styles.actions}>
+              <Button
+                variant="danger"
+                size="lg"
+                icon="close-circle-outline"
+                onPress={handleReject}
+                disabled={rejectMutation.isPending}
+              >
+                {rejectMutation.isPending ? 'Enviando…' : 'Confirmar rechazo'}
+              </Button>
               <Button
                 variant="ghost"
                 onPress={() => {
@@ -168,19 +184,14 @@ export function PickupOrderPendingScreen({ route, navigation }: Props) {
               >
                 Cancelar
               </Button>
-              <Button
-                variant="danger"
-                onPress={handleReject}
-                disabled={rejectMutation.isPending}
-              >
-                {rejectMutation.isPending ? 'Enviando…' : 'Confirmar rechazo'}
-              </Button>
             </View>
           </Card>
         ) : (
           <View style={styles.actions}>
             <Button
               variant="primary"
+              size="lg"
+              icon="checkmark-circle-outline"
               onPress={handleAccept}
               disabled={acceptMutation.isPending}
             >
@@ -210,65 +221,53 @@ export function PickupOrderPendingScreen({ route, navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
-    badge: {
-      alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.text,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 8,
-    },
-    title: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
+    loading: { ...typography.body, color: colors.muted, padding: spacing.lg },
+    scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl + spacing.sm },
+    headerCard: { marginBottom: spacing.md },
+    stopCard: { marginBottom: spacing.sm },
+    rejectCard: { marginTop: spacing.md },
+    badge: { marginBottom: spacing.sm },
+    title: { ...typography.subtitle, fontWeight: '700', color: colors.text },
     timeHero: {
-      fontSize: 40,
-      fontWeight: '700',
-      color: theme.colors.text,
+      ...typography.display,
+      color: colors.text,
       letterSpacing: -0.5,
-      lineHeight: 44,
+      fontVariant: ['tabular-nums'],
     },
     dateLabel: {
-      fontSize: 15,
-      color: theme.colors.muted,
-      marginTop: 4,
+      ...typography.body,
+      color: colors.muted,
+      marginTop: spacing.xs,
       fontWeight: '500',
     },
-    muted: { fontSize: 14, color: theme.colors.muted, marginTop: 4 },
+    muted: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
     notes: {
-      marginTop: 8,
-      fontSize: 14,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      padding: 8,
-      borderRadius: 6,
+      ...typography.caption,
+      marginTop: spacing.sm,
+      color: colors.text,
+      backgroundColor: colors.surfaceMuted,
+      padding: spacing.sm,
+      borderRadius: spacing.radiusMd,
     },
     sectionTitle: {
-      fontSize: 14,
+      ...typography.captionStrong,
       fontWeight: '700',
-      color: theme.colors.text,
-      marginTop: 8,
-      marginBottom: 8,
+      color: colors.text,
+      marginTop: spacing.sm,
+      marginBottom: spacing.sm,
     },
-    stopTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    stopAddress: { fontSize: 13, color: theme.colors.muted, marginTop: 2 },
+    stopTitle: { ...typography.bodyStrong, color: colors.text },
+    stopAddress: { ...typography.caption, color: colors.muted, marginTop: spacing.xxs },
+    inputContainer: { marginTop: spacing.xs },
     input: {
-      minHeight: 80,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      padding: 10,
-      borderRadius: 8,
-      marginTop: 6,
-      fontSize: 14,
+      minHeight: 96,
       textAlignVertical: 'top',
     },
     actions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: 8,
-      marginTop: 12,
+      gap: spacing.sm,
+      marginTop: spacing.md,
     },
   });
 }

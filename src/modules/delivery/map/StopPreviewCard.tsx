@@ -2,12 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Button } from '@components/ui';
 import type { RouteStopView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
 import { ChannelBadge } from '../components/ChannelBadge';
 import { formatDriverShipmentStatusLabel } from '../deliveryStatus';
-import { ON_PRIMARY_INK } from './onPrimaryInk';
 import {
   addressTypeLabel,
   formatStopAddress,
@@ -90,7 +90,7 @@ export function StopPreviewCard({
         accessibilityRole="button"
         accessibilityLabel="Cerrar"
         onPress={onClose}
-        hitSlop={10}
+        hitSlop={theme.touch.hitSlop}
         style={({ pressed }) => [styles.close, pressed && styles.pressed]}
       >
         <Ionicons name="close" size={20} color={theme.colors.muted} />
@@ -176,35 +176,28 @@ export function StopPreviewCard({
       ) : null}
 
       <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="primary"
+          size="lg"
+          icon="navigate"
           accessibilityLabel="Ir con Google Maps"
-          accessibilityState={{ disabled: !canNavigate }}
           disabled={!canNavigate}
           onPress={onPressNavigate}
-          style={({ pressed }) => [
-            styles.primaryBtn,
-            !canNavigate && styles.btnDisabled,
-            pressed && canNavigate && styles.pressed,
-          ]}
+          style={styles.primaryBtn}
         >
-          <Ionicons
-            name="navigate"
-            size={18}
-            color={canNavigate ? ON_PRIMARY_INK : theme.colors.muted}
-          />
-          <Text style={[styles.primaryLabel, !canNavigate && styles.labelDisabled]}>Ir</Text>
-        </Pressable>
+          Ir
+        </Button>
 
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="secondary"
+          size="lg"
+          icon="document-text-outline"
+          fullWidth={false}
           accessibilityLabel="Abrir detalle del envío"
           onPress={onPressDetail}
-          style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
         >
-          <Ionicons name="document-text-outline" size={18} color={theme.colors.text} />
-          <Text style={styles.secondaryLabel}>Detalle</Text>
-        </Pressable>
+          Detalle
+        </Button>
       </View>
 
       {!canNavigate ? (
@@ -219,19 +212,20 @@ export function StopPreviewCard({
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     groupList: {
       marginTop: spacing.sm,
-      gap: 6,
+      gap: spacing.sm,
     },
     groupRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      paddingVertical: 6,
+      minHeight: touch.min,
+      paddingVertical: spacing.xs,
       paddingHorizontal: spacing.sm,
-      borderRadius: 8,
+      borderRadius: spacing.radiusMd,
       backgroundColor: colors.surfaceMuted,
     },
     groupRowTexts: {
@@ -251,15 +245,16 @@ function createStyles(t: AppTheme) {
     },
     card: {
       backgroundColor: colors.surface,
-      borderTopLeftRadius: spacing.radiusCard + 6,
-      borderTopRightRadius: spacing.radiusCard + 6,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
+      // Floats over the map: keeps its (neutral) shadow.
       ...Platform.select({
         ios: {
-          shadowColor: '#000',
+          shadowColor: colors.shadow,
           shadowOpacity: 0.22,
           shadowRadius: 16,
           shadowOffset: { width: 0, height: -4 },
@@ -271,8 +266,8 @@ function createStyles(t: AppTheme) {
     handle: {
       alignSelf: 'center',
       width: 40,
-      height: 4,
-      borderRadius: 2,
+      height: spacing.xs,
+      borderRadius: spacing.xxs,
       backgroundColor: colors.border,
       marginBottom: spacing.md,
     },
@@ -280,23 +275,23 @@ function createStyles(t: AppTheme) {
       position: 'absolute',
       top: spacing.md,
       right: spacing.md,
-      width: 32,
-      height: 32,
+      width: 40,
+      height: 40,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 16,
+      borderRadius: spacing.radiusPill,
       backgroundColor: colors.surfaceMuted,
       zIndex: 2,
     },
     body: {
       flexDirection: 'row',
       gap: spacing.md,
-      paddingRight: spacing.xxl,
+      paddingRight: spacing.xxl + spacing.sm,
     },
     iconCircle: {
       width: 40,
       height: 40,
-      borderRadius: 20,
+      borderRadius: spacing.radiusPill,
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
@@ -306,14 +301,13 @@ function createStyles(t: AppTheme) {
       minWidth: 0,
     },
     address: {
-      ...typography.bodyStrong,
-      fontSize: 17,
+      ...typography.subtitle,
       color: colors.text,
     },
     locality: {
       ...typography.body,
       color: colors.muted,
-      marginTop: 1,
+      marginTop: spacing.xxs,
     },
     metaRow: {
       flexDirection: 'row',
@@ -337,7 +331,6 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.text,
       marginTop: spacing.xs,
-      opacity: 0.85,
     },
     tracking: {
       ...typography.caption,
@@ -351,40 +344,6 @@ function createStyles(t: AppTheme) {
     },
     primaryBtn: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      minHeight: 50,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
-    },
-    primaryLabel: {
-      ...typography.bodyStrong,
-      fontSize: 17,
-      color: ON_PRIMARY_INK,
-    },
-    secondaryBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      minHeight: 50,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surfaceMuted,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    secondaryLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    btnDisabled: {
-      backgroundColor: colors.surfaceMuted,
-    },
-    labelDisabled: {
-      color: colors.muted,
     },
     noCoords: {
       ...typography.caption,

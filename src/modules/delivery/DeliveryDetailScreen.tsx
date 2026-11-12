@@ -1,8 +1,8 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useLayoutEffect, useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { ScreenContainer } from '@components/ui';
+import { Banner, ScreenContainer } from '@components/ui';
 import type { DeliveryStackParamList } from '@navigation/deliveryStackTypes';
 import { useTheme } from '@theme';
 
@@ -36,7 +36,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
         {detail.loading ? <DeliveryShipmentDetailSkeleton /> : null}
 
         {detail.error != null && detail.error !== '' ? (
-          <Text style={shell.errorBanner}>{detail.error}</Text>
+          <Banner tone="danger" message={detail.error} style={shell.errorBanner} />
         ) : null}
 
         {!detail.loading && detail.error == null && detail.shipment != null ? (
@@ -89,7 +89,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
 }
 
 function createShellStyles(t: ReturnType<typeof useTheme>) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing } = t;
   return StyleSheet.create({
     content: {
       paddingBottom: spacing.xxl + spacing.lg,
@@ -110,13 +110,6 @@ function createShellStyles(t: ReturnType<typeof useTheme>) {
       borderTopColor: colors.border,
     },
     errorBanner: {
-      padding: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.danger,
-      color: colors.danger,
-      ...typography.body,
       marginBottom: spacing.md,
     },
   });

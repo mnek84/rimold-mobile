@@ -1,9 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { QrScanner } from '@components/QrScanner';
+import { Banner, Button } from '@components/ui';
 import { AssignScanError, assignShipmentByTracking } from '@core/api/shipments';
 import { playScanFeedback } from '@core/feedback/scanFeedback';
 import { showToast } from '@core/feedback/toastStore';
@@ -19,7 +20,7 @@ import {
   resolveTrackingIdForAssign,
   takeLastAssignPackageInfo,
 } from '@core/scanner/resolveTrackingIdForAssign';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme, type Tone } from '@theme';
 
 import { DeliveryFailedModal } from './DeliveryFailedModal';
 
@@ -347,25 +348,20 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Escanear paquete</Text>
-          <Pressable
+          <Button
+            variant={hasScans ? 'primary' : 'ghost'}
+            icon={hasScans ? 'checkmark-done' : undefined}
             onPress={handleFinalize}
-            style={({ pressed }) => [
-              hasScans ? styles.finalizeBtn : styles.closeBtn,
-              pressed && (hasScans ? styles.pressedStrong : styles.closeBtnPressed),
-            ]}
-            hitSlop={12}
           >
-            <Text style={hasScans ? styles.finalizeLabel : styles.closeLabel}>
-              {finalizeLabel}
-            </Text>
-          </Pressable>
+            {finalizeLabel}
+          </Button>
         </View>
 
         <View style={styles.scannerWrap}>
           <QrScanner onScan={handleScan} scanCooldownMs={2000} containerStyle={styles.scanner} />
           {busy ? (
             <View style={styles.overlayBusy} pointerEvents="auto">
-              <ActivityIndicator size="large" color="#ffffff" />
+              <ActivityIndicator size="large" color={theme.colors.mediaOn} />
             </View>
           ) : null}
           {confirm !== null ? (
@@ -379,32 +375,18 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
                 </Text>
                 <Text style={styles.confirmQuestion}>¿Tomar este paquete?</Text>
                 <View style={styles.confirmActions}>
-                  <Pressable
-                    onPress={handleConfirmCancel}
-                    disabled={busy}
-                    style={({ pressed }) => [
-                      styles.confirmBtn,
-                      styles.confirmBtnSecondary,
-                      pressed && styles.pressedSoft,
-                      busy && styles.disabled,
-                    ]}
-                  >
-                    <Text style={styles.confirmBtnSecondaryLabel}>Cancelar</Text>
-                  </Pressable>
-                  <Pressable
+                  <Button variant="secondary" onPress={handleConfirmCancel} disabled={busy}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="primary"
                     onPress={() => {
                       void handleConfirmTakeover();
                     }}
                     disabled={busy}
-                    style={({ pressed }) => [
-                      styles.confirmBtn,
-                      styles.confirmBtnPrimary,
-                      pressed && styles.pressedStrong,
-                      busy && styles.disabled,
-                    ]}
                   >
-                    <Text style={styles.confirmBtnPrimaryLabel}>Tomar paquete</Text>
-                  </Pressable>
+                    Tomar paquete
+                  </Button>
                 </View>
               </View>
             </View>
@@ -412,17 +394,17 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
         </View>
 
         {error != null ? (
-          <View style={[styles.errorBanner, errorBannerStyleFor(theme, error.tone)]}>
-            <Text style={[styles.errorText, errorTextStyleFor(theme, error.tone)]}>
-              {error.message}
-            </Text>
+          <View style={styles.errorBanner}>
+            <Banner tone={bannerToneFor(error.tone)} message={error.message} />
             {error.failureTarget != null ? (
-              <Pressable
+              <Button
+                variant="danger"
+                icon="close-circle"
                 onPress={handleOpenFailureModal}
-                style={({ pressed }) => [styles.failureCta, pressed && styles.pressedStrong]}
+                style={styles.failureCta}
               >
-                <Text style={styles.failureCtaLabel}>Marcar como fallida</Text>
-              </Pressable>
+                Marcar como fallida
+              </Button>
             ) : null}
           </View>
         ) : null}
@@ -479,9 +461,12 @@ function ScannedItemsList({
       </View>
       {items.map((it) => (
         <View key={it.id} style={styles.historyRow}>
-          <Text style={[styles.historyDot, { color: dotColorFor(theme, it.status) }]}>
-            {dotGlyphFor(it.status)}
-          </Text>
+          <Ionicons
+            name={dotIconFor(it.status)}
+            size={16}
+            color={dotColorFor(theme, it.status)}
+            style={styles.historyDot}
+          />
           <Text style={styles.historyKey} numberOfLines={1}>
             {it.trackingKey}
             {it.packageTotal != null && it.packageTotal > 1 ? ` · ${it.packageTotal} bultos` : ''}
@@ -498,16 +483,16 @@ function ScannedItemsList({
   );
 }
 
-function dotGlyphFor(status: ScannedItemStatus): string {
+function dotIconFor(status: ScannedItemStatus): keyof typeof Ionicons.glyphMap {
   switch (status) {
     case 'assigned':
     case 'reassigned':
-      return '●';
+      return 'checkmark-circle';
     case 'already_scanned':
-      return '○';
+      return 'ellipse-outline';
     case 'reported_failed':
     case 'error':
-      return '✕';
+      return 'close-circle';
   }
 }
 
@@ -564,30 +549,19 @@ function humanStatus(code: string): string {
   return STATUS_LABELS[code] ?? code;
 }
 
-function errorBannerStyleFor(t: AppTheme, tone: ErrorTone) {
+function bannerToneFor(tone: ErrorTone): Tone {
   switch (tone) {
     case 'critical':
-      return { backgroundColor: 'rgba(239, 68, 68, 0.12)' };
+      return 'danger';
     case 'warning':
-      return { backgroundColor: t.colors.surface };
+      return 'warning';
     default:
-      return { backgroundColor: t.colors.surface };
-  }
-}
-
-function errorTextStyleFor(t: AppTheme, tone: ErrorTone) {
-  switch (tone) {
-    case 'critical':
-      return { color: t.colors.danger };
-    case 'warning':
-      return { color: t.colors.text };
-    default:
-      return { color: t.colors.text };
+      return 'info';
   }
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -597,43 +571,36 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
+      paddingLeft: spacing.lg,
+      paddingRight: spacing.sm,
+      paddingVertical: spacing.xs,
+      gap: spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.surface,
     },
     headerTitle: {
       ...typography.subtitle,
       color: colors.text,
-    },
-    closeBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    closeBtnPressed: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
-    },
-    closeLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
+      flex: 1,
     },
     scannerWrap: {
       flex: 1,
       position: 'relative',
+      backgroundColor: colors.media,
     },
     scanner: {
       flex: 1,
     },
     overlayBusy: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaScrim,
       alignItems: 'center',
       justifyContent: 'center',
     },
     overlayConfirm: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.65)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaScrim,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: spacing.lg,
@@ -665,74 +632,21 @@ function createStyles(t: AppTheme) {
     confirmActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
+      flexWrap: 'wrap',
       gap: spacing.md,
       marginTop: spacing.md,
-    },
-    confirmBtn: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-    },
-    confirmBtnPrimary: {
-      backgroundColor: colors.primary,
-    },
-    confirmBtnPrimaryLabel: {
-      ...typography.bodyStrong,
-      color: colors.primaryOn,
-    },
-    confirmBtnSecondary: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    confirmBtnSecondaryLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    pressedSoft: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
-    },
-    pressedStrong: {
-      opacity: motion.pressOpacityStrong,
-      transform: [{ scale: motion.pressScale }],
-    },
-    disabled: {
-      opacity: 0.5,
     },
     errorBanner: {
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
       borderTopWidth: 1,
       borderTopColor: colors.border,
+      backgroundColor: colors.background,
       gap: spacing.sm,
-    },
-    errorText: {
-      ...typography.body,
-      textAlign: 'center',
     },
     failureCta: {
       alignSelf: 'center',
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.danger,
       minWidth: 220,
-      alignItems: 'center',
-    },
-    failureCtaLabel: {
-      ...typography.bodyStrong,
-      color: colors.background,
-    },
-    finalizeBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.primary,
-    },
-    finalizeLabel: {
-      ...typography.bodyStrong,
-      color: colors.primaryOn,
     },
     historyBlock: {
       paddingHorizontal: spacing.lg,
@@ -764,9 +678,7 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
     },
     historyDot: {
-      fontSize: 14,
       width: 16,
-      textAlign: 'center',
     },
     historyKey: {
       ...typography.caption,

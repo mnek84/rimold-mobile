@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { QrScanner } from '@components/QrScanner';
+import { Button } from '@components/ui';
 import { getAuthErrorMessage, loginWithQr } from '@core/api/auth';
 import type { AuthUser } from '@core/auth/types';
 import { parseEmployeeLoginQr } from '@core/scanner/parseEmployeeLoginQr';
@@ -76,20 +70,16 @@ export function LoginQrScannerModal({ visible, onClose, onLoggedIn }: Props) {
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Escanear QR</Text>
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-            hitSlop={12}
-          >
-            <Text style={styles.closeLabel}>Cerrar</Text>
-          </Pressable>
+          <Button variant="secondary" onPress={onClose} hitSlop={theme.touch.hitSlop}>
+            Cerrar
+          </Button>
         </View>
 
         <View style={styles.scannerWrap}>
           <QrScanner onScan={handleScan} scanCooldownMs={2000} containerStyle={styles.scanner} />
           {busy ? (
             <View style={styles.overlayBusy} pointerEvents="auto">
-              <ActivityIndicator size="large" color="#ffffff" />
+              <ActivityIndicator size="large" color={theme.colors.mediaOn} />
             </View>
           ) : null}
         </View>
@@ -108,7 +98,7 @@ function useThemeStyles(theme: AppTheme) {
   return StyleSheet.create({
     safe: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: theme.colors.media,
     },
     header: {
       flexDirection: 'row',
@@ -116,27 +106,11 @@ function useThemeStyles(theme: AppTheme) {
       justifyContent: 'space-between',
       paddingHorizontal: theme.spacing.lg,
       paddingVertical: theme.spacing.md,
-      backgroundColor: '#000000',
+      backgroundColor: theme.colors.media,
     },
     headerTitle: {
       ...theme.typography.subtitle,
-      color: theme.colors.text,
-    },
-    closeBtn: {
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      borderRadius: theme.spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    closeBtnPressed: {
-      opacity: theme.motion.pressOpacitySoft,
-      transform: [{ scale: theme.motion.pressScale }],
-    },
-    closeLabel: {
-      ...theme.typography.bodyStrong,
-      color: theme.colors.text,
+      color: theme.colors.mediaOn,
     },
     scannerWrap: {
       flex: 1,
@@ -146,15 +120,15 @@ function useThemeStyles(theme: AppTheme) {
       flex: 1,
     },
     overlayBusy: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: 'rgba(0,0,0,0.35)',
+      backgroundColor: theme.colors.mediaScrim,
     },
     errorBanner: {
       paddingHorizontal: theme.spacing.lg,
       paddingVertical: theme.spacing.md,
-      backgroundColor: '#1a1a1a',
+      backgroundColor: theme.colors.dangerSoft,
     },
     errorText: {
       ...theme.typography.caption,

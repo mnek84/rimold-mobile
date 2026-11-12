@@ -254,9 +254,10 @@ export function CrossdockManualScreen() {
       </Text>
 
       <Pressable
-        style={styles.locationSelector}
+        style={({ pressed }) => [styles.locationSelector, pressed && styles.rowPressed]}
         onPress={() => setLocationPickerOpen((v) => !v)}
         accessibilityRole="button"
+        accessibilityState={{ expanded: locationPickerOpen }}
       >
         <Ionicons name="business-outline" size={18} color={theme.colors.primary} />
         <Text style={styles.locationLabel}>
@@ -274,7 +275,9 @@ export function CrossdockManualScreen() {
           {(locationsQuery.data ?? []).map((loc: CrossdockingLocation) => (
             <Pressable
               key={loc.id}
-              style={styles.pickerRow}
+              style={({ pressed }) => [styles.pickerRow, pressed && styles.rowPressed]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: loc.id === locationId }}
               onPress={() => {
                 setLocationId(loc.id);
                 setLocationPickerOpen(false);
@@ -301,7 +304,7 @@ export function CrossdockManualScreen() {
         <Animated.View style={[styles.flashError, errorFlashStyle]} pointerEvents="none" />
         {scanMutation.isPending || !ready ? (
           <View style={styles.scannerLockOverlay} pointerEvents="none">
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={theme.colors.mediaOn} />
             <Text style={styles.scannerLockText}>
               {!ready ? 'Cargando depósitos…' : 'Resolviendo…'}
             </Text>
@@ -314,8 +317,8 @@ export function CrossdockManualScreen() {
           style={[
             styles.resultBanner,
             last.success
-              ? last.duplicate
-                ? styles.resultBannerDuplicate
+              ? last.duplicate || !last.applied
+                ? styles.resultBannerWarning
                 : styles.resultBannerOk
               : styles.resultBannerError,
           ]}
@@ -340,7 +343,7 @@ export function CrossdockManualScreen() {
                 <Text
                   style={[
                     styles.resultLabel,
-                    { color: last.duplicate ? theme.colors.warning : theme.colors.success },
+                    !last.applied || last.duplicate ? styles.inkWarning : styles.inkSuccess,
                   ]}
                 >
                   {!last.applied
@@ -381,7 +384,7 @@ export function CrossdockManualScreen() {
             <View style={styles.resultTextWrap}>
               <View style={styles.resultHeaderRow}>
                 <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
-                <Text style={[styles.resultLabel, { color: theme.colors.danger }]}>
+                <Text style={[styles.resultLabel, styles.inkDanger]}>
                   SIN JAULA
                 </Text>
               </View>
@@ -441,7 +444,7 @@ export function CrossdockManualScreen() {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     headline: {
       ...typography.title,
@@ -457,12 +460,16 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      padding: spacing.sm + 2,
+      minHeight: touch.min,
+      paddingHorizontal: spacing.md,
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
+      borderColor: colors.borderStrong,
+      borderRadius: spacing.radiusLg,
       marginBottom: spacing.sm,
       backgroundColor: colors.surface,
+    },
+    rowPressed: {
+      opacity: motion.pressOpacitySoft,
     },
     locationLabel: {
       ...typography.body,
@@ -472,16 +479,18 @@ function createStyles(t: AppTheme) {
     pickerBox: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       marginBottom: spacing.md,
+      overflow: 'hidden',
     },
     pickerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      padding: spacing.sm + 2,
-      borderBottomWidth: 1,
+      minHeight: touch.min,
+      paddingHorizontal: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
     },
     pickerRowText: {
@@ -491,30 +500,30 @@ function createStyles(t: AppTheme) {
     },
     scannerWrap: {
       height: 230,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       overflow: 'hidden',
-      backgroundColor: '#000',
+      backgroundColor: colors.media,
       marginBottom: spacing.md,
     },
     scanner: { flex: 1 },
     flashSuccess: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(34, 197, 94, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaSuccessFlash,
     },
     flashError: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(239, 68, 68, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaDangerFlash,
     },
     scannerLockOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: colors.mediaScrim,
       gap: spacing.xs,
     },
     scannerLockText: {
       ...typography.bodyStrong,
-      color: '#ffffff',
+      color: colors.mediaOn,
       letterSpacing: 0.4,
     },
     resultBanner: {
@@ -522,22 +531,26 @@ function createStyles(t: AppTheme) {
       alignItems: 'flex-start',
       gap: spacing.sm,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusXl,
       borderWidth: 1,
       marginBottom: spacing.md,
     },
     resultBannerOk: {
-      backgroundColor: 'rgba(34, 197, 94, 0.12)',
-      borderColor: 'rgba(34, 197, 94, 0.45)',
+      backgroundColor: colors.successSoft,
+      borderColor: colors.success,
     },
     resultBannerError: {
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
-      borderColor: 'rgba(239, 68, 68, 0.45)',
+      backgroundColor: colors.dangerSoft,
+      borderColor: colors.danger,
     },
-    resultBannerDuplicate: {
-      backgroundColor: 'rgba(245, 158, 11, 0.12)',
-      borderColor: 'rgba(245, 158, 11, 0.45)',
+    // Re-escaneo / sugerida sin asignar: atencion, no exito ni error (ver `warning` en theme.ts).
+    resultBannerWarning: {
+      backgroundColor: colors.warningSoft,
+      borderColor: colors.warning,
     },
+    inkSuccess: { color: colors.success },
+    inkWarning: { color: colors.warning },
+    inkDanger: { color: colors.danger },
     resultTextWrap: { flex: 1, minWidth: 0 },
     resultHeaderRow: {
       flexDirection: 'row',
@@ -550,36 +563,37 @@ function createStyles(t: AppTheme) {
       letterSpacing: 1.1,
     },
     /**
-     * El nombre de la jaula es el dato dominante de la pantalla. 44pt se lee de
-     * un vistazo con el paquete en la mano; `adjustsFontSizeToFit` baja solo si
-     * la jaula tiene un nombre largo.
+     * El nombre de la jaula es el dato dominante de la pantalla: el token
+     * `display` (el mas grande de la escala) se lee de un vistazo con el paquete
+     * en la mano; `adjustsFontSizeToFit` baja solo si la jaula tiene un nombre
+     * largo.
      */
     resultCage: {
-      fontSize: 44,
-      lineHeight: 50,
-      fontWeight: '900',
+      ...typography.display,
+      fontWeight: '800',
       color: colors.text,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     resultMetaRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: spacing.md,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     resultMeta: {
       ...typography.captionStrong,
       color: colors.muted,
+      fontVariant: ['tabular-nums'],
     },
     resultGrid: {
       ...typography.title,
       color: colors.text,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     resultDetail: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
       fontFamily: 'monospace',
     },
     sectionLabel: {

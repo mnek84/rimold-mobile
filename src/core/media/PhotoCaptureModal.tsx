@@ -1,18 +1,10 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useTheme, type AppTheme } from '@theme';
+import { Button } from '@components/ui';
+import { useTheme, withAlpha, type AppTheme } from '@theme';
 
 type Captured = { uri: string; base64: string };
 
@@ -100,13 +92,9 @@ export function PhotoCaptureModal({ visible, onCapture, onClose }: Props) {
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
         <View style={styles.header}>
           <Text style={styles.title}>Foto de la entrega</Text>
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-            hitSlop={12}
-          >
-            <Text style={styles.headerBtnLabel}>Cancelar</Text>
-          </Pressable>
+          <Button variant="ghost" onPress={onClose} hitSlop={theme.touch.hitSlop}>
+            Cancelar
+          </Button>
         </View>
 
         {permission == null ? (
@@ -119,39 +107,26 @@ export function PhotoCaptureModal({ visible, onCapture, onClose }: Props) {
             <Text style={styles.message}>
               Se necesita acceso a la cámara para sacar la foto de entrega.
             </Text>
-            <Pressable
-              style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
-              onPress={() => void requestPermission()}
-            >
-              <Text style={styles.primaryBtnLabel}>Permitir cámara</Text>
-            </Pressable>
+            <Button size="lg" icon="camera-outline" onPress={() => void requestPermission()}>
+              Permitir cámara
+            </Button>
           </View>
         ) : captured != null ? (
           <View style={styles.previewWrap}>
             <Image source={{ uri: captured.uri }} style={styles.preview} resizeMode="contain" />
             <View style={styles.actionsRow}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryBtn,
-                  pressed && styles.pressed,
-                  busy && styles.disabled,
-                ]}
+              <Button
+                variant="secondary"
+                size="lg"
+                style={styles.actionBtn}
                 onPress={handleRetake}
                 disabled={busy}
               >
-                <Text style={styles.secondaryBtnLabel}>Reintentar</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  pressed && styles.pressed,
-                  busy && styles.disabled,
-                ]}
-                onPress={handleConfirm}
-                disabled={busy}
-              >
-                <Text style={styles.primaryBtnLabel}>Usar foto</Text>
-              </Pressable>
+                Reintentar
+              </Button>
+              <Button size="lg" style={styles.actionBtn} onPress={handleConfirm} disabled={busy}>
+                Usar foto
+              </Button>
             </View>
           </View>
         ) : (
@@ -176,7 +151,7 @@ export function PhotoCaptureModal({ visible, onCapture, onClose }: Props) {
                 accessibilityLabel="Capturar foto"
               >
                 {busy ? (
-                  <ActivityIndicator color={theme.colors.background} />
+                  <ActivityIndicator color={theme.colors.mediaOn} />
                 ) : (
                   <View style={styles.shutterInner} />
                 )}
@@ -194,15 +169,15 @@ function createStyles(t: AppTheme) {
   return StyleSheet.create({
     safe: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.media,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
-      backgroundColor: colors.background,
+      paddingVertical: spacing.sm,
+      backgroundColor: colors.surface,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -210,14 +185,6 @@ function createStyles(t: AppTheme) {
       ...typography.subtitle,
       color: colors.text,
       flex: 1,
-    },
-    headerBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    headerBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
     },
     centered: {
       flex: 1,
@@ -235,7 +202,7 @@ function createStyles(t: AppTheme) {
     },
     cameraWrap: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.media,
       overflow: 'hidden',
     },
     shutterRow: {
@@ -248,22 +215,22 @@ function createStyles(t: AppTheme) {
     shutter: {
       width: 76,
       height: 76,
-      borderRadius: 38,
-      backgroundColor: 'rgba(255,255,255,0.25)',
+      borderRadius: spacing.radiusPill,
+      backgroundColor: withAlpha(colors.mediaOn, 0.25),
       borderWidth: 4,
-      borderColor: '#FFFFFF',
+      borderColor: colors.mediaOn,
       alignItems: 'center',
       justifyContent: 'center',
     },
     shutterInner: {
       width: 56,
       height: 56,
-      borderRadius: 28,
-      backgroundColor: '#FFFFFF',
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.mediaOn,
     },
     previewWrap: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.media,
     },
     preview: {
       flex: 1,
@@ -275,38 +242,15 @@ function createStyles(t: AppTheme) {
       padding: spacing.lg,
       backgroundColor: colors.background,
     },
-    primaryBtn: {
+    actionBtn: {
       flex: 1,
-      paddingVertical: spacing.md + 2,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    primaryBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.background,
-    },
-    secondaryBtn: {
-      flex: 1,
-      paddingVertical: spacing.md + 2,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    secondaryBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
     },
     pressed: {
       opacity: motion.pressOpacityStrong,
       transform: [{ scale: motion.pressScale }],
     },
     disabled: {
-      opacity: 0.5,
+      opacity: motion.disabledOpacity,
     },
   });
 }

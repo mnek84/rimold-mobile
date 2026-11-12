@@ -20,6 +20,7 @@ import { createEventUuid } from '@core/sync';
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { showToast } from '@core/feedback/toastStore';
 import { decodeOsrmPolyline } from '@core/geo/decodeOsrmPolyline';
+import { Button } from '@components/ui';
 import type { MainTabNav } from '@navigation/types';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -28,7 +29,6 @@ import {
   openRouteInGoogleMaps,
   openTurnByTurnNavigation,
 } from './map/externalNavigation';
-import { ON_PRIMARY_INK } from './map/onPrimaryInk';
 import { RouteActionsSheet, type RouteBusyAction } from './map/RouteActionsSheet';
 import { RouteProgressHeader } from './map/RouteProgressHeader';
 import { StopListSheet } from './map/StopListSheet';
@@ -560,7 +560,7 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
           onPress={() => setListOpen(true)}
           style={({ pressed }) => [styles.fabPrimary, pressed && styles.pressed]}
         >
-          <Ionicons name="list" size={24} color={ON_PRIMARY_INK} />
+          <Ionicons name="list" size={24} color={theme.colors.primaryOn} />
         </Pressable>
       </View>
 
@@ -582,23 +582,16 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
         />
       ) : !started && !finished ? (
         <View style={[styles.startBar, { paddingBottom: theme.spacing.md + insets.bottom }]}>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="primary"
+            size="lg"
+            icon="play"
             accessibilityLabel="Iniciar ruta"
-            accessibilityState={{ disabled: busy !== null }}
             disabled={busy !== null}
             onPress={() => void onStartRoute()}
-            style={({ pressed }) => [
-              styles.startButton,
-              busy !== null && styles.startButtonBusy,
-              pressed && busy === null && styles.pressed,
-            ]}
           >
-            <Ionicons name="play" size={18} color={ON_PRIMARY_INK} />
-            <Text style={styles.startButtonLabel}>
-              {busy === 'start' ? 'Despachando…' : 'Poner todos en camino'}
-            </Text>
-          </Pressable>
+            {busy === 'start' ? 'Despachando…' : 'Poner todos en camino'}
+          </Button>
           <Text style={styles.startHint}>
             {totals !== null
               ? `Saca a reparto tus envíos propios. Los ${totals.byOperator.mercadolibre_flex ?? 0} Flex quedan en el recorrido con el estado que informe Mercado Libre.`
@@ -613,7 +606,7 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
             onPress={() => focusStop(nextStop.id)}
             style={({ pressed }) => [styles.nextPill, pressed && styles.pressed]}
           >
-            <Ionicons name="navigate" size={16} color={theme.colors.primary} />
+            <Ionicons name="navigate" size={22} color={theme.colors.primary} />
             <Text style={styles.nextPillText} numberOfLines={1}>
               Siguiente: {formatStopAddress(nextStop)}
             </Text>
@@ -654,7 +647,19 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
+  // Floating controls over the map keep a neutral shadow; never a coloured glow.
+  const floatShadow = (opacity: number, radius: number, offsetY: number, androidElevation: number) =>
+    Platform.select({
+      ios: {
+        shadowColor: colors.shadow,
+        shadowOpacity: opacity,
+        shadowRadius: radius,
+        shadowOffset: { width: 0, height: offsetY },
+      },
+      android: { elevation: androidElevation },
+      default: {},
+    });
   return StyleSheet.create({
     unlocatableBanner: {
       position: 'absolute',
@@ -666,7 +671,8 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
-      borderRadius: 12,
+      minHeight: touch.min,
+      borderRadius: spacing.radiusXl,
       backgroundColor: colors.warning,
     },
     unlocatableBannerText: {
@@ -679,7 +685,7 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.background,
     },
     webPlaceholder: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
       gap: spacing.md,
@@ -697,42 +703,24 @@ function createStyles(t: AppTheme) {
       alignItems: 'flex-end',
     },
     fabLight: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      width: touch.min,
+      height: touch.min,
+      borderRadius: spacing.radiusPill,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOpacity: 0.2,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-        },
-        android: { elevation: 5 },
-        default: {},
-      }),
+      ...floatShadow(0.2, 6, 2, 5),
     },
     fabPrimary: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: touch.primary,
+      height: touch.primary,
+      borderRadius: spacing.radiusPill,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.primary,
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.primary,
-          shadowOpacity: 0.45,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-        },
-        android: { elevation: 8 },
-        default: {},
-      }),
+      ...floatShadow(0.25, 8, 3, 8),
     },
     startBar: {
       position: 'absolute',
@@ -742,37 +730,11 @@ function createStyles(t: AppTheme) {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
       backgroundColor: colors.surface,
-      borderTopLeftRadius: spacing.radiusCard + 6,
-      borderTopRightRadius: spacing.radiusCard + 6,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOpacity: 0.22,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: -4 },
-        },
-        android: { elevation: 16 },
-        default: {},
-      }),
-    },
-    startButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      minHeight: 54,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
-    },
-    startButtonBusy: {
-      opacity: 0.7,
-    },
-    startButtonLabel: {
-      ...typography.bodyStrong,
-      fontSize: 17,
-      color: ON_PRIMARY_INK,
+      ...floatShadow(0.22, 16, -4, 16),
     },
     startHint: {
       ...typography.caption,
@@ -793,21 +755,12 @@ function createStyles(t: AppTheme) {
       alignItems: 'center',
       gap: spacing.sm,
       paddingHorizontal: spacing.lg,
-      minHeight: 48,
+      minHeight: touch.primary,
       borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOpacity: 0.18,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 2 },
-        },
-        android: { elevation: 6 },
-        default: {},
-      }),
+      borderWidth: 1,
+      borderColor: colors.primary,
+      ...floatShadow(0.18, 10, 2, 6),
     },
     nextPillText: {
       ...typography.bodyStrong,

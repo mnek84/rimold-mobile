@@ -41,6 +41,10 @@ function backgroundTaskOptions(): Location.LocationTaskOptions {
     distanceInterval: 10,
     showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: true,
+    // Sin esto iOS usa `Other` y puede pausar las actualizaciones en un
+    // embotellamiento. `AutomotiveNavigation` sólo pausa con el vehículo
+    // detenido un rato largo.
+    activityType: Location.ActivityType.AutomotiveNavigation,
     foregroundService: {
       notificationTitle: 'Tracking activo',
       notificationBody: 'Tu ubicación está siendo compartida',
@@ -84,7 +88,14 @@ export async function startDriverLocationTracking(): Promise<void> {
   startDriverLocationSyncWorker();
   setBlockedReason(null);
 
-  void Location.requestBackgroundPermissionsAsync();
+  // Esperar el permiso: sin él, `startLocationUpdatesAsync` falla en el primer
+  // arranque y sólo quedaba el watch de primer plano (sin rastreo con la app
+  // cerrada) hasta la próxima vuelta a primer plano.
+  try {
+    await Location.requestBackgroundPermissionsAsync();
+  } catch {
+    /* sigue con el watch de primer plano */
+  }
 
   let hasSource = false;
 

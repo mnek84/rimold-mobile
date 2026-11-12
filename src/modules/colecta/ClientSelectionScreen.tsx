@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { Card, Input, ScreenContainer } from '@components/ui';
+import { Button, Card, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { fetchClientsPage } from '@core/api/clients';
 import { calculateDistance } from '@core/geo/calculateDistance';
 import { isValidLatLng } from '@core/geo/coordinates';
@@ -347,9 +347,12 @@ export function ClientSelectionScreen({ navigation }: Props) {
           style={[styles.warehouseCard, isClosest && styles.warehouseCardClosest]}
         >
           {isClosest ? (
-            <View style={styles.closestBadge}>
-              <Text style={styles.closestBadgeText}>Más cercano</Text>
-            </View>
+            <StatusBadge
+              label="Más cercano"
+              tone="primary"
+              icon="navigate-outline"
+              style={styles.closestBadge}
+            />
           ) : null}
           <Text style={styles.warehouseName}>{warehouse.name}</Text>
           {warehouse.address != null && warehouse.address.trim() !== '' ? (
@@ -445,7 +448,7 @@ export function ClientSelectionScreen({ navigation }: Props) {
     const showSuggested = suggested.length > 0;
     const showAllDivider = showSuggested && sections.length > 0;
     if (!showSuggested && !showAllDivider) {
-      return null;
+      return undefined;
     }
     return (
       <View>
@@ -497,12 +500,9 @@ export function ClientSelectionScreen({ navigation }: Props) {
       ) : isError ? (
         <View style={styles.centered}>
           <Text style={styles.error}>{errorMessage}</Text>
-          <Pressable
-            style={({ pressed }) => [styles.retry, pressed && styles.retryPressed]}
-            onPress={() => void infinite.refetch()}
-          >
-            <Text style={styles.retryLabel}>Reintentar</Text>
-          </Pressable>
+          <Button variant="primary" onPress={() => void infinite.refetch()}>
+            Reintentar
+          </Button>
         </View>
       ) : (
         <SectionList<SectionRow, ClientSection>
@@ -536,7 +536,7 @@ export function ClientSelectionScreen({ navigation }: Props) {
               <View style={styles.footerLoading}>
                 <ActivityIndicator color={theme.colors.primary} />
               </View>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <Text style={styles.empty}>
@@ -641,22 +641,9 @@ function createStyles(t: AppTheme) {
     warehouseCardClosest: {
       borderWidth: 1.5,
       borderColor: colors.primary,
-      backgroundColor: colors.surfaceMuted,
     },
     closestBadge: {
-      alignSelf: 'flex-start',
-      backgroundColor: colors.surfaceMuted,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.primary,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
-      borderRadius: spacing.radiusSm,
       marginBottom: spacing.sm,
-    },
-    closestBadgeText: {
-      ...typography.captionStrong,
-      color: colors.primary,
-      letterSpacing: 0.2,
     },
     warehouseName: {
       ...typography.bodyStrong,
@@ -709,28 +696,16 @@ function createStyles(t: AppTheme) {
       color: colors.danger,
       textAlign: 'center',
     },
-    retry: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.xl,
-      backgroundColor: colors.primary,
-      borderRadius: spacing.radiusLg,
-    },
-    retryPressed: {
-      opacity: motion.pressOpacityStrong,
-      transform: [{ scale: motion.pressScale }],
-    },
-    retryLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
     empty: {
       ...typography.body,
       color: colors.muted,
       textAlign: 'center',
     },
     headerRightButton: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
+      minWidth: t.touch.min,
+      minHeight: t.touch.min,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     headerRightButtonPressed: {
       opacity: motion.pressOpacitySoft,

@@ -10,9 +10,9 @@ import {
   View,
 } from 'react-native';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Card, ScreenContainer, StatusBadge, type StatusBadgeProps } from '@components/ui';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme, type Tone } from '@theme';
 
 import { useMyPickupOrders } from '../hooks/usePickupOrders';
 import {
@@ -87,6 +87,15 @@ const STATUS_TONE: Record<Extract<PickupOrderStatus, 'completed' | 'cancelled' |
   rejected: 'danger',
 };
 
+const BADGE_PRESENTATION: Record<
+  'ok' | 'warn' | 'danger',
+  { tone: Tone; icon: NonNullable<StatusBadgeProps['icon']> }
+> = {
+  ok: { tone: 'success', icon: 'checkmark-circle' },
+  warn: { tone: 'warning', icon: 'warning-outline' },
+  danger: { tone: 'danger', icon: 'close-circle' },
+};
+
 export function PickupOrdersHistoryScreen(_props: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -133,7 +142,7 @@ export function PickupOrdersHistoryScreen(_props: Props) {
           return (
             <Card style={styles.card}>
               <View style={styles.rowBetween}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.flex}>
                   <Text style={styles.title} numberOfLines={1}>
                     {item.crossdocking_location?.name ?? 'Destino desconocido'}
                   </Text>
@@ -151,11 +160,11 @@ export function PickupOrdersHistoryScreen(_props: Props) {
                     </Text>
                   ) : null}
                 </View>
-                <View style={[styles.badge, styles[`badge_${tone}` as const]]}>
-                  <Text style={[styles.badgeText, styles[`badgeText_${tone}` as const]]}>
-                    {PICKUP_ORDER_STATUS_LABEL[item.status]}
-                  </Text>
-                </View>
+                <StatusBadge
+                  label={PICKUP_ORDER_STATUS_LABEL[item.status]}
+                  tone={BADGE_PRESENTATION[tone].tone}
+                  icon={BADGE_PRESENTATION[tone].icon}
+                />
               </View>
             </Card>
           );
@@ -167,7 +176,9 @@ export function PickupOrdersHistoryScreen(_props: Props) {
         refreshControl={
           <RefreshControl
             refreshing={query.isFetching && !query.isLoading}
-            onRefresh={() => query.refetch()}
+            onRefresh={() => {
+                void query.refetch();
+              }}
             tintColor={theme.colors.primary}
           />
         }
@@ -195,7 +206,8 @@ function createStyles(theme: AppTheme) {
       gap: spacing.md,
     },
     muted: { ...typography.caption, color: colors.muted },
-    listContent: { paddingBottom: spacing.xl, paddingHorizontal: 16 },
+    listContent: { paddingBottom: spacing.xl, paddingHorizontal: spacing.lg },
+    flex: { flex: 1 },
     listEmpty: { flexGrow: 1, justifyContent: 'center' },
     sectionHeader: {
       paddingTop: spacing.lg,
@@ -206,24 +218,16 @@ function createStyles(theme: AppTheme) {
     },
     sectionTitle: { ...typography.subtitle, color: colors.text },
     sectionSummary: { ...typography.caption, color: colors.muted, marginTop: 2 },
-    card: { marginVertical: 6 },
-    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    title: { fontSize: 16, fontWeight: '600', color: colors.text },
-    subtitle: { fontSize: 13, color: colors.muted, marginTop: 2 },
-    reason: { fontSize: 12, color: colors.muted, marginTop: 4, fontStyle: 'italic' },
-    badge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: colors.surfaceMuted ?? '#e5e7eb',
+    card: { marginVertical: spacing.xs + 2 },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    title: { ...typography.bodyStrong, color: colors.text },
+    subtitle: { ...typography.caption, color: colors.muted, marginTop: spacing.xxs },
+    reason: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: spacing.xs,
+      fontStyle: 'italic',
     },
-    badge_ok: { backgroundColor: colors.surfaceMuted ?? '#e5e7eb' },
-    badge_warn: { backgroundColor: colors.surfaceMuted ?? '#e5e7eb' },
-    badge_danger: { backgroundColor: colors.surfaceMuted ?? '#e5e7eb' },
-    badgeText: { fontSize: 12, fontWeight: '500' },
-    badgeText_ok: { color: colors.primary },
-    badgeText_warn: { color: colors.text },
-    badgeText_danger: { color: colors.danger },
     emptyState: {
       alignItems: 'center',
       paddingHorizontal: spacing.xl,

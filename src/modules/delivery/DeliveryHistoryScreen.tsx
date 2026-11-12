@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Button, Card, ScreenContainer } from '@components/ui';
 import {
   fetchDeliveryHistory,
   type DeliveryHistoryDay,
@@ -319,7 +319,7 @@ export function DeliveryHistoryScreen(_props: Props) {
             <View style={styles.reasonRow}>
               <Ionicons
                 name="alert-circle-outline"
-                size={14}
+                size={16}
                 color={theme.colors.danger}
                 style={styles.reasonIcon}
               />
@@ -335,7 +335,7 @@ export function DeliveryHistoryScreen(_props: Props) {
             <View style={styles.itemMetaRow}>
               {time !== '' ? (
                 <>
-                  <Ionicons name="time-outline" size={13} color={theme.colors.muted} />
+                  <Ionicons name="time-outline" size={14} color={theme.colors.muted} />
                   <Text style={styles.itemMetaText}>{time}</Text>
                 </>
               ) : null}
@@ -393,7 +393,6 @@ export function DeliveryHistoryScreen(_props: Props) {
         accessibilityRole="button"
         accessibilityLabel="Mes anterior"
         onPress={() => onChangeMonth(-1)}
-        hitSlop={8}
         style={({ pressed }) => [styles.monthNav, pressed && styles.monthNavPressed]}
       >
         <Ionicons name="chevron-back" size={20} color={theme.colors.primary} />
@@ -413,7 +412,6 @@ export function DeliveryHistoryScreen(_props: Props) {
         accessibilityState={{ disabled: !canGoForward }}
         disabled={!canGoForward}
         onPress={() => onChangeMonth(1)}
-        hitSlop={8}
         style={({ pressed }) => [
           styles.monthNav,
           !canGoForward && styles.monthNavDisabled,
@@ -454,12 +452,9 @@ export function DeliveryHistoryScreen(_props: Props) {
         {monthHeader}
         <View style={styles.centered}>
           <Text style={styles.error}>{errorMessage}</Text>
-          <Pressable
-            style={({ pressed }) => [styles.retry, pressed && styles.retryPressed]}
-            onPress={() => void query.refetch()}
-          >
-            <Text style={styles.retryLabel}>Reintentar</Text>
-          </Pressable>
+          <Button icon="refresh-outline" onPress={() => void query.refetch()}>
+            Reintentar
+          </Button>
         </View>
       </ScreenContainer>
     );
@@ -507,7 +502,7 @@ export function DeliveryHistoryScreen(_props: Props) {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     screenBody: {
       flexGrow: 1,
@@ -533,17 +528,17 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.sm,
     },
     monthNav: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: touch.min,
+      height: touch.min,
+      borderRadius: spacing.radiusPill,
       backgroundColor: colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
       alignItems: 'center',
       justifyContent: 'center',
     },
     monthNavDisabled: {
-      opacity: 0.4,
+      opacity: motion.disabledOpacity,
     },
     monthNavPressed: {
       opacity: motion.pressOpacitySoft,
@@ -560,7 +555,7 @@ function createStyles(t: AppTheme) {
     monthSummary: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     sectionHeader: {
       paddingVertical: spacing.md,
@@ -588,22 +583,23 @@ function createStyles(t: AppTheme) {
     sectionSummary: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     sectionAlertDot: {
-      minWidth: 22,
-      height: 22,
-      paddingHorizontal: 6,
-      borderRadius: 11,
-      backgroundColor: `${colors.danger}28`,
+      minWidth: 24,
+      height: 24,
+      paddingHorizontal: spacing.xs + 2,
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.dangerSoft,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: `${colors.danger}88`,
+      borderColor: colors.danger,
       alignItems: 'center',
       justifyContent: 'center',
     },
     sectionAlertDotText: {
       ...typography.captionStrong,
       color: colors.danger,
+      fontVariant: ['tabular-nums'],
     },
     itemCard: {
       marginBottom: spacing.md,
@@ -626,7 +622,7 @@ function createStyles(t: AppTheme) {
       marginTop: spacing.sm,
     },
     reasonIcon: {
-      marginTop: 1,
+      marginTop: spacing.xxs,
     },
     reasonTextWrapper: {
       flex: 1,
@@ -639,7 +635,7 @@ function createStyles(t: AppTheme) {
     reasonNote: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     itemHeaderRow: {
       flexDirection: 'row',
@@ -674,9 +670,9 @@ function createStyles(t: AppTheme) {
     statusBadge: {
       flexShrink: 0,
       maxWidth: '45%',
-      paddingHorizontal: spacing.sm + 2,
-      paddingVertical: spacing.xs + 1,
-      borderRadius: spacing.radiusMd,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: spacing.radiusSm,
       borderWidth: StyleSheet.hairlineWidth,
     },
     statusBadgeText: {
@@ -697,20 +693,6 @@ function createStyles(t: AppTheme) {
       ...typography.body,
       color: colors.danger,
       textAlign: 'center',
-    },
-    retry: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.xl,
-      backgroundColor: colors.primary,
-      borderRadius: spacing.radiusLg,
-    },
-    retryPressed: {
-      opacity: motion.pressOpacityStrong,
-      transform: [{ scale: motion.pressScale }],
-    },
-    retryLabel: {
-      ...typography.bodyStrong,
-      color: colors.primaryOn,
     },
     emptyState: {
       alignItems: 'center',

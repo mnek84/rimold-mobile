@@ -64,10 +64,7 @@ export function AppNavigator() {
         ...theme.typography.bodyStrong,
         color: theme.colors.text,
       },
-      tabBarLabelStyle: {
-        fontSize: theme.typography.captionStrong.fontSize,
-        fontWeight: theme.typography.captionStrong.fontWeight,
-      },
+      tabBarLabelStyle: theme.typography.micro,
       tabBarActiveTintColor: theme.colors.primary,
       tabBarInactiveTintColor: theme.colors.muted,
       tabBarStyle: {

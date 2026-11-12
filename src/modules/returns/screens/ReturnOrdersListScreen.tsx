@@ -11,13 +11,14 @@ import {
   View,
 } from 'react-native';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Card, ScreenContainer, StatusBadge } from '@components/ui';
 import type { ReturnStackParamList } from '@navigation/returnStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
 import { useMyReturnOrders } from '../hooks/useReturnOrders';
 import { formatShortWeekday } from '@modules/pickups/lib/formatSchedule';
 import { RETURN_ORDER_STATUS_LABEL, isTerminalOrderStatus } from '../lib/returnOrderStatus';
+import { RETURN_ORDER_STATUS_PRESENTATION } from '../lib/returnStatusTone';
 import type { ReturnOrder } from '../types';
 
 type Props = NativeStackScreenProps<ReturnStackParamList, 'ReturnOrdersList'>;
@@ -59,9 +60,13 @@ export function ReturnOrdersListScreen({ navigation }: Props) {
   return (
     <ScreenContainer>
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={query.isFetching} onRefresh={() => void query.refetch()} />
+          <RefreshControl
+            refreshing={query.isFetching}
+            onRefresh={() => void query.refetch()}
+            tintColor={theme.colors.primary}
+          />
         }
       >
         {orders.length === 0 ? (
@@ -71,9 +76,19 @@ export function ReturnOrdersListScreen({ navigation }: Props) {
           </View>
         ) : (
           orders.map((order) => (
-            <Pressable key={order.id} onPress={() => open(order)}>
-              <Card style={{ marginBottom: 10 }}>
-                <Text style={styles.badge}>{RETURN_ORDER_STATUS_LABEL[order.status]}</Text>
+            <Pressable
+              key={order.id}
+              onPress={() => open(order)}
+              accessibilityRole="button"
+              style={({ pressed }) => pressed && styles.cardPressed}
+            >
+              <Card style={styles.card}>
+                <StatusBadge
+                  label={RETURN_ORDER_STATUS_LABEL[order.status]}
+                  tone={RETURN_ORDER_STATUS_PRESENTATION[order.status].tone}
+                  icon={RETURN_ORDER_STATUS_PRESENTATION[order.status].icon}
+                  style={styles.badge}
+                />
                 <Text style={styles.title}>{order.business?.name ?? 'Devolución'}</Text>
                 <Text style={styles.muted}>{formatShortWeekday(order.scheduled_date)}</Text>
                 <Text style={styles.muted}>
@@ -90,21 +105,20 @@ export function ReturnOrdersListScreen({ navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography, motion } = theme;
   return StyleSheet.create({
-    center: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
-    empty: { color: theme.colors.muted, fontSize: 14, textAlign: 'center' },
-    badge: {
-      alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.text,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 8,
+    scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl + spacing.sm },
+    center: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: spacing.xxl,
+      gap: spacing.sm,
     },
-    title: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
-    muted: { fontSize: 14, color: theme.colors.muted, marginTop: 4 },
+    empty: { ...typography.body, color: colors.muted, textAlign: 'center' },
+    card: { marginBottom: spacing.md },
+    cardPressed: { opacity: motion.pressOpacitySoft },
+    badge: { marginBottom: spacing.sm },
+    title: { ...typography.subtitle, fontWeight: '700', color: colors.text },
+    muted: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
   });
 }

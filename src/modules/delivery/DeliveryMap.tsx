@@ -5,7 +5,7 @@ import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 import type { ShipmentNavigationStop } from '@core/api/shipments';
 import { decodeEncodedPolyline } from '@core/geo/decodePolyline';
 import { isValidLatLng } from '@core/geo/coordinates';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, withAlpha, type AppTheme } from '@theme';
 
 type Props = {
   stops: ShipmentNavigationStop[];
@@ -133,8 +133,8 @@ export function DeliveryMap({ stops, encodedPolyline, loading, error, emptyHint 
         <Circle
           center={{ latitude: nextStop.latitude, longitude: nextStop.longitude }}
           radius={100}
-          strokeColor={`${routeColor}d9`}
-          fillColor={`${routeColor}26`}
+          strokeColor={withAlpha(routeColor, 0.85)}
+          fillColor={withAlpha(routeColor, 0.15)}
         />
       )}
       {stopsWithCoords.map((s) => (
@@ -143,13 +143,7 @@ export function DeliveryMap({ stops, encodedPolyline, loading, error, emptyHint 
           coordinate={{ latitude: s.latitude, longitude: s.longitude }}
           title={s.is_next ? 'Siguiente parada' : `Parada ${s.sequence}`}
           description={s.label ?? s.shipment_id.slice(0, 8)}
-          pinColor={
-            Platform.OS === 'ios'
-              ? s.is_next
-                ? 'red'
-                : 'green'
-              : (s.is_next ? theme.colors.primary : theme.colors.muted)
-          }
+          pinColor={s.is_next ? theme.colors.primary : theme.colors.muted}
         />
       ))}
     </MapView>

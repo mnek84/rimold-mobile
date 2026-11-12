@@ -1,5 +1,4 @@
 import NetInfo from '@react-native-community/netinfo';
-import { InteractionManager } from 'react-native';
 
 import { showToast } from '@core/feedback/toastStore';
 
@@ -81,9 +80,9 @@ export function processQueue(): Promise<void> {
   return run;
 }
 
-/** Runs {@link processQueue} after the current interaction/animation batch (keeps UI responsive). */
+/** Runs {@link processQueue} once the JS thread is idle (keeps UI responsive). */
 export function scheduleProcessQueue(): void {
-  InteractionManager.runAfterInteractions(() => {
+  requestIdleCallback(() => {
     void processQueue();
   });
 }
@@ -105,7 +104,7 @@ export async function processQueueIfOnline(): Promise<void> {
 }
 
 export function scheduleProcessQueueIfOnline(): void {
-  InteractionManager.runAfterInteractions(() => {
+  requestIdleCallback(() => {
     void processQueueIfOnline();
   });
 }

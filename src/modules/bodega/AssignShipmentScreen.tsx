@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { QrScanner } from '@components/QrScanner';
-import { ScreenContainer } from '@components/ui';
+import { Banner, Button, ScreenContainer } from '@components/ui';
 import {
   assignShipmentsToCage,
   CAGE_SPECIAL_PURPOSE_LABELS,
@@ -139,7 +139,14 @@ export function AssignShipmentScreen() {
       const suggested = found?.suggested_cage?.id === item.id;
       return (
         <Pressable
-          style={[styles.cageBtn, suggested && styles.cageBtnSuggested]}
+          style={({ pressed }) => [
+            styles.cageBtn,
+            suggested && styles.cageBtnSuggested,
+            pressed && styles.cageBtnPressed,
+            assignMutation.isPending && styles.disabled,
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: assignMutation.isPending }}
           disabled={assignMutation.isPending}
           onPress={() => assignMutation.mutate(item.id)}
         >
@@ -149,11 +156,16 @@ export function AssignShipmentScreen() {
               {CAGE_SPECIAL_PURPOSE_LABELS[item.special_purpose]}
             </Text>
           ) : null}
-          {suggested ? <Text style={styles.cageBtnSuggestedTag}>sugerida por CP</Text> : null}
+          {suggested ? (
+            <View style={styles.cageBtnSuggestedRow}>
+              <Ionicons name="star" size={14} color={theme.colors.primary} />
+              <Text style={styles.cageBtnSuggestedTag}>sugerida por CP</Text>
+            </View>
+          ) : null}
         </Pressable>
       );
     },
-    [assignMutation, found, styles],
+    [assignMutation, found, styles, theme.colors.primary],
   );
 
   return (
@@ -236,38 +248,39 @@ export function AssignShipmentScreen() {
             </>
           ) : null}
 
-          <Pressable style={styles.cancelBtn} onPress={() => setFound(null)}>
-            <Text style={styles.cancelBtnText}>Escanear otro</Text>
-          </Pressable>
+          <Button
+            variant="ghost"
+            icon="scan-outline"
+            fullWidth
+            style={styles.cancelBtn}
+            onPress={() => setFound(null)}
+          >
+            Escanear otro
+          </Button>
         </>
       )}
 
       {done !== null ? (
-        <View style={styles.okBanner}>
-          <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
-          <Text style={styles.okText}>{done}</Text>
-        </View>
+        <Banner tone="success" icon="checkmark-circle" message={done} style={styles.resultBanner} />
       ) : null}
 
       {error !== null ? (
-        <View style={styles.errBanner}>
-          <Ionicons name="alert-circle" size={18} color={theme.colors.danger} />
-          <Text style={styles.errText}>{error}</Text>
-        </View>
+        <Banner tone="danger" icon="alert-circle" message={error} style={styles.resultBanner} />
       ) : null}
     </ScreenContainer>
   );
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     title: { ...typography.title, color: colors.text, marginBottom: spacing.xs },
     subtitle: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
     scannerBox: {
       height: 260,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       overflow: 'hidden',
+      backgroundColor: colors.media,
       marginBottom: spacing.md,
     },
     hintRow: {
@@ -279,12 +292,12 @@ function createStyles(t: AppTheme) {
     hintText: { ...typography.caption, color: colors.muted },
     card: {
       padding: spacing.md,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.surface,
       marginBottom: spacing.lg,
-      gap: 2,
+      gap: spacing.xxs,
     },
     tracking: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
     cardMeta: { ...typography.caption, color: colors.muted },
@@ -304,43 +317,31 @@ function createStyles(t: AppTheme) {
     cageRow: { gap: spacing.sm, marginBottom: spacing.sm },
     cageBtn: {
       flex: 1,
+      minHeight: touch.min,
+      justifyContent: 'center',
       padding: spacing.md,
       borderRadius: spacing.radiusLg,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
     },
-    cageBtnSuggested: { borderColor: colors.primary, borderWidth: 2 },
+    cageBtnSuggested: {
+      borderColor: colors.primary,
+      borderWidth: 2,
+      backgroundColor: colors.primarySoft,
+    },
+    cageBtnPressed: { opacity: motion.pressOpacitySoft },
+    disabled: { opacity: motion.disabledOpacity },
+    cageBtnSuggestedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: spacing.xxs,
+    },
     cageBtnName: { ...typography.bodyStrong, color: colors.text },
     cageBtnMeta: { ...typography.caption, color: colors.muted },
-    cageBtnSuggestedTag: { ...typography.caption, color: colors.primary },
-    cancelBtn: {
-      alignItems: 'center',
-      paddingVertical: spacing.md,
-      marginTop: spacing.sm,
-    },
-    cancelBtnText: { ...typography.bodyStrong, color: colors.primary },
-    okBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      padding: spacing.md,
-      borderRadius: spacing.radiusLg,
-      borderWidth: 1,
-      borderColor: colors.success,
-      marginTop: spacing.sm,
-    },
-    okText: { ...typography.caption, color: colors.success, flex: 1 },
-    errBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      padding: spacing.md,
-      borderRadius: spacing.radiusLg,
-      borderWidth: 1,
-      borderColor: colors.danger,
-      marginTop: spacing.sm,
-    },
-    errText: { ...typography.caption, color: colors.danger, flex: 1 },
+    cageBtnSuggestedTag: { ...typography.captionStrong, color: colors.primary },
+    cancelBtn: { marginTop: spacing.sm },
+    resultBanner: { marginTop: spacing.sm },
   });
 }

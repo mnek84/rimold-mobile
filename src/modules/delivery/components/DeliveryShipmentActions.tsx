@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, withAlpha, type AppTheme } from '@theme';
 
 import { DELIVERY_DETAIL_ACTIONS } from '../deliveryDetailActions';
 import { isDriverActionEnabled, type DriverActionKey } from '../deliveryStatus';
@@ -25,10 +25,10 @@ const ACTION_ICONS: Record<DriverActionKey, keyof typeof Ionicons.glyphMap> = {
 
 type ActionLook = {
   backgroundColor: string;
+  borderColor: string;
   iconColor: string;
   labelColor: string;
   sublabelColor: string;
-  shadowColor: string;
 };
 
 function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): ActionLook {
@@ -37,10 +37,10 @@ function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): Acti
   if (!enabled) {
     return {
       backgroundColor: colors.surface,
+      borderColor: colors.border,
       iconColor: colors.muted,
       labelColor: colors.muted,
       sublabelColor: 'transparent',
-      shadowColor: 'transparent',
     };
   }
 
@@ -48,34 +48,34 @@ function actionLook(t: AppTheme, variant: ActionVariant, enabled: boolean): Acti
     case 'primary':
       return {
         backgroundColor: colors.primary,
+        borderColor: colors.primary,
         iconColor: colors.primaryOn,
         labelColor: colors.primaryOn,
         sublabelColor: colors.primaryOn,
-        shadowColor: colors.primary,
       };
     case 'secondary':
       return {
-        backgroundColor: colors.surfaceMuted,
+        backgroundColor: colors.surface,
+        borderColor: colors.borderStrong,
         iconColor: colors.text,
         labelColor: colors.text,
         sublabelColor: colors.muted,
-        shadowColor: colors.text,
       };
     case 'success':
       return {
         backgroundColor: colors.success,
+        borderColor: colors.success,
         iconColor: colors.successOn,
         labelColor: colors.successOn,
         sublabelColor: colors.successOn,
-        shadowColor: colors.success,
       };
     case 'danger':
       return {
         backgroundColor: colors.danger,
+        borderColor: colors.danger,
         iconColor: colors.dangerOn,
         labelColor: colors.dangerOn,
         sublabelColor: colors.dangerOn,
-        shadowColor: colors.danger,
       };
   }
 }
@@ -115,23 +115,11 @@ export function DeliveryShipmentActions({ effectiveStatusCode, onAction, driverA
               accessibilityState={{ disabled: !enabled }}
               disabled={!enabled}
               android_ripple={
-                enabled ? { color: 'rgba(255,255,255,0.12)', foreground: true } : undefined
+                enabled ? { color: withAlpha(look.labelColor, 0.12), foreground: true } : undefined
               }
               style={({ pressed }) => [
                 styles.actionBtn,
-                { backgroundColor: look.backgroundColor },
-                enabled && {
-                  ...Platform.select({
-                    ios: {
-                      shadowColor: look.shadowColor,
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.45,
-                      shadowRadius: 8,
-                    },
-                    android: { elevation: 5 },
-                    default: {},
-                  }),
-                },
+                { backgroundColor: look.backgroundColor, borderColor: look.borderColor },
                 !enabled && styles.actionBtnDisabled,
                 enabled && pressed && styles.actionBtnPressed,
               ]}
@@ -184,10 +172,11 @@ function createStyles(t: AppTheme) {
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.lg,
       borderRadius: spacing.radiusLg,
+      borderWidth: 1,
       overflow: 'hidden',
     },
     actionBtnDisabled: {
-      opacity: 0.28,
+      opacity: motion.disabledOpacity,
     },
     actionBtnPressed: {
       opacity: motion.pressOpacityStrong,
@@ -200,12 +189,11 @@ function createStyles(t: AppTheme) {
     },
     textBlock: {
       flex: 1,
-      gap: 2,
+      gap: spacing.xxs,
     },
     actionLabel: {
-      fontSize: 17,
+      ...typography.subtitle,
       fontWeight: '700' as const,
-      lineHeight: 22,
     },
     actionSublabel: {
       ...typography.caption,

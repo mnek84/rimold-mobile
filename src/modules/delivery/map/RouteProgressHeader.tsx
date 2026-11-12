@@ -4,8 +4,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { useTheme, type AppTheme } from '@theme';
 
-import { ON_PRIMARY_CONTROL_BG, ON_PRIMARY_INK } from './onPrimaryInk';
-
 type Props = {
   visited: number;
   total: number;
@@ -35,6 +33,7 @@ export function RouteProgressHeader({
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const ink = theme.colors.chromeOn;
 
   const allDone = total > 0 && visited >= total;
   const title =
@@ -60,7 +59,7 @@ export function RouteProgressHeader({
               <Text style={styles.link} numberOfLines={1}>
                 {openMapsLabel}
               </Text>
-              <Ionicons name="chevron-forward" size={15} color={ON_PRIMARY_INK} />
+              <Ionicons name="chevron-forward" size={16} color={ink} />
             </Pressable>
           ) : (
             <Text style={styles.subtle} numberOfLines={1}>
@@ -79,9 +78,9 @@ export function RouteProgressHeader({
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         >
           {refreshing ? (
-            <ActivityIndicator size="small" color={ON_PRIMARY_INK} />
+            <ActivityIndicator size="small" color={ink} />
           ) : (
-            <Ionicons name="refresh" size={22} color={ON_PRIMARY_INK} />
+            <Ionicons name="refresh" size={22} color={ink} />
           )}
         </Pressable>
       </View>
@@ -93,7 +92,7 @@ function createStyles(t: AppTheme) {
   const { colors, spacing, typography, motion } = t;
   return StyleSheet.create({
     banner: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.chrome,
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.md,
     },
@@ -108,34 +107,34 @@ function createStyles(t: AppTheme) {
     },
     title: {
       ...typography.subtitle,
-      fontSize: 19,
       fontWeight: '700',
-      color: ON_PRIMARY_INK,
+      color: colors.chromeOn,
     },
     linkRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
-      marginTop: 2,
+      gap: spacing.xxs,
+      marginTop: spacing.xxs,
       alignSelf: 'flex-start',
+      minHeight: 32,
     },
     link: {
-      ...typography.body,
-      color: ON_PRIMARY_INK,
+      ...typography.bodyStrong,
+      color: colors.chromeOn,
+      textDecorationLine: 'underline',
     },
     subtle: {
       ...typography.caption,
-      color: ON_PRIMARY_INK,
-      opacity: 0.85,
-      marginTop: 2,
+      color: colors.chromeOn,
+      marginTop: spacing.xxs,
     },
     iconButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: ON_PRIMARY_CONTROL_BG,
+      backgroundColor: colors.chromeControl,
     },
     pressed: {
       opacity: motion.pressOpacityStrong,

@@ -62,7 +62,10 @@ export function PackageProgress({
                 size={14}
                 color={done ? theme.colors.success : theme.colors.muted}
               />
-              <Text style={[styles.chipText, done && styles.chipTextDone]}>
+              <Text
+                style={[styles.chipText, done && styles.chipTextDone]}
+                maxFontSizeMultiplier={1.3}
+              >
                 {index}/{safeTotal}
               </Text>
             </View>
@@ -80,67 +83,68 @@ export function PackageProgress({
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
     wrap: {
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      gap: 8,
+      backgroundColor: colors.surfaceMuted,
+      borderRadius: spacing.radiusXl,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm + spacing.xxs,
+      gap: spacing.sm,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 8,
+      gap: spacing.sm,
     },
     title: {
+      ...typography.captionStrong,
       flex: 1,
-      color: theme.colors.text,
-      fontSize: 13,
-      fontWeight: '600',
+      color: colors.text,
     },
     count: {
-      color: theme.colors.muted,
-      fontSize: 15,
+      ...typography.bodyStrong,
       fontWeight: '700',
+      color: colors.muted,
       fontVariant: ['tabular-nums'],
     },
     countComplete: {
-      color: theme.colors.success,
+      color: colors.success,
     },
     chips: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
+      gap: spacing.xs + spacing.xxs,
     },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      borderRadius: 999,
+      gap: spacing.xs,
+      borderRadius: spacing.radiusPill,
       borderWidth: 1,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xxs,
+      backgroundColor: colors.surface,
     },
     chipDone: {
-      borderColor: theme.colors.success,
+      borderColor: colors.success,
+      backgroundColor: colors.successSoft,
     },
     chipPending: {
-      borderColor: theme.colors.border,
+      borderColor: colors.border,
     },
     chipText: {
-      color: theme.colors.muted,
-      fontSize: 12,
-      fontWeight: '600',
+      ...typography.micro,
+      color: colors.muted,
       fontVariant: ['tabular-nums'],
     },
     chipTextDone: {
-      color: theme.colors.success,
+      color: colors.success,
     },
     missing: {
-      color: theme.colors.muted,
-      fontSize: 12,
+      ...typography.caption,
+      color: colors.muted,
     },
   });
 }

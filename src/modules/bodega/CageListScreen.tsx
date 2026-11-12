@@ -9,13 +9,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { QrScanner } from '@components/QrScanner';
-import { ScreenContainer } from '@components/ui';
+import { Button, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { fetchActiveCageSession } from '@core/api/cageSessions';
 import {
   fetchWarehouseCages,
@@ -258,6 +257,7 @@ export function CageListScreen() {
           ]}
           onPress={() => onSelect(item)}
           disabled={Boolean(transfer !== null && item.id === transfer.excludeCageId)}
+          accessibilityRole="button"
         >
           <Text style={styles.cardTitle}>{item.name}</Text>
           {sub !== '' ? <Text style={styles.cardSub}>{sub}</Text> : null}
@@ -268,7 +268,12 @@ export function CageListScreen() {
               puede retirar. Las especiales guardan lo que NO sale hoy, asi que
               no bloquean. */}
           {missing > 0 && !special ? (
-            <Text style={styles.cardMissing}>🔒 falta {missing}</Text>
+            <StatusBadge
+              tone="danger"
+              icon="lock-closed"
+              label={`falta ${missing}`}
+              style={styles.cardMissing}
+            />
           ) : null}
         </Pressable>
       );
@@ -295,13 +300,13 @@ export function CageListScreen() {
             {cagesWithPackagesInSession === 1 ? '' : 's'}
           </Text>
         </View>
-        <Pressable
-          style={styles.closeSessionBtn}
+        <Button
+          variant="outline"
+          icon="checkmark-done-outline"
           onPress={() => navigation.navigate('CloseCageSession')}
         >
-          <Ionicons name="checkmark-done-outline" size={18} color={theme.colors.primary} />
-          <Text style={styles.closeSessionBtnLabel}>Cerrar sesión</Text>
-        </Pressable>
+          Cerrar sesión
+        </Button>
       </View>
     ) : null;
 
@@ -310,21 +315,15 @@ export function CageListScreen() {
       <View style={styles.transferBanner}>
         <View style={styles.transferHeaderRow}>
           <Text style={styles.transferTitle}>Transferir paquete</Text>
-          <Pressable
-            style={styles.transferCancelBtn}
+          <Button
+            variant="ghost"
+            size="sm"
             onPress={onCancelTransfer}
             disabled={transferMutation.isPending}
-            hitSlop={8}
+            hitSlop={theme.touch.hitSlop}
           >
-            <Text
-              style={[
-                styles.transferCancelLabel,
-                transferMutation.isPending && styles.transferCancelLabelDisabled,
-              ]}
-            >
-              Cancelar
-            </Text>
-          </Pressable>
+            Cancelar
+          </Button>
         </View>
         <Text style={styles.transferBody}>
           Elegí la jaula destino para el tracking{' '}
@@ -360,23 +359,28 @@ export function CageListScreen() {
         <Text style={styles.error}>No se pudieron cargar las jaulas. Reintentá más tarde.</Text>
       ) : (
         <>
-          <TextInput
+          <Input
             value={search}
             onChangeText={setSearch}
             placeholder="Buscar jaula o zona…"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.searchInput}
+            accessibilityLabel="Buscar jaula o zona"
+            containerStyle={styles.searchInput}
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"
           />
           <Pressable
-            style={({ pressed }) => [styles.scanCageBtn, pressed && styles.scanCageBtnPressed]}
+            style={({ pressed }) => [
+              styles.scanCageBtn,
+              pressed && styles.scanCageBtnPressed,
+              (resolveCageQrMutation.isPending || transferMutation.isPending) && styles.cardDisabled,
+            ]}
             onPress={() => {
               setCageScanError(null);
               setCageScannerOpen(true);
             }}
             disabled={resolveCageQrMutation.isPending || transferMutation.isPending}
+            accessibilityRole="button"
           >
             <Ionicons name="qr-code-outline" size={22} color={theme.colors.primary} />
             <View style={styles.scanCageBtnText}>
@@ -387,12 +391,17 @@ export function CageListScreen() {
           </Pressable>
           {transfer === null ? (
             <Pressable
-              style={({ pressed }) => [styles.movePackageBtn, pressed && styles.scanCageBtnPressed]}
+              style={({ pressed }) => [
+                styles.scanCageBtn,
+                pressed && styles.scanCageBtnPressed,
+                transferMutation.isPending && styles.cardDisabled,
+              ]}
               onPress={() => {
                 setPackageScanError(null);
                 setPackageScannerOpen(true);
               }}
               disabled={transferMutation.isPending}
+              accessibilityRole="button"
             >
               <Ionicons name="swap-horizontal-outline" size={22} color={theme.colors.primary} />
               <View style={styles.scanCageBtnText}>
@@ -443,9 +452,14 @@ export function CageListScreen() {
               <Text style={styles.cageModalLoadingLabel}>Abriendo jaula…</Text>
             </View>
           ) : null}
-          <Pressable style={styles.cageModalClose} onPress={() => setCageScannerOpen(false)}>
-            <Text style={styles.cageModalCloseLabel}>Cerrar</Text>
-          </Pressable>
+          <Button
+            variant="ghost"
+            size="lg"
+            style={styles.cageModalClose}
+            onPress={() => setCageScannerOpen(false)}
+          >
+            Cerrar
+          </Button>
         </View>
       </Modal>
 
@@ -463,9 +477,14 @@ export function CageListScreen() {
             <Text style={styles.cageModalErr}>{packageScanError}</Text>
           ) : null}
           <QrScanner onScan={onPackageQrScanned} containerStyle={styles.cageScannerBox} />
-          <Pressable style={styles.cageModalClose} onPress={() => setPackageScannerOpen(false)}>
-            <Text style={styles.cageModalCloseLabel}>Cerrar</Text>
-          </Pressable>
+          <Button
+            variant="ghost"
+            size="lg"
+            style={styles.cageModalClose}
+            onPress={() => setPackageScannerOpen(false)}
+          >
+            Cerrar
+          </Button>
         </View>
       </Modal>
     </ScreenContainer>
@@ -473,7 +492,7 @@ export function CageListScreen() {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     intro: {
       ...typography.caption,
@@ -487,10 +506,10 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       padding: spacing.md,
       marginBottom: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.primary + '44',
+      borderColor: colors.border,
     },
     sessionHeaderText: { flex: 1, minWidth: 0 },
     sessionTitle: {
@@ -500,60 +519,26 @@ function createStyles(t: AppTheme) {
     sessionSub: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
-    },
-    closeSessionBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.primary + '66',
-      backgroundColor: colors.primary + '11',
-    },
-    closeSessionBtnLabel: {
-      ...typography.captionStrong,
-      color: colors.primary,
+      marginTop: spacing.xxs,
     },
     searchInput: {
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
       marginBottom: spacing.sm,
     },
     scanCageBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
+      minHeight: touch.min,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.primary + '44',
-    },
-    movePackageBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.primary + '44',
+      borderColor: colors.border,
     },
     scanCageBtnPressed: {
-      opacity: 0.88,
+      opacity: motion.pressOpacitySoft,
     },
     scanCageBtnText: {
       flex: 1,
@@ -566,7 +551,7 @@ function createStyles(t: AppTheme) {
     scanCageBtnSub: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     cageScanErr: {
       ...typography.caption,
@@ -600,6 +585,8 @@ function createStyles(t: AppTheme) {
     cageScannerBox: {
       flex: 1,
       minHeight: 320,
+      borderRadius: spacing.radiusCard,
+      overflow: 'hidden',
     },
     cageModalLoading: {
       flexDirection: 'row',
@@ -613,20 +600,15 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
     },
     cageModalClose: {
-      padding: spacing.lg,
-      alignItems: 'center',
-    },
-    cageModalCloseLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
+      marginVertical: spacing.md,
     },
     transferBanner: {
       marginBottom: spacing.md,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
+      borderRadius: spacing.radiusCard,
+      backgroundColor: colors.primarySoft,
       borderWidth: 1,
-      borderColor: colors.primary + '55',
+      borderColor: colors.primary,
     },
     transferHeaderRow: {
       flexDirection: 'row',
@@ -635,25 +617,13 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       marginBottom: spacing.xs,
     },
-    transferCancelBtn: {
-      paddingVertical: 2,
-      paddingHorizontal: spacing.sm,
-      borderRadius: spacing.radiusSm,
-    },
-    transferCancelLabel: {
-      ...typography.captionStrong,
-      color: colors.danger,
-    },
-    transferCancelLabelDisabled: {
-      opacity: 0.5,
-    },
     transferTitle: {
       ...typography.bodyStrong,
       color: colors.text,
     },
     transferBody: {
       ...typography.caption,
-      color: colors.muted,
+      color: colors.text,
     },
     transferMono: {
       fontFamily: 'monospace',
@@ -687,17 +657,18 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
     },
     card: {
+      minHeight: touch.min,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
     cardPressed: {
-      opacity: 0.92,
+      opacity: motion.pressOpacitySoft,
     },
     cardDisabled: {
-      opacity: 0.45,
+      opacity: motion.disabledOpacity,
     },
     cardTitle: {
       ...typography.bodyStrong,
@@ -706,18 +677,16 @@ function createStyles(t: AppTheme) {
     cardSub: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     cardMissing: {
-      marginTop: 2,
-      color: colors.danger,
-      fontSize: 12,
-      fontWeight: '600',
+      marginTop: spacing.xs,
     },
     cardCount: {
       ...typography.captionStrong,
       color: colors.primary,
       marginTop: spacing.sm,
+      fontVariant: ['tabular-nums'],
     },
     empty: {
       ...typography.body,

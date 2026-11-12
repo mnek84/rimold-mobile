@@ -38,7 +38,7 @@ export function ToastHost() {
   const { colors, spacing, typography } = theme;
 
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Animated.View
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
@@ -51,6 +51,7 @@ export function ToastHost() {
             opacity,
             transform: [{ translateY }],
             backgroundColor: colors.surface,
+            shadowColor: colors.shadow,
             borderRadius: spacing.radiusMd,
             borderColor: colors.border,
             paddingVertical: spacing.sm + 2,
@@ -71,7 +72,6 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     width: '100%',
     borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.14,
     shadowRadius: 5,

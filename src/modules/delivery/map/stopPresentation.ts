@@ -109,26 +109,28 @@ export function stopVisualStyle(
   addressType: StopAddressTypeCode,
 ): StopVisualStyle {
   const { colors } = t;
-  const ring = '#ffffff';
+  // Map tiles are light in both themes, so the ring is always the light marker ring
+  // and each fill carries its own `*On` ink — never a hardcoded white.
+  const ring = colors.mapMarkerRing;
   switch (kind) {
     case 'done':
-      return { fill: colors.success, ring, icon: 'checkmark', iconColor: '#ffffff' };
+      return { fill: colors.success, ring, icon: 'checkmark', iconColor: colors.successOn };
     case 'failed':
-      return { fill: colors.danger, ring, icon: 'close', iconColor: '#ffffff' };
+      return { fill: colors.danger, ring, icon: 'close', iconColor: colors.dangerOn };
     case 'skipped':
-      return { fill: colors.muted, ring, icon: 'remove', iconColor: '#ffffff' };
+      return { fill: colors.muted, ring, icon: 'remove', iconColor: colors.surface };
     case 'active':
       return {
         fill: colors.primary,
         ring,
         icon: addressTypeIcon(addressType),
-        iconColor: '#ffffff',
+        iconColor: colors.primaryOn,
       };
     default:
       // Pendiente: fondo claro con el ícono en acento. Pesa menos en la vista
       // que una parada en curso, que es la única que el chofer está haciendo.
       return {
-        fill: '#ffffff',
+        fill: colors.surface,
         ring: colors.primary,
         icon: addressTypeIcon(addressType),
         iconColor: colors.primary,

@@ -21,7 +21,7 @@ export function BodegaHomeScreen() {
 
       <View style={styles.cards}>
         <Pressable
-          style={styles.card}
+          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           onPress={() => navigation.navigate('WarehouseEntry')}
           accessibilityRole="button"
         >
@@ -39,7 +39,7 @@ export function BodegaHomeScreen() {
         </Pressable>
 
         <Pressable
-          style={styles.card}
+          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           onPress={() => navigation.navigate('AssignShipment')}
           accessibilityRole="button"
         >
@@ -56,7 +56,7 @@ export function BodegaHomeScreen() {
         </Pressable>
 
         <Pressable
-          style={styles.card}
+          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           onPress={() => navigation.navigate('CrossdockManual')}
           accessibilityRole="button"
         >
@@ -78,7 +78,7 @@ export function BodegaHomeScreen() {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     title: {
       ...typography.title,
@@ -101,15 +101,19 @@ function createStyles(t: AppTheme) {
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
+      minHeight: touch.min,
+    },
+    cardPressed: {
+      opacity: motion.pressOpacitySoft,
     },
     cardIconWrap: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
+      width: touch.min,
+      height: touch.min,
+      borderRadius: spacing.radiusLg,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primary + '1A',
+      backgroundColor: colors.primarySoft,
     },
     cardTextWrap: {
       flex: 1,
@@ -118,7 +122,7 @@ function createStyles(t: AppTheme) {
     cardTitle: {
       ...typography.subtitle,
       color: colors.text,
-      marginBottom: 2,
+      marginBottom: spacing.xxs,
     },
     cardHint: {
       ...typography.caption,

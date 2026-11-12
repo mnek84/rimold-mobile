@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -11,9 +10,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { QrScanner } from '@components/QrScanner';
+import { Banner, Button } from '@components/ui';
 import { AssignScanError, lookupShipmentByScan } from '@core/api/shipments';
 import { showToast } from '@core/feedback/toastStore';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, type AppTheme, type Tone } from '@theme';
 
 import { DeliveryFailedModal } from './DeliveryFailedModal';
 
@@ -181,20 +181,16 @@ export function DeliveryReportFailureScanModal({ visible, onClose, onReported }:
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reportar paquete fallido</Text>
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-            hitSlop={12}
-          >
-            <Text style={styles.closeLabel}>Cerrar</Text>
-          </Pressable>
+          <Button variant="ghost" onPress={onClose}>
+            Cerrar
+          </Button>
         </View>
 
         <View style={styles.scannerWrap}>
           <QrScanner onScan={handleScan} scanCooldownMs={2000} containerStyle={styles.scanner} />
           {busy ? (
             <View style={styles.overlayBusy} pointerEvents="auto">
-              <ActivityIndicator size="large" color="#ffffff" />
+              <ActivityIndicator size="large" color={theme.colors.mediaOn} />
             </View>
           ) : null}
         </View>
@@ -207,10 +203,8 @@ export function DeliveryReportFailureScanModal({ visible, onClose, onReported }:
         </View>
 
         {error != null ? (
-          <View style={[styles.errorBanner, errorBannerStyleFor(theme, error.tone)]}>
-            <Text style={[styles.errorText, errorTextStyleFor(theme, error.tone)]}>
-              {error.message}
-            </Text>
+          <View style={styles.errorBanner}>
+            <Banner tone={bannerToneFor(error.tone)} message={error.message} />
           </View>
         ) : null}
 
@@ -227,30 +221,19 @@ export function DeliveryReportFailureScanModal({ visible, onClose, onReported }:
   );
 }
 
-function errorBannerStyleFor(t: AppTheme, tone: ErrorTone) {
+function bannerToneFor(tone: ErrorTone): Tone {
   switch (tone) {
     case 'critical':
-      return { backgroundColor: 'rgba(239, 68, 68, 0.12)' };
+      return 'danger';
     case 'warning':
-      return { backgroundColor: t.colors.surface };
+      return 'warning';
     default:
-      return { backgroundColor: t.colors.surface };
-  }
-}
-
-function errorTextStyleFor(t: AppTheme, tone: ErrorTone) {
-  switch (tone) {
-    case 'critical':
-      return { color: t.colors.danger };
-    case 'warning':
-      return { color: t.colors.text };
-    default:
-      return { color: t.colors.text };
+      return 'info';
   }
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -260,37 +243,30 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
+      paddingLeft: spacing.lg,
+      paddingRight: spacing.xs,
+      paddingVertical: spacing.xs,
+      gap: spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.surface,
     },
     headerTitle: {
       ...typography.subtitle,
       color: colors.text,
-    },
-    closeBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    closeBtnPressed: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
-    },
-    closeLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
+      flex: 1,
     },
     scannerWrap: {
       flex: 1,
       position: 'relative',
+      backgroundColor: colors.media,
     },
     scanner: {
       flex: 1,
     },
     overlayBusy: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaScrim,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -311,10 +287,7 @@ function createStyles(t: AppTheme) {
       paddingVertical: spacing.md,
       borderTopWidth: 1,
       borderTopColor: colors.border,
-    },
-    errorText: {
-      ...typography.body,
-      textAlign: 'center',
+      backgroundColor: colors.background,
     },
   });
 }

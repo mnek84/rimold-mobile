@@ -249,7 +249,6 @@ function pushEnvToEas() {
     '--path',
     ENV_FILE,
     '--force',
-    '--non-interactive',
   ]);
 }
 
@@ -271,8 +270,6 @@ function downloadApk() {
     'build:download',
     '--platform',
     'android',
-    '--profile',
-    EAS_PROFILE,
     '--non-interactive',
   ]);
 }

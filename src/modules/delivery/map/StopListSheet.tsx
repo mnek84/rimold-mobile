@@ -85,7 +85,7 @@ export function StopListSheet({
           ]}
         >
           <View style={[styles.rowIcon, { backgroundColor: visual.fill, borderColor: visual.ring }]}>
-            <Ionicons name={visual.icon} size={17} color={visual.iconColor} />
+            <Ionicons name={visual.icon} size={18} color={visual.iconColor} />
           </View>
 
           <View style={styles.rowTexts}>
@@ -121,7 +121,6 @@ export function StopListSheet({
             accessibilityLabel={`Ir a la parada ${item.sequence}`}
             accessibilityState={{ disabled: !navigable }}
             disabled={!navigable}
-            hitSlop={8}
             onPress={() => onPressNavigate(item.id)}
             style={({ pressed }) => [
               styles.rowGo,
@@ -131,8 +130,8 @@ export function StopListSheet({
           >
             <Ionicons
               name="navigate"
-              size={18}
-              color={navigable ? theme.colors.primary : theme.colors.muted}
+              size={22}
+              color={navigable ? theme.colors.primaryOn : theme.colors.muted}
             />
           </Pressable>
         </Pressable>
@@ -167,7 +166,7 @@ export function StopListSheet({
               accessibilityRole="button"
               accessibilityLabel="Cerrar"
               onPress={onClose}
-              hitSlop={10}
+              hitSlop={theme.touch.hitSlop}
               style={({ pressed }) => [styles.headerClose, pressed && styles.pressed]}
             >
               <Ionicons name="close" size={20} color={theme.colors.muted} />
@@ -195,36 +194,36 @@ export function StopListSheet({
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     rowWarning: {
-      ...t.typography.caption,
-      color: t.colors.danger,
-      marginTop: 2,
+      ...typography.caption,
+      color: colors.danger,
+      marginTop: spacing.xxs,
     },
     rowBadges: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 4,
-      marginTop: 4,
+      gap: spacing.xs,
+      marginTop: spacing.xs,
     },
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      backgroundColor: colors.scrim,
       justifyContent: 'flex-end',
     },
     panel: {
       flex: 1,
       backgroundColor: colors.background,
-      borderTopLeftRadius: spacing.radiusCard + 6,
-      borderTopRightRadius: spacing.radiusCard + 6,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
       overflow: 'hidden',
     },
     handle: {
       alignSelf: 'center',
       width: 40,
-      height: 4,
-      borderRadius: 2,
+      height: spacing.xs,
+      borderRadius: spacing.xxs,
       backgroundColor: colors.border,
       marginTop: spacing.sm,
     },
@@ -241,11 +240,11 @@ function createStyles(t: AppTheme) {
       color: colors.text,
     },
     headerClose: {
-      width: 32,
-      height: 32,
+      width: 40,
+      height: 40,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 16,
+      borderRadius: spacing.radiusPill,
       backgroundColor: colors.surfaceMuted,
     },
     listContent: {
@@ -277,9 +276,9 @@ function createStyles(t: AppTheme) {
       borderWidth: 2,
     },
     rowIcon: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
+      width: 36,
+      height: 36,
+      borderRadius: spacing.radiusPill,
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
@@ -295,23 +294,24 @@ function createStyles(t: AppTheme) {
     rowLocality: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 1,
+      marginTop: spacing.xxs,
     },
     rowMeta: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     rowGo: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: touch.min,
+      height: touch.min,
+      borderRadius: spacing.radiusLg,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.surfaceMuted,
+      backgroundColor: colors.primary,
     },
     rowGoDisabled: {
-      opacity: 0.45,
+      backgroundColor: colors.surfaceMuted,
+      opacity: motion.disabledOpacity,
     },
     empty: {
       ...typography.body,

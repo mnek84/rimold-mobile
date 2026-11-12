@@ -90,6 +90,8 @@ export function CageSessionGateScreen() {
         }}
         loading={startMut.isPending}
         disabled={startMut.isPending}
+        size="lg"
+        icon="play-circle-outline"
         style={styles.startBtn}
       >
         Iniciar sesión de jaulas

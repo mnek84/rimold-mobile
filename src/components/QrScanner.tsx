@@ -1,8 +1,9 @@
 import type { BarcodeScanningResult } from 'expo-camera';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useCallback, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
+import { Button } from '@components/ui';
 import { useTheme, type AppTheme } from '@theme';
 
 export type QrScannerProps = {
@@ -51,12 +52,9 @@ export function QrScanner({ onScan, scanCooldownMs = 1500, containerStyle }: QrS
     return (
       <View style={[styles.centered, containerStyle]}>
         <Text style={styles.message}>Se necesita acceso a la cámara para escanear códigos QR.</Text>
-        <Pressable
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-          onPress={() => void requestPermission()}
-        >
-          <Text style={styles.buttonLabel}>Permitir cámara</Text>
-        </Pressable>
+        <Button size="lg" icon="camera-outline" onPress={() => void requestPermission()}>
+          Permitir cámara
+        </Button>
       </View>
     );
   }
@@ -77,11 +75,11 @@ export function QrScanner({ onScan, scanCooldownMs = 1500, containerStyle }: QrS
 }
 
 function createScannerStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.media,
       overflow: 'hidden',
     },
     centered: {
@@ -97,32 +95,21 @@ function createScannerStyles(t: AppTheme) {
       textAlign: 'center',
       marginBottom: spacing.lg,
     },
-    button: {
-      backgroundColor: colors.surface,
-      paddingVertical: spacing.md + 2,
-      paddingHorizontal: spacing.xl,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    buttonPressed: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
-    },
-    buttonLabel: {
-      color: colors.text,
-      ...typography.bodyStrong,
-    },
     hint: {
       position: 'absolute',
-      bottom: 48,
+      bottom: spacing.xxl + spacing.lg,
       left: spacing.xl,
       right: spacing.xl,
       alignItems: 'center',
     },
     hintText: {
-      color: `${colors.text}cc`,
       ...typography.body,
+      color: colors.mediaOn,
+      backgroundColor: colors.mediaScrim,
+      borderRadius: spacing.radiusPill,
+      overflow: 'hidden',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.xs,
     },
   });
 }

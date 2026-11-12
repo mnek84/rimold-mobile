@@ -23,7 +23,7 @@ export function AppUpdateBootstrap() {
     }, CHECK_INTERVAL_MS);
 
     const appSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
+      if (appState.current?.match(/inactive|background/) && next === 'active') {
         void useAppUpdateStore.getState().checkForUpdate();
       }
       appState.current = next;

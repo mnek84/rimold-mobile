@@ -50,7 +50,15 @@ export async function syncDriverLocationQueueOnce(): Promise<void> {
     try {
       await postDriverLocationBatch(batch);
       await deletePendingByIds(batch.map((b) => b.id));
-    } catch {
+    } catch (e) {
+      // 4xx definitivo (422 lote inválido, 403 no es chofer): reintentarlo 24 h
+      // no lo arregla y frena a los puntos nuevos. 401/408/429 sí son
+      // transitorios (token por renovar, timeout, rate limit).
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status != null && status >= 400 && status < 500 && ![401, 408, 429].includes(status)) {
+        await deletePendingByIds(batch.map((b) => b.id));
+        return;
+      }
       await markPendingBatchFailed(
         batch.map((b) => b.id),
         attemptsById,

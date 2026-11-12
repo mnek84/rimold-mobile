@@ -36,7 +36,7 @@ export function SyncBootstrap() {
     void processQueueIfOnline();
 
     const appSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
+      if (appState.current?.match(/inactive|background/) && next === 'active') {
         void useSyncStatusStore.getState().refresh();
         void processQueueIfOnline();
       }

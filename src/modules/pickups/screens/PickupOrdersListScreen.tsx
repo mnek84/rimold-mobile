@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useMemo } from 'react';
@@ -13,7 +12,7 @@ import {
   View,
 } from 'react-native';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Card, IconButton, ScreenContainer, StatusBadge } from '@components/ui';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -23,6 +22,7 @@ import {
   PICKUP_ORDER_STATUS_LABEL,
   isTerminalOrderStatus,
 } from '../lib/pickupOrderStatus';
+import { PICKUP_ORDER_STATUS_PRESENTATION } from '../lib/pickupStatusTone';
 import { usePickupOrderActiveStore } from '../store/pickupOrderActiveStore';
 import type { PickupOrder } from '../types';
 
@@ -103,10 +103,12 @@ export function PickupOrdersListScreen({ navigation }: Props) {
             navigation.navigate('PickupOrderInProgress', { orderId: item.id });
           }
         }}
+        accessibilityRole="button"
+        style={({ pressed }) => pressed && styles.cardPressed}
       >
         <Card style={styles.card}>
           <View style={styles.rowBetween}>
-            <View style={{ flex: 1 }}>
+            <View style={styles.flex}>
               <Text style={styles.timeHero}>
                 {formatTimeRange(item.scheduled_time_from, item.scheduled_time_to) || '—'}
               </Text>
@@ -116,9 +118,11 @@ export function PickupOrdersListScreen({ navigation }: Props) {
                 {item.crossdocking_location?.name ?? '—'}
               </Text>
             </View>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{PICKUP_ORDER_STATUS_LABEL[item.status]}</Text>
-            </View>
+            <StatusBadge
+              label={PICKUP_ORDER_STATUS_LABEL[item.status]}
+              tone={PICKUP_ORDER_STATUS_PRESENTATION[item.status].tone}
+              icon={PICKUP_ORDER_STATUS_PRESENTATION[item.status].icon}
+            />
           </View>
         </Card>
       </Pressable>
@@ -129,12 +133,11 @@ export function PickupOrdersListScreen({ navigation }: Props) {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Mis colectas</Text>
-        <Pressable
+        <IconButton
+          icon="time-outline"
+          accessibilityLabel="Ver historial de colectas"
           onPress={() => navigation.navigate('PickupOrdersHistory')}
-          hitSlop={8}
-        >
-          <Ionicons name="time-outline" size={22} color={theme.colors.muted} />
-        </Pressable>
+        />
       </View>
 
       {query.isLoading && orders.length === 0 ? (
@@ -157,11 +160,13 @@ export function PickupOrdersListScreen({ navigation }: Props) {
           refreshControl={
             <RefreshControl
               refreshing={query.isFetching && !query.isLoading}
-              onRefresh={() => query.refetch()}
+              onRefresh={() => {
+                void query.refetch();
+              }}
               tintColor={theme.colors.primary}
             />
           }
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={styles.listContent}
           stickySectionHeadersEnabled={false}
         />
       )}
@@ -170,52 +175,47 @@ export function PickupOrdersListScreen({ navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography, motion } = theme;
   return StyleSheet.create({
     header: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
     },
     headerTitle: {
-      fontSize: 22,
-      fontWeight: '700',
-      color: theme.colors.text,
+      ...typography.title,
+      color: colors.text,
     },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    flex: { flex: 1 },
+    listContent: { paddingBottom: spacing.xl },
     sectionTitle: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: theme.colors.muted,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
+      ...typography.captionStrong,
+      color: colors.muted,
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    card: { marginHorizontal: 16, marginVertical: 6 },
-    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    title: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
+    card: { marginHorizontal: spacing.lg, marginVertical: spacing.xs + 2 },
+    cardPressed: { opacity: motion.pressOpacitySoft },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+    title: { ...typography.bodyStrong, color: colors.text },
     timeHero: {
-      fontSize: 28,
-      fontWeight: '700',
-      color: theme.colors.text,
-      lineHeight: 32,
+      ...typography.title,
+      color: colors.text,
       letterSpacing: -0.3,
+      fontVariant: ['tabular-nums'],
     },
-    subtitle: { fontSize: 13, color: theme.colors.muted, marginTop: 4 },
-    badge: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: theme.colors.surfaceMuted ?? '#e5e7eb',
-    },
-    badgeText: { fontSize: 12, color: theme.colors.text, fontWeight: '500' },
+    subtitle: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
     empty: {
+      ...typography.body,
       textAlign: 'center',
-      color: theme.colors.muted,
-      paddingHorizontal: 24,
-      paddingVertical: 32,
+      color: colors.muted,
+      paddingHorizontal: spacing.xl,
+      paddingVertical: spacing.xxl,
     },
   });
 }

@@ -160,7 +160,9 @@ export function FlexBatchMapScreen({ route }: Props) {
               coordinate={{ latitude: s.latitude!, longitude: s.longitude! }}
               title={s.tracking}
               description={selected ? 'Seleccionado' : 'Tocá la lista para destacar'}
-              pinColor={Platform.OS === 'ios' ? (selected ? 'red' : 'green') : undefined}
+              pinColor={
+                Platform.OS === 'ios' ? (selected ? theme.colors.primary : theme.colors.muted) : undefined
+              }
             />
           );
         })}
@@ -228,6 +230,8 @@ function ShipmentSelectRow({
     shipment.latitude !== null && shipment.longitude !== null && isValidLatLng(shipment.latitude, shipment.longitude);
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled: !hasCoords }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.shipRow,
@@ -246,7 +250,7 @@ function ShipmentSelectRow({
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     map: {
       width: '100%',
@@ -270,7 +274,7 @@ function createStyles(t: AppTheme) {
     banner: {
       marginBottom: spacing.md,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -309,7 +313,7 @@ function createStyles(t: AppTheme) {
       alignItems: 'center',
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusSm,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -335,27 +339,30 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.sm,
     },
     shipRow: {
+      minHeight: touch.min,
+      justifyContent: 'center',
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusLg,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
       marginBottom: spacing.sm,
     },
     shipRowSelected: {
+      backgroundColor: colors.primarySoft,
       borderColor: colors.primary,
       borderWidth: 2,
     },
     shipRowPressed: {
-      opacity: 0.85,
+      opacity: motion.pressOpacitySoft,
     },
     shipRowDisabled: {
-      opacity: 0.5,
+      opacity: motion.disabledOpacity,
     },
     shipTracking: {
       ...typography.bodyStrong,
       color: colors.text,
-      marginBottom: 2,
+      marginBottom: spacing.xxs,
     },
   });
 }

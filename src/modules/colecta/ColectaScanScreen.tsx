@@ -570,7 +570,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
         <View style={[styles.corner, styles.cornerBR]} pointerEvents="none" />
         {(!isOnline || isValidating) && (
           <View style={styles.scannerLockOverlay} pointerEvents="none">
-            {isValidating && <ActivityIndicator color="#ffffff" />}
+            {isValidating && <ActivityIndicator color={theme.colors.mediaOn} />}
             <Text style={styles.scannerLockText}>
               {!isOnline ? 'Sin conexión' : 'Validando…'}
             </Text>
@@ -613,7 +613,15 @@ export function ColectaScanScreen({ navigation, route }: Props) {
                     lastScanned.source === 'flex' ? styles.sourcePillFlex : styles.sourcePillInterno,
                   ]}
                 >
-                  <Text style={styles.sourcePillText}>
+                  <Text
+                    style={[
+                      styles.sourcePillText,
+                      lastScanned.source === 'flex'
+                        ? styles.sourcePillTextFlex
+                        : styles.sourcePillTextInterno,
+                    ]}
+                    maxFontSizeMultiplier={1.3}
+                  >
                     {lastScanned.source === 'flex' ? 'FLEX' : 'INTERNO'}
                   </Text>
                 </View>
@@ -666,7 +674,7 @@ export function ColectaScanScreen({ navigation, route }: Props) {
           <Pressable
             onLongPress={() => onRemoveItem(item)}
             delayLongPress={450}
-            android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
+            android_ripple={{ color: theme.colors.overlay }}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             accessibilityRole="button"
             accessibilityHint="Mantené presionado para quitar este paquete de la colecta"
@@ -692,7 +700,13 @@ export function ColectaScanScreen({ navigation, route }: Props) {
                   item.source === 'flex' ? styles.sourcePillFlex : styles.sourcePillInterno,
                 ]}
               >
-                <Text style={styles.sourcePillText}>
+                <Text
+                  style={[
+                    styles.sourcePillText,
+                    item.source === 'flex' ? styles.sourcePillTextFlex : styles.sourcePillTextInterno,
+                  ]}
+                  maxFontSizeMultiplier={1.3}
+                >
                   {item.source === 'flex' ? 'FLEX' : 'INTERNO'}
                 </Text>
               </View>
@@ -740,20 +754,20 @@ function createStyles(t: AppTheme) {
       height: 230,
       borderRadius: spacing.radiusLg,
       overflow: 'hidden',
-      backgroundColor: '#000',
+      backgroundColor: colors.media,
       marginBottom: spacing.md,
     },
     scanner: { flex: 1 },
     scanFlash: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(34, 197, 94, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaSuccessFlash,
     },
     // Esquinas decorativas (efecto visor)
     corner: {
       position: 'absolute',
       width: CORNER_SIZE,
       height: CORNER_SIZE,
-      borderColor: colors.primary,
+      borderColor: colors.mediaOn,
     },
     cornerTL: {
       top: 12,
@@ -789,10 +803,10 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      backgroundColor: 'rgba(34, 197, 94, 0.12)',
+      backgroundColor: colors.successSoft,
       borderWidth: 1,
-      borderColor: 'rgba(34, 197, 94, 0.4)',
-      borderRadius: spacing.radiusMd,
+      borderColor: colors.success,
+      borderRadius: spacing.radiusXl,
       paddingVertical: spacing.sm + 2,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
@@ -816,24 +830,28 @@ function createStyles(t: AppTheme) {
     },
     sourcePill: {
       paddingHorizontal: spacing.sm,
-      paddingVertical: 3,
-      borderRadius: 6,
+      paddingVertical: spacing.xxs + 1,
+      borderRadius: spacing.radiusSm,
     },
     sourcePillFlex: {
-      backgroundColor: 'rgba(245, 158, 11, 0.2)',
+      backgroundColor: colors.partnerFlex,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(245, 158, 11, 0.55)',
+      borderColor: colors.partnerFlex,
     },
     sourcePillInterno: {
-      backgroundColor: 'rgba(37, 99, 235, 0.12)',
+      backgroundColor: colors.primarySoft,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(37, 99, 235, 0.35)',
+      borderColor: colors.primary,
     },
     sourcePillText: {
-      ...typography.captionStrong,
-      fontSize: 11,
+      ...typography.micro,
       letterSpacing: 0.6,
-      color: colors.text,
+    },
+    sourcePillTextFlex: {
+      color: colors.partnerFlexOn,
+    },
+    sourcePillTextInterno: {
+      color: colors.primary,
     },
     hintRow: {
       flexDirection: 'row',
@@ -853,7 +871,7 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       borderWidth: 1,
       borderColor: colors.border,
       paddingVertical: spacing.md,
@@ -862,9 +880,8 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
     },
     counterNumber: {
-      fontSize: 38,
-      fontWeight: '700' as const,
-      lineHeight: 42,
+      ...typography.display,
+      fontVariant: ['tabular-nums'],
       color: colors.primary,
     },
     counterUnit: {
@@ -898,6 +915,7 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
+      minHeight: t.touch.min,
       paddingVertical: spacing.sm + 2,
       paddingHorizontal: spacing.md,
       backgroundColor: colors.surface,
@@ -907,29 +925,29 @@ function createStyles(t: AppTheme) {
       borderColor: colors.border,
     },
     rowPressed: {
-      opacity: 0.7,
+      opacity: t.motion.pressOpacitySoft,
       backgroundColor: colors.background,
     },
     scannerLockOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: colors.mediaScrim,
       gap: spacing.xs,
     },
     scannerLockText: {
       ...typography.bodyStrong,
-      color: '#ffffff',
+      color: colors.mediaOn,
       letterSpacing: 0.4,
     },
     offlineBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      backgroundColor: colors.dangerSoft,
       borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      borderRadius: spacing.radiusMd,
+      borderColor: colors.danger,
+      borderRadius: spacing.radiusXl,
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.sm,
@@ -943,10 +961,10 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+      backgroundColor: colors.dangerSoft,
       borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      borderRadius: spacing.radiusMd,
+      borderColor: colors.danger,
+      borderRadius: spacing.radiusXl,
       paddingVertical: spacing.sm + 2,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
@@ -961,7 +979,7 @@ function createStyles(t: AppTheme) {
       width: 26,
       height: 26,
       borderRadius: 13,
-      backgroundColor: 'rgba(37, 99, 235, 0.15)',
+      backgroundColor: colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
     },

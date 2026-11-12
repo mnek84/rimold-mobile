@@ -2,22 +2,11 @@
   "expo": {
     "name": "mobile",
     "slug": "mobile",
-    "version": "1.10.0",
+    "version": "1.12.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#fafaf9",
-      "dark": {
-        "image": "./assets/splash-icon.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#0d0e10"
-      }
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -30,9 +19,8 @@
       "package": "com.logistica.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0d0e10"
+        "backgroundColor": "#FFFFFF"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
@@ -79,10 +67,27 @@
         "expo-notifications",
         {
           "icon": "./assets/adaptive-icon.png",
-          "color": "#0ea5e9"
+          "color": "#0D347D"
         }
       ],
-      "./plugins/withFlexAppQuery"
+      "./plugins/withFlexAppQuery",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F5F7F8",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#101923"
+          }
+        }
+      ],
+      "expo-status-bar",
+      "expo-web-browser",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

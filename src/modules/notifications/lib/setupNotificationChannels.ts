@@ -1,6 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { buildTheme } from '@theme';
+
+/** Fuera de React no hay hook: el LED de Android usa la paleta clara fija. */
+const ledColors = buildTheme('light').colors;
+
 /**
  * Canales Android para diferenciar prioridad y sonido de los distintos tipos
  * de mensajes admin. En iOS los canales no aplican; la prioridad y sonido se
@@ -23,7 +28,7 @@ export async function setupNotificationChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.HIGH,
     sound: 'default',
     vibrationPattern: [0, 300, 200, 300],
-    lightColor: '#f59e0b',
+    lightColor: ledColors.warning,
   });
 
   await Notifications.setNotificationChannelAsync('urgent-alerts', {
@@ -31,7 +36,7 @@ export async function setupNotificationChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.MAX,
     sound: 'default',
     vibrationPattern: [0, 500, 250, 500, 250, 500],
-    lightColor: '#dc2626',
+    lightColor: ledColors.danger,
     bypassDnd: true,
   });
 }

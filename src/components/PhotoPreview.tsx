@@ -76,7 +76,7 @@ export function PhotoPreview({ uri, size = 96, hint }: Props) {
           <Pressable
             onPress={() => setOpen(false)}
             style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
-            hitSlop={12}
+            hitSlop={theme.touch.hitSlop}
             accessibilityRole="button"
             accessibilityLabel="Cerrar vista de foto"
           >
@@ -89,7 +89,7 @@ export function PhotoPreview({ uri, size = 96, hint }: Props) {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     thumbWrap: {
       borderRadius: spacing.radiusMd,
@@ -110,7 +110,7 @@ function createStyles(t: AppTheme) {
     },
     overlay: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.media,
     },
     zoomScroll: {
       flex: 1,
@@ -124,14 +124,16 @@ function createStyles(t: AppTheme) {
       position: 'absolute',
       top: spacing.lg,
       right: spacing.lg,
+      minHeight: touch.min,
+      justifyContent: 'center',
       paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: 'rgba(0,0,0,0.55)',
+      paddingHorizontal: spacing.lg,
+      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.mediaScrim,
     },
     closeBtnLabel: {
       ...typography.bodyStrong,
-      color: '#FFFFFF',
+      color: colors.mediaOn,
     },
     pressed: {
       opacity: motion.pressOpacityStrong,

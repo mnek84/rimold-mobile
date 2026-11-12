@@ -135,7 +135,7 @@ export function RouteMapTabScreen() {
         <Text style={styles.emptyTitle}>No pudimos cargar la ruta</Text>
         <Text style={styles.emptySubtitle}>{error}</Text>
         <View style={styles.actions}>
-          <Button variant="primary" onPress={() => void sync('initial')}>
+          <Button variant="primary" size="lg" onPress={() => void sync('initial')}>
             Reintentar
           </Button>
         </View>
@@ -152,7 +152,7 @@ export function RouteMapTabScreen() {
           Cuando tengas envíos asignados vas a ver todas tus paradas en el mapa.
         </Text>
         <View style={styles.actions}>
-          <Button variant="outline" onPress={() => void sync('initial')}>
+          <Button variant="outline" size="lg" onPress={() => void sync('initial')}>
             Actualizar
           </Button>
         </View>

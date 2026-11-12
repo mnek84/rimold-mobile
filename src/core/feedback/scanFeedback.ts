@@ -1,11 +1,10 @@
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 import { Vibration } from 'react-native';
 
 /**
  * Audio + haptic feedback helper for QR scanning across modules
- * (colecta and depósito). Sounds are loaded once and replayed,
- * which is faster and avoids creating/destroying Sound objects
- * on every scan.
+ * (colecta and depósito). Players are created once and replayed,
+ * which is faster and avoids creating/destroying players on every scan.
  */
 
 export type ScanOutcome = 'success' | 'error';
@@ -21,13 +20,12 @@ const ERROR_VIBRATION_PATTERN: number[] = [0, 80, 60, 80];
 let audioModeReady = false;
 let audioModePromise: Promise<void> | null = null;
 
-const soundCache = new Map<number, Audio.Sound>();
-const soundLoading = new Map<number, Promise<Audio.Sound>>();
+const playerCache = new Map<number, AudioPlayer>();
 
 async function ensureAudioMode(): Promise<void> {
   if (audioModeReady) return;
   if (audioModePromise === null) {
-    audioModePromise = Audio.setAudioModeAsync({ playsInSilentModeIOS: true })
+    audioModePromise = setAudioModeAsync({ playsInSilentMode: true })
       .then(() => {
         audioModeReady = true;
       })
@@ -38,31 +36,32 @@ async function ensureAudioMode(): Promise<void> {
   await audioModePromise;
 }
 
-async function loadSound(asset: number): Promise<Audio.Sound> {
-  const cached = soundCache.get(asset);
+function loadPlayer(asset: number): AudioPlayer {
+  const cached = playerCache.get(asset);
   if (cached !== undefined) return cached;
 
-  const inFlight = soundLoading.get(asset);
-  if (inFlight !== undefined) return inFlight;
-
-  const promise = (async () => {
-    const { sound } = await Audio.Sound.createAsync(asset, { shouldPlay: false, volume: 1 });
-    soundCache.set(asset, sound);
-    soundLoading.delete(asset);
-    return sound;
-  })();
-  soundLoading.set(asset, promise);
-  return promise;
+  const player = createAudioPlayer(asset);
+  player.volume = 1;
+  playerCache.set(asset, player);
+  return player;
 }
 
 async function playOnce(asset: number): Promise<void> {
   try {
     await ensureAudioMode();
-    const sound = await loadSound(asset);
-    await sound.replayAsync();
+    const player = loadPlayer(asset);
+    // expo-audio does not rewind on finish: seek back to the start before replaying.
+    await player.seekTo(0);
+    player.play();
   } catch {
-    // Replays can fail if the sound was unloaded externally; drop the cache and let the next call reload.
-    soundCache.delete(asset);
+    // Replays can fail if the player was released externally; drop the cache and let the next call recreate it.
+    const stale = playerCache.get(asset);
+    playerCache.delete(asset);
+    try {
+      stale?.remove();
+    } catch {
+      // already released
+    }
   }
 }
 
@@ -74,8 +73,12 @@ async function playOnce(asset: number): Promise<void> {
  */
 export function prepareScanAudio(): void {
   void ensureAudioMode();
-  void loadSound(SUCCESS_ASSET);
-  void loadSound(ERROR_ASSET);
+  try {
+    loadPlayer(SUCCESS_ASSET);
+    loadPlayer(ERROR_ASSET);
+  } catch {
+    // Preloading is best-effort; playOnce retries.
+  }
 }
 
 /**

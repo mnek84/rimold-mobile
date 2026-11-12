@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo } from 'react';
 import {
-  Platform,
   Pressable,
   RefreshControl,
   SectionList,
@@ -10,11 +9,11 @@ import {
   View,
 } from 'react-native';
 
-import { Card } from '@components/ui';
+import { Banner, Button, Card, SegmentedControl } from '@components/ui';
 import type { TodayShipmentRow } from '@core/api/shipments';
 import type { ChannelFilter } from '../hooks/useDeliveryList';
 import { ChannelBadge } from './ChannelBadge';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, withAlpha, type AppTheme } from '@theme';
 
 import {
   formatDriverShipmentStatusLabel,
@@ -35,12 +34,14 @@ function phaseBarSegmentStyle(
   index: number,
 ): { backgroundColor: string } {
   const { colors } = theme;
-  const empty = `${colors.muted}24`;
-  if (kind === 'delivered') return { backgroundColor: `${colors.success}66` };
+  // Track vacío: translucidez no semántica derivada de `muted`.
+  const empty = withAlpha(colors.muted, 0.18);
+  // Fases cumplidas: acento de progreso (`brand` es relleno, nunca texto).
+  if (kind === 'delivered') return { backgroundColor: colors.brand };
   if (kind === 'failed') {
-    return { backgroundColor: index < 3 ? `${colors.muted}38` : `${colors.danger}70` };
+    return { backgroundColor: index < 3 ? empty : colors.danger };
   }
-  if (index < phase) return { backgroundColor: `${colors.success}50` };
+  if (index < phase) return { backgroundColor: colors.brand };
   if (index === phase) return { backgroundColor: colors.primary };
   return { backgroundColor: empty };
 }
@@ -104,88 +105,43 @@ export function DeliveryListView({
     () => (
       <View style={styles.listHeader}>
         {showCount && <Text style={styles.countLabel}>{countLabel}</Text>}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Escanear paquete"
-          accessibilityState={{ disabled: scanDisabled }}
+        <Button
+          variant="primary"
+          size="lg"
+          icon="scan-outline"
           disabled={scanDisabled}
-          style={({ pressed }) => [
-            styles.btnScan,
-            scanDisabled && styles.btnScanDisabled,
-            pressed && !scanDisabled && styles.btnPressed,
-          ]}
           onPress={onPressScan}
         >
-          <Ionicons
-            name="scan-outline"
-            size={20}
-            color={scanDisabled ? theme.colors.muted : theme.colors.primaryOn}
-            style={styles.scanIcon}
-          />
-          <Text style={[styles.btnScanLabel, scanDisabled && styles.btnScanLabelDisabled]}>
-            Escanear paquete
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Reportar paquete fallido"
-          accessibilityState={{ disabled: scanDisabled }}
+          Escanear paquete
+        </Button>
+        <Button
+          variant="dangerOutline"
+          icon="alert-circle-outline"
           disabled={scanDisabled}
-          style={({ pressed }) => [
-            styles.btnReportFailure,
-            scanDisabled && styles.btnReportFailureDisabled,
-            pressed && !scanDisabled && styles.btnPressed,
-          ]}
           onPress={onPressReportFailure}
         >
-          <Ionicons
-            name="alert-circle-outline"
-            size={18}
-            color={scanDisabled ? theme.colors.muted : theme.colors.danger}
-            style={styles.scanIcon}
-          />
-          <Text
-            style={[
-              styles.btnReportFailureLabel,
-              scanDisabled && styles.btnReportFailureLabelDisabled,
-            ]}
-          >
-            Reportar paquete fallido
-          </Text>
-        </Pressable>
+          Reportar paquete fallido
+        </Button>
         {onChangeChannelFilter != null && channelCounts != null && channelCounts.flex > 0 ? (
-          <View style={styles.channelFilterRow} accessibilityRole="tablist">
-            {CHANNEL_FILTERS.map((f) => {
-              const active = channelFilter === f.key;
-              return (
-                <Pressable
-                  key={f.key}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => onChangeChannelFilter(f.key)}
-                  style={({ pressed }) => [
-                    styles.channelChip,
-                    active && styles.channelChipActive,
-                    pressed && styles.btnPressed,
-                  ]}
-                >
-                  <Text style={[styles.channelChipLabel, active && styles.channelChipLabelActive]}>
-                    {f.label} ({channelCounts[f.key]})
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            style={styles.channelFilterRow}
+            options={CHANNEL_FILTERS.map((f) => ({
+              value: f.key,
+              label: `${f.label} (${channelCounts[f.key]})`,
+            }))}
+            value={channelFilter}
+            onChange={onChangeChannelFilter}
+          />
         ) : null}
         {showFlexMap && (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="outline"
+            icon="map-outline"
             onPress={onPressFlexMap}
-            style={({ pressed }) => [styles.flexMapBtn, pressed && styles.btnPressed]}
+            style={styles.flexMapBtn}
           >
-            <Ionicons name="map-outline" size={15} color={theme.colors.primary} />
-            <Text style={styles.flexMapLabel}>Mapa flex</Text>
-          </Pressable>
+            Mapa flex
+          </Button>
         )}
       </View>
     ),
@@ -201,8 +157,6 @@ export function DeliveryListView({
       onChangeChannelFilter,
       channelCounts,
       styles,
-      theme.colors.muted,
-      theme.colors.primary,
       theme.colors.danger,
     ],
   );
@@ -225,7 +179,7 @@ export function DeliveryListView({
         <View style={styles.shipmentCardClip}>
           {isNext && (
             <View style={styles.nextBanner}>
-              <Ionicons name="navigate" size={13} color={theme.colors.primaryOn} />
+              <Ionicons name="navigate" size={14} color={theme.colors.chromeOn} />
               <Text style={styles.nextBannerText}>Siguiente entrega</Text>
             </View>
           )}
@@ -300,7 +254,9 @@ export function DeliveryListView({
 
   return (
     <View style={styles.root}>
-      {error != null && error !== '' ? <Text style={styles.banner}>{error}</Text> : null}
+      {error != null && error !== '' ? (
+        <Banner tone="danger" message={error} style={styles.banner} />
+      ) : null}
 
       {showInitialLoader ? (
         <View style={styles.skeletonColumn}>
@@ -328,7 +284,7 @@ export function DeliveryListView({
           contentContainerStyle={
             sections.length === 0 && !showInitialLoader ? styles.listEmpty : styles.listContent
           }
-          ListEmptyComponent={!showInitialLoader ? listEmpty : null}
+          ListEmptyComponent={!showInitialLoader ? listEmpty : undefined}
         />
       )}
     </View>
@@ -354,41 +310,20 @@ function buildCountLabel(pending: number, deliveredToday: number, failed: number
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     channelFilterRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginTop: 4,
-    },
-    channelChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-      backgroundColor: t.colors.surface,
-    },
-    channelChipActive: {
-      backgroundColor: t.colors.primary,
-      borderColor: t.colors.primary,
-    },
-    channelChipLabel: {
-      ...t.typography.captionStrong,
-      color: t.colors.text,
-    },
-    channelChipLabelActive: {
-      color: t.colors.primaryOn,
+      marginTop: spacing.xs,
     },
     channelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginBottom: 6,
+      gap: spacing.xs + 2,
+      marginBottom: spacing.xs + 2,
     },
     channelHint: {
-      ...t.typography.caption,
-      color: t.colors.muted,
+      ...typography.caption,
+      color: colors.muted,
       flexShrink: 1,
     },
     root: {
@@ -406,96 +341,11 @@ function createStyles(t: AppTheme) {
       letterSpacing: 0.4,
       paddingBottom: spacing.xs,
     },
-    btnScan: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 56,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
-      gap: spacing.sm,
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.4,
-          shadowRadius: 8,
-        },
-        android: { elevation: 4 },
-        default: {},
-      }),
-    },
-    btnScanDisabled: {
-      backgroundColor: colors.surface,
-      ...Platform.select({
-        ios: { shadowOpacity: 0 },
-        android: { elevation: 0 },
-        default: {},
-      }),
-    },
-    scanIcon: {
-      marginRight: 2,
-    },
-    btnScanLabel: {
-      ...typography.bodyStrong,
-      fontSize: 17,
-      color: colors.primaryOn,
-    },
-    btnScanLabelDisabled: {
-      color: colors.muted,
-    },
-    btnReportFailure: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 48,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.danger,
-      gap: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    btnReportFailureDisabled: {
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    btnReportFailureLabel: {
-      ...typography.bodyStrong,
-      color: colors.danger,
-    },
-    btnReportFailureLabelDisabled: {
-      color: colors.muted,
-    },
     flexMapBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
       alignSelf: 'flex-start',
-      gap: spacing.xs,
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    flexMapLabel: {
-      ...typography.captionStrong,
-      color: colors.primary,
-    },
-    btnPressed: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
     },
     banner: {
       marginBottom: spacing.sm,
-      padding: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.danger,
-      color: colors.danger,
-      ...typography.body,
     },
     skeletonColumn: {
       flex: 1,
@@ -533,7 +383,7 @@ function createStyles(t: AppTheme) {
     emptyIconCircle: {
       width: 96,
       height: 96,
-      borderRadius: 48,
+      borderRadius: spacing.radiusPill,
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
@@ -558,30 +408,21 @@ function createStyles(t: AppTheme) {
       overflow: 'hidden',
     },
     shipmentCardNext: {
-      borderColor: colors.primary,
+      // Brand bar, not `primary`: in dark mode a full-width primary fill is a light-blue glare.
+      borderColor: colors.chrome,
       borderWidth: 2,
-      ...Platform.select({
-        ios: {
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.3,
-          shadowRadius: 10,
-        },
-        android: { elevation: 5 },
-        default: {},
-      }),
     },
     nextBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.chrome,
       paddingVertical: spacing.xs + 2,
       paddingHorizontal: spacing.md,
     },
     nextBannerText: {
       ...typography.captionStrong,
-      color: colors.primaryOn,
+      color: colors.chromeOn,
       letterSpacing: 0.3,
     },
     shipmentBody: {
@@ -604,13 +445,13 @@ function createStyles(t: AppTheme) {
     },
     phaseBar: {
       flexDirection: 'row',
-      gap: 4,
+      gap: spacing.xs,
       marginBottom: spacing.sm,
     },
     phaseSegment: {
       flex: 1,
       height: 6,
-      borderRadius: 3,
+      borderRadius: spacing.radiusPill,
     },
     addressText: {
       ...typography.body,
@@ -620,16 +461,15 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.text,
       marginTop: spacing.xs,
-      opacity: 0.85,
     },
     statusBadge: {
       flexShrink: 0,
       // 40% cortaba etiquetas de una sola línea ('Entrega fallida',
       // 'Pendiente de ruta'); el tracking_id de al lado es corto y tiene flex: 1.
       maxWidth: '48%',
-      paddingHorizontal: spacing.sm + 2,
-      paddingVertical: spacing.xs + 1,
-      borderRadius: spacing.radiusMd,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: spacing.radiusSm,
       borderWidth: StyleSheet.hairlineWidth,
     },
     statusBadgeText: {

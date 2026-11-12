@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Card, ScreenContainer } from '@components/ui';
+import { Button, Card, ScreenContainer, StatusBadge } from '@components/ui';
 import type { ColectaStackParamList } from '@navigation/colectaStackTypes';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -29,6 +29,10 @@ import {
   PICKUP_ORDER_STATUS_LABEL,
   PICKUP_STOP_STATUS_LABEL,
 } from '../lib/pickupOrderStatus';
+import {
+  PICKUP_ORDER_STATUS_PRESENTATION,
+  PICKUP_STOP_STATUS_PRESENTATION,
+} from '../lib/pickupStatusTone';
 import { usePickupOrderActiveStore } from '../store/pickupOrderActiveStore';
 
 import { useColectaSessionStore } from '@modules/colecta/colectaSessionStore';
@@ -121,7 +125,7 @@ export function PickupOrderInProgressScreen({ route, navigation }: Props) {
   if (query.isLoading || !order) {
     return (
       <ScreenContainer>
-        <Text style={{ color: theme.colors.muted, padding: 16 }}>Cargando…</Text>
+        <Text style={styles.loading}>Cargando…</Text>
       </ScreenContainer>
     );
   }
@@ -313,9 +317,14 @@ export function PickupOrderInProgressScreen({ route, navigation }: Props) {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Card style={{ marginBottom: 12 }}>
-          <Text style={styles.badge}>{PICKUP_ORDER_STATUS_LABEL[order.status]}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Card style={styles.headerCard}>
+          <StatusBadge
+            label={PICKUP_ORDER_STATUS_LABEL[order.status]}
+            tone={PICKUP_ORDER_STATUS_PRESENTATION[order.status].tone}
+            icon={PICKUP_ORDER_STATUS_PRESENTATION[order.status].icon}
+            style={styles.badge}
+          />
           <Text style={styles.timeHero}>
             {formatTimeRange(order.scheduled_time_from, order.scheduled_time_to) || '—'}
           </Text>
@@ -337,16 +346,20 @@ export function PickupOrderInProgressScreen({ route, navigation }: Props) {
               ]}
             >
               <View style={styles.rowBetween}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.flex}>
                   <Text style={styles.stopTitle}>
                     {stop.sequence}. {stop.warehouse?.name ?? '—'}
                   </Text>
                   {stop.warehouse?.address ? (
                     <Text style={styles.stopAddress}>{stop.warehouse.address}</Text>
                   ) : null}
-                  <Text style={styles.muted}>
-                    {PICKUP_STOP_STATUS_LABEL[stop.status]}
-                  </Text>
+                  <StatusBadge
+                    size="sm"
+                    label={PICKUP_STOP_STATUS_LABEL[stop.status]}
+                    tone={PICKUP_STOP_STATUS_PRESENTATION[stop.status].tone}
+                    icon={PICKUP_STOP_STATUS_PRESENTATION[stop.status].icon}
+                    style={styles.stopBadge}
+                  />
                 </View>
               </View>
             </Card>
@@ -355,13 +368,13 @@ export function PickupOrderInProgressScreen({ route, navigation }: Props) {
       </ScrollView>
 
       <View style={styles.incidentBar}>
-        <Text
-          style={styles.incidentLink}
+        <Button
+          variant="secondary"
+          icon="alert-circle-outline"
           onPress={() => setIncidentOpen(true)}
-          accessibilityRole="button"
         >
           Informar novedad
-        </Text>
+        </Button>
       </View>
 
       <ContextualActionButton
@@ -399,55 +412,44 @@ export function PickupOrderInProgressScreen({ route, navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
-    badge: {
-      alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.text,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 8,
-    },
-    title: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
+    loading: { ...typography.body, color: colors.muted, padding: spacing.lg },
+    scrollContent: { padding: spacing.lg },
+    headerCard: { marginBottom: spacing.md },
+    flex: { flex: 1 },
+    badge: { marginBottom: spacing.sm },
+    title: { ...typography.subtitle, fontWeight: '700', color: colors.text },
     timeHero: {
-      fontSize: 40,
-      fontWeight: '700',
-      color: theme.colors.text,
+      ...typography.display,
+      color: colors.text,
       letterSpacing: -0.5,
-      lineHeight: 44,
+      fontVariant: ['tabular-nums'],
     },
     dateLabel: {
-      fontSize: 15,
-      color: theme.colors.muted,
-      marginTop: 4,
+      ...typography.body,
+      color: colors.muted,
+      marginTop: spacing.xs,
       fontWeight: '500',
     },
-    muted: { fontSize: 14, color: theme.colors.muted, marginTop: 4 },
+    muted: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
     sectionTitle: {
-      fontSize: 14,
+      ...typography.captionStrong,
       fontWeight: '700',
-      color: theme.colors.text,
-      marginTop: 8,
-      marginBottom: 8,
+      color: colors.text,
+      marginTop: spacing.sm,
+      marginBottom: spacing.sm,
     },
-    stopCard: { marginBottom: 8 },
-    stopCardActive: { borderColor: theme.colors.primary, borderWidth: 2 },
-    stopTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    stopAddress: { fontSize: 13, color: theme.colors.muted, marginTop: 2 },
-    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    stopCard: { marginBottom: spacing.sm },
+    stopCardActive: { borderColor: colors.primary, borderWidth: 2 },
+    stopTitle: { ...typography.bodyStrong, color: colors.text },
+    stopAddress: { ...typography.caption, color: colors.muted, marginTop: spacing.xxs },
+    stopBadge: { marginTop: spacing.sm },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
     incidentBar: {
-      paddingHorizontal: 16,
-      paddingBottom: 8,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
       alignItems: 'flex-end',
-    },
-    incidentLink: {
-      fontSize: 13,
-      color: theme.colors.danger ?? '#dc2626',
-      fontWeight: '600',
-      textDecorationLine: 'underline',
     },
   });
 }

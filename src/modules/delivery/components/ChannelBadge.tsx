@@ -28,40 +28,40 @@ export function ChannelBadge({ channel, compact = false }: { channel: ShipmentCh
     >
       <Ionicons
         name={flex ? 'swap-horizontal' : 'cube-outline'}
-        size={compact ? 11 : 13}
-        color={flex ? FLEX_INK : theme.colors.primary}
+        size={compact ? 12 : 14}
+        color={flex ? theme.colors.partnerFlexOn : theme.colors.primary}
       />
-      <Text style={[styles.label, flex ? styles.labelFlex : styles.labelOwn, compact && styles.labelCompact]}>
+      <Text
+        style={[styles.label, flex ? styles.labelFlex : styles.labelOwn, compact && styles.labelCompact]}
+        maxFontSizeMultiplier={1.3}
+      >
         {channel.label}
       </Text>
     </View>
   );
 }
 
-/** Amarillo de marca ML sobre tinta oscura: contraste > 4.5:1 en ambos temas. */
-const FLEX_BG = '#FFE600';
-const FLEX_INK = '#1F2937';
-
 function createStyles(t: AppTheme) {
   const { colors, spacing, typography } = t;
+  // Amarillo de marca ML sobre tinta oscura (`partnerFlex*`): contraste > 4.5:1 en ambos temas.
   return StyleSheet.create({
     pill: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
-      gap: 4,
+      gap: spacing.xs,
       paddingHorizontal: spacing.sm,
-      paddingVertical: 3,
-      borderRadius: 999,
+      paddingVertical: spacing.xxs,
+      borderRadius: spacing.radiusPill,
       borderWidth: 1,
     },
     pillCompact: {
-      paddingHorizontal: 6,
+      paddingHorizontal: spacing.xs + spacing.xxs,
       paddingVertical: 1,
     },
     pillFlex: {
-      backgroundColor: FLEX_BG,
-      borderColor: FLEX_BG,
+      backgroundColor: colors.partnerFlex,
+      borderColor: colors.partnerFlex,
     },
     pillOwn: {
       backgroundColor: colors.surfaceMuted,
@@ -71,10 +71,10 @@ function createStyles(t: AppTheme) {
       ...typography.captionStrong,
     },
     labelCompact: {
-      fontSize: 11,
+      ...typography.micro,
     },
     labelFlex: {
-      color: FLEX_INK,
+      color: colors.partnerFlexOn,
     },
     labelOwn: {
       color: colors.text,

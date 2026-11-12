@@ -82,6 +82,8 @@ export function RouteActionsSheet({
               <>
                 <Button
                   variant="primary"
+                  size="lg"
+                  icon="play"
                   loading={busy === 'start'}
                   disabled={busy !== null}
                   onPress={onStart}
@@ -99,6 +101,7 @@ export function RouteActionsSheet({
               <>
                 <Button
                   variant="primary"
+                  size="lg"
                   loading={busy === 'reoptimize'}
                   disabled={busy !== null}
                   onPress={onReoptimize}
@@ -107,6 +110,7 @@ export function RouteActionsSheet({
                 </Button>
                 <Button
                   variant="outline"
+                  size="lg"
                   loading={busy === 'finish'}
                   disabled={busy !== null}
                   onPress={onFinish}
@@ -133,21 +137,21 @@ function createStyles(t: AppTheme) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      backgroundColor: colors.scrim,
       justifyContent: 'flex-end',
     },
     panel: {
       backgroundColor: colors.surface,
-      borderTopLeftRadius: spacing.radiusCard + 6,
-      borderTopRightRadius: spacing.radiusCard + 6,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
     },
     handle: {
       alignSelf: 'center',
       width: 40,
-      height: 4,
-      borderRadius: 2,
+      height: spacing.xs,
+      borderRadius: spacing.xxs,
       backgroundColor: colors.border,
       marginBottom: spacing.lg,
     },

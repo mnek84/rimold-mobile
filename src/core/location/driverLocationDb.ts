@@ -152,6 +152,19 @@ export async function deletePendingOlderThan(cutoffMs: number): Promise<void> {
   await db.runAsync(`DELETE FROM pending_locations WHERE timestamp < ?`, cutoffMs);
 }
 
+/**
+ * Vacía la cola. Se llama al cerrar sesión: sin esto, los puntos pendientes del
+ * chofer anterior se subían con el token del siguiente usuario que entrara en
+ * el mismo teléfono, y quedaban guardados como posiciones de otra persona.
+ */
+export async function clearPendingLocations(): Promise<void> {
+  const db = await getDb();
+  if (db === null) {
+    return;
+  }
+  await db.runAsync(`DELETE FROM pending_locations`);
+}
+
 export async function deletePendingByIds(ids: string[]): Promise<void> {
   if (ids.length === 0) {
     return;

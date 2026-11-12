@@ -14,7 +14,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import Animated, {
@@ -26,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { QrScanner } from '@components/QrScanner';
-import { Button, ScreenContainer } from '@components/ui';
+import { Button, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { fetchActiveCageSession } from '@core/api/cageSessions';
 import {
   closeWarehouseCage,
@@ -332,14 +331,23 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
       const selected = item.id === selectedDriverId;
       return (
         <Pressable
-          style={[styles.driverRow, selected && styles.driverRowSelected]}
+          style={({ pressed }) => [
+            styles.driverRow,
+            selected && styles.driverRowSelected,
+            pressed && !selected && styles.driverRowPressed,
+          ]}
           onPress={() => setSelectedDriverId(item.id)}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: selected }}
         >
           <Text style={styles.driverName}>{item.name}</Text>
+          {selected ? (
+            <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} />
+          ) : null}
         </Pressable>
       );
     },
-    [selectedDriverId, styles],
+    [selectedDriverId, styles, theme.colors.primary],
   );
 
   const renderShipment = useCallback(
@@ -347,17 +355,32 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
       <View style={styles.shipRow}>
         <View style={styles.shipRowMain}>
           <Text style={styles.shipTracking}>{item.tracking}</Text>
-          <Text style={styles.shipStatus}>
-            {item.status_code === 'in_cage'
-              ? 'En jaula'
-              : item.pending_scan === true
-                ? 'Asignado · sin escanear'
-                : (item.status_code ?? '—')}
-          </Text>
+          {item.status_code === 'in_cage' ? (
+            <StatusBadge
+              size="sm"
+              tone="success"
+              icon="checkmark-circle"
+              label="En jaula"
+              style={styles.shipStatus}
+            />
+          ) : item.pending_scan === true ? (
+            <StatusBadge
+              size="sm"
+              tone="warning"
+              icon="time-outline"
+              label="Asignado · sin escanear"
+              style={styles.shipStatus}
+            />
+          ) : (
+            <StatusBadge size="sm" label={item.status_code ?? '—'} style={styles.shipStatus} />
+          )}
         </View>
         {item.status_code === 'in_cage' ? (
-          <Pressable
-            style={styles.transferBtn}
+          <Button
+            variant="outline"
+            size="sm"
+            icon="swap-horizontal-outline"
+            hitSlop={theme.touch.hitSlop}
             onPress={() =>
               navigation.navigate('CageList', {
                 mode: 'transfer',
@@ -368,12 +391,12 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
               })
             }
           >
-            <Text style={styles.transferBtnLabel}>Mover</Text>
-          </Pressable>
+            Mover
+          </Button>
         ) : null}
       </View>
     ),
-    [cageId, cageName, navigation, styles],
+    [cageId, cageName, navigation, styles, theme.touch.hitSlop],
   );
 
   return (
@@ -395,20 +418,24 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
         <View style={[styles.corner, styles.cornerBR]} pointerEvents="none" />
         {scanMutation.isPending ? (
           <View style={styles.scannerLockOverlay} pointerEvents="none">
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={theme.colors.mediaOn} />
             <Text style={styles.scannerLockText}>Registrando…</Text>
           </View>
         ) : null}
       </View>
 
       {transientError !== null ? (
-        <View style={styles.scanErrorBanner}>
+        <View style={[styles.resultBanner, styles.resultBannerError]}>
           <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
           <Text style={styles.scanErrorText}>{transientError}</Text>
         </View>
       ) : lastScanned !== null ? (
-        <View style={styles.lastScannedBanner}>
-          <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
+        <View style={[styles.resultBanner, styles.resultBannerOk]}>
+          <Ionicons
+            name={lastScanned.duplicate ? 'repeat' : 'checkmark-circle'}
+            size={22}
+            color={theme.colors.success}
+          />
           <View style={styles.lastScannedTextWrap}>
             <Text style={styles.lastScannedLabel}>
               {lastScanned.duplicate ? 'Ya estaba en la jaula' : '¡Agregado!'}
@@ -443,7 +470,7 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
       {missingShipments.length > 0 ? (
         // Con nombre y apellido: "29 de 30" no manda a nadie a buscar nada.
         <View style={styles.missingBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color={theme.colors.danger} />
+          <Ionicons name="alert-circle-outline" size={20} color={theme.colors.danger} />
           <Text style={styles.missingText}>
             Falta escanear: {missingShipments.map((m) => m.tracking).join(', ')}
           </Text>
@@ -507,7 +534,12 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
           <View style={styles.closeOverlay}>
-            <Pressable style={styles.closeBackdrop} onPress={onRequestCloseModal} />
+            <Pressable
+              style={styles.closeBackdrop}
+              onPress={onRequestCloseModal}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar"
+            />
             <View style={styles.closeSheet}>
               <Text style={styles.closeTitle}>¿Qué conductor retira la jaula?</Text>
               <Text style={styles.closeHint}>
@@ -515,30 +547,26 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
               </Text>
               {closeError !== null ? <Text style={styles.closeApiErr}>{closeError}</Text> : null}
               <View style={styles.closeActions}>
-                <Pressable style={styles.cancelBtn} onPress={onRequestCloseModal}>
-                  <Text style={styles.cancelBtnLabel}>Cancelar</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.confirmBtn,
-                    (selectedDriverId === null || closeMutation.isPending) && styles.confirmDisabled,
-                  ]}
+                <Button variant="ghost" onPress={onRequestCloseModal}>
+                  Cancelar
+                </Button>
+                <Button
                   onPress={onConfirmClose}
                   disabled={selectedDriverId === null || closeMutation.isPending}
                 >
-                  <Text style={styles.confirmBtnLabel}>{closeMutation.isPending ? 'Cerrando…' : 'Confirmar'}</Text>
-                </Pressable>
+                  {closeMutation.isPending ? 'Cerrando…' : 'Confirmar'}
+                </Button>
               </View>
               {driversQuery.isLoading ? (
                 <ActivityIndicator color={theme.colors.primary} style={styles.loader} />
               ) : (
                 <>
-                  <TextInput
+                  <Input
                     value={driverSearch}
                     onChangeText={setDriverSearch}
                     placeholder="Buscar por nombre…"
-                    placeholderTextColor={theme.colors.muted}
-                    style={styles.driverSearchInput}
+                    accessibilityLabel="Buscar conductor por nombre"
+                    containerStyle={styles.driverSearchInput}
                     autoCapitalize="none"
                     autoCorrect={false}
                     returnKeyType="search"
@@ -571,7 +599,7 @@ export function CageWorkspaceScreen({ navigation, route }: Props) {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     cageLabel: {
       ...typography.caption,
@@ -588,80 +616,86 @@ function createStyles(t: AppTheme) {
     // ── Scanner ────────────────────────────────────────────────────────
     scannerWrap: {
       height: 230,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       overflow: 'hidden',
-      backgroundColor: '#000',
+      backgroundColor: colors.media,
       marginBottom: spacing.md,
     },
     scanner: { flex: 1 },
     flashSuccess: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(34, 197, 94, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaSuccessFlash,
     },
     flashError: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(239, 68, 68, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaDangerFlash,
     },
     corner: {
       position: 'absolute',
       width: CORNER_SIZE,
       height: CORNER_SIZE,
-      borderColor: colors.primary,
+      borderColor: colors.mediaOn,
     },
     cornerTL: {
-      top: 12,
-      left: 12,
+      top: spacing.md,
+      left: spacing.md,
       borderTopWidth: CORNER_THICKNESS,
       borderLeftWidth: CORNER_THICKNESS,
-      borderTopLeftRadius: 4,
+      borderTopLeftRadius: spacing.xs,
     },
     cornerTR: {
-      top: 12,
-      right: 12,
+      top: spacing.md,
+      right: spacing.md,
       borderTopWidth: CORNER_THICKNESS,
       borderRightWidth: CORNER_THICKNESS,
-      borderTopRightRadius: 4,
+      borderTopRightRadius: spacing.xs,
     },
     cornerBL: {
-      bottom: 12,
-      left: 12,
+      bottom: spacing.md,
+      left: spacing.md,
       borderBottomWidth: CORNER_THICKNESS,
       borderLeftWidth: CORNER_THICKNESS,
-      borderBottomLeftRadius: 4,
+      borderBottomLeftRadius: spacing.xs,
     },
     cornerBR: {
-      bottom: 12,
-      right: 12,
+      bottom: spacing.md,
+      right: spacing.md,
       borderBottomWidth: CORNER_THICKNESS,
       borderRightWidth: CORNER_THICKNESS,
-      borderBottomRightRadius: 4,
+      borderBottomRightRadius: spacing.xs,
     },
     scannerLockOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: colors.mediaScrim,
       gap: spacing.xs,
     },
     scannerLockText: {
       ...typography.bodyStrong,
-      color: '#ffffff',
+      color: colors.mediaOn,
       letterSpacing: 0.4,
     },
 
     // ── Banners ────────────────────────────────────────────────────────
-    lastScannedBanner: {
+    resultBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      backgroundColor: 'rgba(34, 197, 94, 0.12)',
       borderWidth: 1,
-      borderColor: 'rgba(34, 197, 94, 0.4)',
-      borderRadius: spacing.radiusMd,
-      paddingVertical: spacing.sm + 2,
+      borderRadius: spacing.radiusXl,
+      paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
-      minHeight: 52,
+      minHeight: touch.primary,
+    },
+    resultBannerOk: {
+      backgroundColor: colors.successSoft,
+      borderColor: colors.success,
+    },
+    resultBannerError: {
+      backgroundColor: colors.dangerSoft,
+      borderColor: colors.danger,
     },
     lastScannedTextWrap: { flex: 1, minWidth: 0 },
     lastScannedLabel: {
@@ -671,20 +705,8 @@ function createStyles(t: AppTheme) {
     lastScannedId: {
       ...typography.bodyStrong,
       color: colors.text,
-      marginTop: 2,
-    },
-    scanErrorBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
-      borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      borderRadius: spacing.radiusMd,
-      paddingVertical: spacing.sm + 2,
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.md,
-      minHeight: 52,
+      marginTop: spacing.xxs,
+      fontVariant: ['tabular-nums'],
     },
     scanErrorText: {
       ...typography.body,
@@ -697,7 +719,7 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       paddingHorizontal: spacing.xs,
       marginBottom: spacing.md,
-      minHeight: 52,
+      minHeight: touch.primary,
     },
     hintText: {
       ...typography.caption,
@@ -708,18 +730,19 @@ function createStyles(t: AppTheme) {
     missingBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: spacing.radiusXl,
       borderWidth: 1,
       borderColor: colors.danger,
+      backgroundColor: colors.dangerSoft,
       marginBottom: spacing.md,
     },
     missingText: {
+      ...typography.caption,
       flex: 1,
       color: colors.danger,
-      fontSize: 12,
     },
     statsRow: {
       flexDirection: 'row',
@@ -729,13 +752,15 @@ function createStyles(t: AppTheme) {
     statBox: {
       flex: 1,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
     statValue: {
       ...typography.title,
+      color: colors.text,
+      fontVariant: ['tabular-nums'],
     },
     statOk: {
       color: colors.success,
@@ -746,7 +771,7 @@ function createStyles(t: AppTheme) {
     statLabel: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 4,
+      marginTop: spacing.xs,
     },
 
     // ── Cerrar jaula ───────────────────────────────────────────────────
@@ -757,11 +782,11 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      paddingVertical: spacing.sm + 2,
+      paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
+      borderRadius: spacing.radiusXl,
+      backgroundColor: colors.surfaceMuted,
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -808,25 +833,13 @@ function createStyles(t: AppTheme) {
       flex: 1,
       minWidth: 0,
     },
-    transferBtn: {
-      paddingVertical: 6,
-      paddingHorizontal: spacing.sm,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.primary + '66',
-    },
-    transferBtnLabel: {
-      ...typography.captionStrong,
-      color: colors.primary,
-    },
     shipTracking: {
       ...typography.bodyStrong,
       color: colors.text,
       fontFamily: 'monospace',
     },
     shipStatus: {
-      ...typography.caption,
-      color: colors.muted,
+      marginTop: spacing.xs,
     },
     emptyList: {
       ...typography.caption,
@@ -843,16 +856,16 @@ function createStyles(t: AppTheme) {
     },
     closeOverlay: {
       flex: 1,
-      backgroundColor: '#000a',
+      backgroundColor: colors.scrim,
       justifyContent: 'center',
       padding: spacing.lg,
     },
     closeBackdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     closeSheet: {
       backgroundColor: colors.surface,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       padding: spacing.lg,
       maxHeight: '88%',
       zIndex: 1,
@@ -873,14 +886,6 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.md,
     },
     driverSearchInput: {
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
       marginBottom: spacing.sm,
     },
     driverList: {
@@ -888,44 +893,34 @@ function createStyles(t: AppTheme) {
       maxHeight: 260,
     },
     driverRow: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.sm,
-      borderRadius: spacing.radiusSm,
-      marginBottom: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      minHeight: touch.min,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: spacing.radiusMd,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      marginBottom: spacing.xs,
     },
     driverRowSelected: {
-      backgroundColor: colors.primary + '33',
+      backgroundColor: colors.primarySoft,
+      borderColor: colors.primary,
+    },
+    driverRowPressed: {
+      backgroundColor: colors.overlay,
     },
     driverName: {
       ...typography.body,
       color: colors.text,
+      flex: 1,
     },
     closeActions: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       gap: spacing.md,
       marginBottom: spacing.md,
-    },
-    cancelBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    cancelBtnLabel: {
-      ...typography.body,
-      color: colors.muted,
-    },
-    confirmBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.lg,
-      backgroundColor: colors.primary,
-      borderRadius: spacing.radiusMd,
-    },
-    confirmDisabled: {
-      opacity: 0.45,
-    },
-    confirmBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primaryOn,
     },
   });
 }

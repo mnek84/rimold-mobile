@@ -9,11 +9,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
-import { Button, ScreenContainer } from '@components/ui';
+import { Button, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { closeCageSession, fetchActiveCageSession } from '@core/api/cageSessions';
 import { fetchDriversForAssignment, type DriverForAssignment } from '@core/api/cagesWarehouse';
 import type { BodegaStackNav } from '@navigation/bodegaStackTypes';
@@ -173,17 +172,26 @@ export function CloseCageSessionScreen() {
                   {item.zone ? ` · ${item.zone.name}` : ''}
                 </Text>
                 {(item.missing_count ?? 0) > 0 && item.kind !== 'special' ? (
-                  <Text style={styles.cageBlocked}>
-                    🔒 faltan {item.missing_count} por escanear
-                  </Text>
+                  <StatusBadge
+                    tone="danger"
+                    icon="lock-closed"
+                    label={`faltan ${item.missing_count} por escanear`}
+                    style={styles.cageBlocked}
+                  />
                 ) : null}
               </View>
               <Pressable
-                style={styles.pickBtn}
+                style={({ pressed }) => [
+                  styles.pickBtn,
+                  pressed && styles.pressed,
+                  driversQ.isLoading && styles.disabled,
+                ]}
                 onPress={() => setPickerCageId(item.id)}
                 disabled={driversQ.isLoading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: driversQ.isLoading }}
               >
-                <Text style={styles.pickBtnLabel}>
+                <Text style={styles.pickBtnLabel} numberOfLines={1}>
                   {driverName ?? 'Elegir chofer'}
                 </Text>
               </Pressable>
@@ -201,6 +209,7 @@ export function CloseCageSessionScreen() {
         }}
         disabled={!canSubmit}
         loading={closeMut.isPending}
+        size="lg"
         style={styles.confirmBtn}
       >
         {blockedCages.length > 0
@@ -217,15 +226,20 @@ export function CloseCageSessionScreen() {
         onRequestClose={() => setPickerCageId(null)}
       >
         <View style={styles.modalRoot}>
-          <Pressable style={styles.backdrop} onPress={() => setPickerCageId(null)} />
+          <Pressable
+            style={styles.backdrop}
+            onPress={() => setPickerCageId(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar"
+          />
           <View style={styles.sheet}>
             <Text style={styles.modalTitle}>Elegí un chofer</Text>
-            <TextInput
+            <Input
               value={driverSearch}
               onChangeText={setDriverSearch}
               placeholder="Buscar por nombre…"
-              placeholderTextColor={theme.colors.muted}
-              style={styles.search}
+              accessibilityLabel="Buscar chofer por nombre"
+              containerStyle={styles.search}
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
@@ -240,7 +254,8 @@ export function CloseCageSessionScreen() {
                 style={styles.driverList}
                 renderItem={({ item }: { item: DriverForAssignment }) => (
                   <Pressable
-                    style={styles.driverRow}
+                    style={({ pressed }) => [styles.driverRow, pressed && styles.driverRowPressed]}
+                    accessibilityRole="button"
                     onPress={() => {
                       if (pickerCageId === null) return;
                       onPickDriver(pickerCageId, item.id);
@@ -256,9 +271,14 @@ export function CloseCageSessionScreen() {
                 }
               />
             )}
-            <Pressable style={styles.cancelBtn} onPress={() => setPickerCageId(null)}>
-              <Text style={styles.cancelBtnLabel}>Cancelar</Text>
-            </Pressable>
+            <Button
+              variant="ghost"
+              fullWidth
+              style={styles.cancelBtn}
+              onPress={() => setPickerCageId(null)}
+            >
+              Cancelar
+            </Button>
           </View>
         </View>
       </Modal>
@@ -267,7 +287,7 @@ export function CloseCageSessionScreen() {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch, motion } = t;
   return StyleSheet.create({
     center: {
       flex: 1,
@@ -298,7 +318,7 @@ function createStyles(t: AppTheme) {
       alignItems: 'center',
       gap: spacing.sm,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -309,23 +329,29 @@ function createStyles(t: AppTheme) {
       color: colors.text,
     },
     cageBlocked: {
-      marginTop: 2,
-      color: colors.danger,
-      fontSize: 12,
-      fontWeight: '600',
+      marginTop: spacing.xs,
     },
     cageMeta: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
+      fontVariant: ['tabular-nums'],
     },
     pickBtn: {
-      paddingVertical: spacing.sm,
+      minHeight: touch.min,
+      maxWidth: '50%',
+      justifyContent: 'center',
       paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusLg,
       borderWidth: 1,
-      borderColor: colors.primary + '66',
-      backgroundColor: colors.primary + '11',
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    pressed: {
+      opacity: motion.pressOpacitySoft,
+    },
+    disabled: {
+      opacity: motion.disabledOpacity,
     },
     pickBtnLabel: {
       ...typography.captionStrong,
@@ -345,7 +371,7 @@ function createStyles(t: AppTheme) {
     },
     modalRoot: {
       flex: 1,
-      backgroundColor: '#000a',
+      backgroundColor: colors.scrim,
       justifyContent: 'flex-end',
     },
     backdrop: {
@@ -353,8 +379,8 @@ function createStyles(t: AppTheme) {
     },
     sheet: {
       backgroundColor: colors.surface,
-      borderTopLeftRadius: spacing.radiusLg,
-      borderTopRightRadius: spacing.radiusLg,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
       padding: spacing.lg,
       maxHeight: '88%',
     },
@@ -364,14 +390,6 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.sm,
     },
     search: {
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm + 2,
       marginBottom: spacing.sm,
     },
     loader: {
@@ -382,9 +400,14 @@ function createStyles(t: AppTheme) {
       maxHeight: 320,
     },
     driverRow: {
+      minHeight: touch.min,
+      justifyContent: 'center',
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.sm,
-      borderRadius: spacing.radiusSm,
+      borderRadius: spacing.radiusMd,
+    },
+    driverRowPressed: {
+      backgroundColor: colors.overlay,
     },
     driverName: {
       ...typography.body,
@@ -397,12 +420,7 @@ function createStyles(t: AppTheme) {
       textAlign: 'center',
     },
     cancelBtn: {
-      padding: spacing.md,
-      alignItems: 'center',
-    },
-    cancelBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
+      marginTop: spacing.sm,
     },
   });
 }

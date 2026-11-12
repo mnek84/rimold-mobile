@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState, type ComponentProps } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, ScreenContainer } from '@components/ui';
+import { Button, Card, ScreenContainer, SegmentedControl, type SegmentedOption } from '@components/ui';
 import { refreshSessionUser } from '@core/api/auth';
 import {
   getInstalledVersionCode,
@@ -17,12 +17,19 @@ import { getUserRoles, type AuthRole } from '@core/auth/types';
 import { queryClient } from '@core/query/queryClient';
 import { processQueue, useSyncStatusStore } from '@core/sync';
 import type { MainTabParamList } from '@navigation/types';
+import { DesignPreview } from '../../dev/DesignPreview';
 import { useAuthStore } from '@store/useAuthStore';
-import { useTheme, type AppTheme } from '@theme';
+import { useTheme, useThemePreferenceStore, type AppTheme, type ThemePreference } from '@theme';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Ajustes'>;
 
 type IonName = ComponentProps<typeof Ionicons>['name'];
+
+const APPEARANCE_OPTIONS: readonly SegmentedOption<ThemePreference>[] = [
+  { value: 'system', label: 'Auto', icon: 'phone-portrait-outline' },
+  { value: 'light', label: 'Claro', icon: 'sunny-outline' },
+  { value: 'dark', label: 'Oscuro', icon: 'moon-outline' },
+];
 
 function roleLabel(role: AuthRole): string {
   switch (role) {
@@ -73,8 +80,11 @@ export function SettingsScreen(_props: Props) {
   const isSyncing = useSyncStatusStore((s) => s.isSyncing);
   const [forceSyncBusy, setForceSyncBusy] = useState(false);
   const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const [designPreviewOpen, setDesignPreviewOpen] = useState(false);
   const appUpdateStatus = useAppUpdateStore((s) => s.status);
   const checkForUpdate = useAppUpdateStore((s) => s.checkForUpdate);
+  const themePreference = useThemePreferenceStore((s) => s.preference);
+  const setThemePreference = useThemePreferenceStore((s) => s.setPreference);
 
   const installedVersionName = getInstalledVersionName();
   const installedVersionCode = getInstalledVersionCode();
@@ -179,14 +189,24 @@ export function SettingsScreen(_props: Props) {
 
       <Card>
         <SectionHeader
-          icon="log-out-outline"
-          title="Acciones"
+          icon="contrast-outline"
+          title="Apariencia"
           iconColor={iconAccent}
           styles={styles}
         />
-        <Button variant="danger" size="lg" onPress={onLogout}>
-          Cerrar sesión
-        </Button>
+        <SegmentedControl
+          accessibilityLabel="Tema de la aplicación"
+          options={APPEARANCE_OPTIONS}
+          value={themePreference}
+          onChange={setThemePreference}
+        />
+        <Text style={styles.helperText}>
+          {themePreference === 'system'
+            ? 'Sigue la configuración del teléfono.'
+            : themePreference === 'light'
+              ? 'Recomendado a pleno sol.'
+              : 'Recomendado de noche: menos brillo en la cabina.'}
+        </Text>
       </Card>
 
       {showAppUpdateSection && (
@@ -263,6 +283,36 @@ export function SettingsScreen(_props: Props) {
           Sincronizar ahora
         </Button>
       </Card>
+
+      <Button variant="danger" size="lg" icon="log-out-outline" onPress={onLogout}>
+        Cerrar sesión
+      </Button>
+
+      {__DEV__ ? (
+        <>
+          <Button variant="ghost" icon="color-palette-outline" onPress={() => setDesignPreviewOpen(true)}>
+            Vista de diseño (dev)
+          </Button>
+          <Modal
+            visible={designPreviewOpen}
+            animationType="slide"
+            onRequestClose={() => setDesignPreviewOpen(false)}
+          >
+            <DesignPreview />
+            <View style={styles.previewFooter}>
+              <SegmentedControl
+                accessibilityLabel="Tema de la aplicación"
+                options={APPEARANCE_OPTIONS}
+                value={themePreference}
+                onChange={setThemePreference}
+              />
+              <Button variant="secondary" onPress={() => setDesignPreviewOpen(false)}>
+                Cerrar
+              </Button>
+            </View>
+          </Modal>
+        </>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -298,7 +348,7 @@ function createStyles(t: AppTheme) {
       width: 40,
       height: 40,
       borderRadius: spacing.radiusMd,
-      backgroundColor: `${colors.primary}22`,
+      backgroundColor: colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -367,6 +417,18 @@ function createStyles(t: AppTheme) {
     },
     forceSyncBtn: {
       marginTop: spacing.md,
+    },
+    previewFooter: {
+      gap: spacing.sm,
+      padding: spacing.lg,
+      backgroundColor: colors.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    helperText: {
+      ...typography.caption,
+      color: colors.muted,
+      marginTop: spacing.sm,
     },
   });
 }

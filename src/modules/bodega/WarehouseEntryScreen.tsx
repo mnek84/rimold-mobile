@@ -269,7 +269,7 @@ export function WarehouseEntryScreen() {
         item.outcome === 'error'
           ? 'close-circle'
           : item.outcome === 'duplicate'
-            ? 'time-outline'
+            ? 'repeat'
             : 'checkmark-circle';
       const iconColor =
         item.outcome === 'error'
@@ -311,21 +311,33 @@ export function WarehouseEntryScreen() {
         <View style={[styles.corner, styles.cornerBR]} pointerEvents="none" />
         {scanMutation.isPending ? (
           <View style={styles.scannerLockOverlay} pointerEvents="none">
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={theme.colors.mediaOn} />
             <Text style={styles.scannerLockText}>Registrando…</Text>
           </View>
         ) : null}
       </View>
 
       {transientError !== null ? (
-        <View style={styles.errorBanner}>
+        <View style={[styles.resultBanner, styles.resultBannerError]}>
           <Ionicons name="close-circle" size={22} color={theme.colors.danger} />
           <Text style={styles.errorText}>{transientError}</Text>
         </View>
       ) : lastScanned !== null ? (
-        <View style={lastScanned.cage !== null ? styles.cageBanner : styles.successBanner}>
+        <View
+          style={[
+            styles.resultBanner,
+            styles.resultBannerOk,
+            lastScanned.cage !== null && styles.cageBanner,
+          ]}
+        >
           <Ionicons
-            name={lastScanned.cage !== null ? 'albums' : 'checkmark-circle'}
+            name={
+              lastScanned.cage !== null
+                ? 'albums'
+                : lastScanned.duplicate
+                  ? 'repeat'
+                  : 'checkmark-circle'
+            }
             size={lastScanned.cage !== null ? 28 : 22}
             color={theme.colors.success}
           />
@@ -364,9 +376,12 @@ export function WarehouseEntryScreen() {
             <Text style={styles.successId}>{formatTrackingDisplay(lastScanned.tracking)}</Text>
 
             {lastScanned.warning !== null ? (
-              <Text style={styles.cageWarning} numberOfLines={2}>
-                {lastScanned.warning}
-              </Text>
+              <View style={styles.cageWarningRow}>
+                <Ionicons name="warning-outline" size={16} color={theme.colors.warning} />
+                <Text style={styles.cageWarning} numberOfLines={2}>
+                  {lastScanned.warning}
+                </Text>
+              </View>
             ) : null}
           </View>
         </View>
@@ -412,7 +427,7 @@ export function WarehouseEntryScreen() {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch } = t;
   return StyleSheet.create({
     headline: {
       ...typography.title,
@@ -427,109 +442,113 @@ function createStyles(t: AppTheme) {
 
     scannerWrap: {
       height: 230,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       overflow: 'hidden',
-      backgroundColor: '#000',
+      backgroundColor: colors.media,
       marginBottom: spacing.md,
     },
     scanner: { flex: 1 },
     flashSuccess: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(34, 197, 94, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaSuccessFlash,
     },
     flashError: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(239, 68, 68, 0.48)',
+      ...StyleSheet.absoluteFill,
+      backgroundColor: colors.mediaDangerFlash,
     },
     corner: {
       position: 'absolute',
       width: CORNER_SIZE,
       height: CORNER_SIZE,
-      borderColor: colors.primary,
+      borderColor: colors.mediaOn,
     },
     cornerTL: {
-      top: 12,
-      left: 12,
+      top: spacing.md,
+      left: spacing.md,
       borderTopWidth: CORNER_THICKNESS,
       borderLeftWidth: CORNER_THICKNESS,
-      borderTopLeftRadius: 4,
+      borderTopLeftRadius: spacing.xs,
     },
     cornerTR: {
-      top: 12,
-      right: 12,
+      top: spacing.md,
+      right: spacing.md,
       borderTopWidth: CORNER_THICKNESS,
       borderRightWidth: CORNER_THICKNESS,
-      borderTopRightRadius: 4,
+      borderTopRightRadius: spacing.xs,
     },
     cornerBL: {
-      bottom: 12,
-      left: 12,
+      bottom: spacing.md,
+      left: spacing.md,
       borderBottomWidth: CORNER_THICKNESS,
       borderLeftWidth: CORNER_THICKNESS,
-      borderBottomLeftRadius: 4,
+      borderBottomLeftRadius: spacing.xs,
     },
     cornerBR: {
-      bottom: 12,
-      right: 12,
+      bottom: spacing.md,
+      right: spacing.md,
       borderBottomWidth: CORNER_THICKNESS,
       borderRightWidth: CORNER_THICKNESS,
-      borderBottomRightRadius: 4,
+      borderBottomRightRadius: spacing.xs,
     },
     scannerLockOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: colors.mediaScrim,
       gap: spacing.xs,
     },
     scannerLockText: {
       ...typography.bodyStrong,
-      color: '#ffffff',
+      color: colors.mediaOn,
       letterSpacing: 0.4,
     },
 
-    successBanner: {
+    resultBanner: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      backgroundColor: 'rgba(34, 197, 94, 0.12)',
       borderWidth: 1,
-      borderColor: 'rgba(34, 197, 94, 0.4)',
-      borderRadius: spacing.radiusMd,
-      paddingVertical: spacing.sm + 2,
+      borderRadius: spacing.radiusXl,
+      paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.md,
-      minHeight: 52,
+      minHeight: touch.primary,
     },
-    // Mismo marco que `successBanner` pero mas alto: cuando hay jaula, el
+    resultBannerOk: {
+      backgroundColor: colors.successSoft,
+      borderColor: colors.success,
+    },
+    resultBannerError: {
+      backgroundColor: colors.dangerSoft,
+      borderColor: colors.danger,
+    },
+    // Mismo marco que el banner de exito pero mas alto: cuando hay jaula, el
     // nombre es el protagonista de la pantalla.
     cageBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      backgroundColor: 'rgba(34, 197, 94, 0.12)',
       borderWidth: 2,
-      borderColor: 'rgba(34, 197, 94, 0.55)',
-      borderRadius: spacing.radiusMd,
       paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.md,
       minHeight: 84,
     },
     cageName: {
-      ...typography.title,
+      ...typography.display,
       color: colors.text,
-      marginTop: 2,
+      marginTop: spacing.xxs,
     },
     cageSuggested: {
       ...typography.bodyStrong,
       color: colors.muted,
-      marginTop: 2,
+      marginTop: spacing.xxs,
+    },
+    cageWarningRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: spacing.xs,
     },
     cageWarning: {
       ...typography.caption,
-      color: colors.danger,
-      marginTop: 4,
+      color: colors.warning,
+      flex: 1,
     },
     successTextWrap: { flex: 1, minWidth: 0 },
     successLabel: {
@@ -539,20 +558,8 @@ function createStyles(t: AppTheme) {
     successId: {
       ...typography.bodyStrong,
       color: colors.text,
-      marginTop: 2,
-    },
-    errorBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      backgroundColor: 'rgba(239, 68, 68, 0.12)',
-      borderWidth: 1,
-      borderColor: 'rgba(239, 68, 68, 0.45)',
-      borderRadius: spacing.radiusMd,
-      paddingVertical: spacing.sm + 2,
-      paddingHorizontal: spacing.md,
-      marginBottom: spacing.md,
-      minHeight: 52,
+      marginTop: spacing.xxs,
+      fontVariant: ['tabular-nums'],
     },
     errorText: {
       ...typography.body,
@@ -565,7 +572,7 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       paddingHorizontal: spacing.xs,
       marginBottom: spacing.md,
-      minHeight: 52,
+      minHeight: touch.primary,
     },
     hintTextInline: {
       ...typography.caption,
@@ -580,13 +587,15 @@ function createStyles(t: AppTheme) {
     statBox: {
       flex: 1,
       padding: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
     statValue: {
       ...typography.title,
+      color: colors.text,
+      fontVariant: ['tabular-nums'],
     },
     statOk: {
       color: colors.success,
@@ -597,7 +606,7 @@ function createStyles(t: AppTheme) {
     statLabel: {
       ...typography.caption,
       color: colors.muted,
-      marginTop: 4,
+      marginTop: spacing.xs,
     },
 
     sectionLabel: {

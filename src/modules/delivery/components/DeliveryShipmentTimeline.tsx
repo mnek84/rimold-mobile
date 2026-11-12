@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -5,6 +6,9 @@ import { Card } from '@components/ui';
 import { useTheme, type AppTheme } from '@theme';
 
 import type { TimelineStepUi } from '../deliveryStatus';
+
+/** Diámetro del marcador: los estados hechos/error usan un ícono del mismo tamaño (no sólo color). */
+const DOT_SIZE = 16;
 
 type Props = {
   steps: TimelineStepUi[];
@@ -21,7 +25,13 @@ export function DeliveryShipmentTimeline({ steps }: Props) {
         {steps.map((step, index) => (
           <View key={step.key} style={styles.timelineRow}>
             <View style={styles.timelineRail}>
-              <View style={[styles.timelineDot, dotStyle(styles, step.state)]} />
+              {step.state === 'done' ? (
+                <Ionicons name="checkmark-circle" size={DOT_SIZE} color={theme.colors.success} />
+              ) : step.state === 'error' ? (
+                <Ionicons name="close-circle" size={DOT_SIZE} color={theme.colors.danger} />
+              ) : (
+                <View style={[styles.timelineDot, dotStyle(styles, step.state)]} />
+              )}
               {index < steps.length - 1 ? (
                 <View
                   style={[
@@ -74,7 +84,7 @@ function titleStyle(
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography } = t;
+  const { colors, spacing, typography, touch } = t;
   return StyleSheet.create({
     timelineCard: {
       marginBottom: spacing.xl,
@@ -92,17 +102,18 @@ function createStyles(t: AppTheme) {
     timelineRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      minHeight: 44,
+      minHeight: touch.min,
     },
     timelineRail: {
       width: 22,
       alignItems: 'center',
       marginRight: spacing.md,
+      paddingTop: spacing.xxs + 1,
     },
     timelineDot: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
+      width: DOT_SIZE,
+      height: DOT_SIZE,
+      borderRadius: spacing.radiusPill,
       borderWidth: 2,
     },
     timelineDotDone: {
@@ -123,9 +134,9 @@ function createStyles(t: AppTheme) {
     },
     timelineLine: {
       width: 2,
-      height: 28,
-      marginVertical: 4,
-      borderRadius: 1,
+      height: 24,
+      marginVertical: spacing.xs,
+      borderRadius: spacing.radiusPill,
     },
     timelineLineDone: {
       backgroundColor: colors.success,
@@ -140,7 +151,6 @@ function createStyles(t: AppTheme) {
     },
     timelineTitleDone: {
       color: colors.text,
-      opacity: 0.85,
     },
     timelineTitleCurrent: {
       color: colors.text,

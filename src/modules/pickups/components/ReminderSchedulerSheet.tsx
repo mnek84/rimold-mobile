@@ -73,7 +73,7 @@ export function ReminderSchedulerSheet({
             </View>
           ) : null}
 
-          <View style={{ height: 12 }} />
+          <View style={styles.spacer} />
           <Button onPress={onSkip} variant="ghost" disabled={busy}>
             Sin recordatorio
           </Button>
@@ -84,22 +84,24 @@ export function ReminderSchedulerSheet({
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
     backdrop: {
       flex: 1,
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.4)',
+      backgroundColor: colors.scrim,
     },
     backdropTap: { flex: 1 },
     sheet: {
-      backgroundColor: theme.colors.surface,
-      padding: 20,
-      paddingBottom: 32,
-      borderTopLeftRadius: 16,
-      borderTopRightRadius: 16,
+      backgroundColor: colors.surface,
+      padding: spacing.xl,
+      paddingBottom: spacing.xxl,
+      borderTopLeftRadius: spacing.radiusCard,
+      borderTopRightRadius: spacing.radiusCard,
     },
-    title: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
-    subtitle: { fontSize: 14, color: theme.colors.muted, marginTop: 6 },
-    options: { marginTop: 16, gap: 8 },
+    title: { ...typography.title, color: colors.text },
+    subtitle: { ...typography.body, color: colors.muted, marginTop: spacing.xs },
+    options: { marginTop: spacing.lg, gap: spacing.sm },
+    spacer: { height: spacing.md },
   });
 }

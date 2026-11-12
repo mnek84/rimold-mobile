@@ -2,17 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 
-import { ScreenContainer } from '@components/ui';
+import { Button, Input, ScreenContainer } from '@components/ui';
 import { authorizeCageDeparture } from '@core/api/cageDeparture';
 import { isWarehouseSupervisor } from '@core/auth/types';
 import { useCageDepartureAuthorization } from '@modules/bodega/hooks/useCageDepartureAuthorization';
@@ -93,7 +85,10 @@ export function CageDepartureGateScreen() {
 
       {missingList.length > 0 ? (
         <View style={styles.missingBox}>
-          <Text style={styles.missingTitle}>Falta escanear</Text>
+          <View style={styles.missingTitleRow}>
+            <Ionicons name="alert-circle" size={20} color={theme.colors.danger} />
+            <Text style={styles.missingTitle}>Falta escanear</Text>
+          </View>
           {missingList.map((m) => (
             <Text key={m.id} style={styles.missingItem}>
               {m.tracking}
@@ -105,7 +100,7 @@ export function CageDepartureGateScreen() {
       <View style={styles.statusBox}>
         {isLoading ? (
           <>
-            <ActivityIndicator />
+            <ActivityIndicator color={theme.colors.primary} />
             <Text style={styles.statusText}>Consultando estado…</Text>
           </>
         ) : canStart ? (
@@ -153,20 +148,20 @@ export function CageDepartureGateScreen() {
         )}
       </View>
 
-      <Pressable
-        style={[styles.cta, !canStart && styles.ctaDisabled]}
-        disabled={!canStart}
-        onPress={() => navigation.goBack()}
-      >
-        <Ionicons name="play" size={20} color="#ffffff" />
-        <Text style={styles.ctaText}>Iniciar recorrido</Text>
-      </Pressable>
+      <Button size="lg" icon="play" disabled={!canStart} onPress={() => navigation.goBack()}>
+        Iniciar recorrido
+      </Button>
 
       {blocked && canOverride ? (
-        <Pressable style={styles.secondaryCta} onPress={() => setOverrideOpen(true)}>
-          <Ionicons name="shield-checkmark-outline" size={18} color={theme.colors.primary} />
-          <Text style={styles.secondaryCtaText}>Autorizar salida igual</Text>
-        </Pressable>
+        <Button
+          variant="outline"
+          icon="shield-checkmark-outline"
+          fullWidth
+          style={styles.secondaryCta}
+          onPress={() => setOverrideOpen(true)}
+        >
+          Autorizar salida igual
+        </Button>
       ) : null}
 
       <Modal visible={overrideOpen} transparent animationType="fade">
@@ -178,10 +173,10 @@ export function CageDepartureGateScreen() {
               faltante queda sin dueño y la próxima vez nadie sabe qué pasó.
             </Text>
 
-            <TextInput
+            <Input
               style={styles.input}
               placeholder="Motivo"
-              placeholderTextColor={theme.colors.muted}
+              accessibilityLabel="Motivo"
               value={reason}
               onChangeText={setReason}
               multiline
@@ -190,25 +185,24 @@ export function CageDepartureGateScreen() {
             {error !== null ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancel}
+              <Button
+                variant="secondary"
+                style={styles.modalAction}
                 onPress={() => {
                   setOverrideOpen(false);
                   setError(null);
                 }}
               >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.modalConfirm,
-                  (reason.trim() === '' || authorizeMutation.isPending) && styles.ctaDisabled,
-                ]}
+                Cancelar
+              </Button>
+              <Button
+                style={styles.modalAction}
                 disabled={reason.trim() === '' || authorizeMutation.isPending}
+                loading={authorizeMutation.isPending}
                 onPress={() => authorizeMutation.mutate()}
               >
-                <Text style={styles.ctaText}>Autorizar</Text>
-              </Pressable>
+                Autorizar
+              </Button>
             </View>
           </View>
         </View>
@@ -235,14 +229,14 @@ function createStyles(t: AppTheme) {
       paddingVertical: spacing.md,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       marginBottom: spacing.sm,
     },
     countValue: {
-      ...typography.title,
-      fontSize: 40,
+      ...typography.display,
       color: colors.text,
+      fontVariant: ['tabular-nums'],
     },
     countLabel: {
       ...typography.caption,
@@ -252,14 +246,20 @@ function createStyles(t: AppTheme) {
       padding: spacing.md,
       borderWidth: 1,
       borderColor: colors.danger,
-      borderRadius: spacing.radiusLg,
+      backgroundColor: colors.dangerSoft,
+      borderRadius: spacing.radiusCard,
       marginBottom: spacing.lg,
-      gap: 2,
+      gap: spacing.xxs,
+    },
+    missingTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
     },
     missingTitle: {
       ...typography.bodyStrong,
       color: colors.danger,
-      marginBottom: spacing.xs,
     },
     missingItem: {
       ...typography.caption,
@@ -272,7 +272,7 @@ function createStyles(t: AppTheme) {
       padding: spacing.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       backgroundColor: colors.surface,
       marginBottom: spacing.lg,
     },
@@ -292,51 +292,23 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
       textAlign: 'center',
     },
-    cta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      backgroundColor: colors.primary,
-      paddingVertical: spacing.md,
-      borderRadius: spacing.radiusLg,
-    },
-    ctaDisabled: {
-      opacity: 0.4,
-    },
-    ctaText: {
-      ...typography.bodyStrong,
-      color: '#ffffff',
-    },
     secondaryCta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      paddingVertical: spacing.md,
       marginTop: spacing.sm,
-      borderRadius: spacing.radiusLg,
-      borderWidth: 1,
-      borderColor: colors.primary,
-    },
-    secondaryCtaText: {
-      ...typography.bodyStrong,
-      color: colors.primary,
     },
     modalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.scrim,
       justifyContent: 'center',
       padding: spacing.lg,
     },
     modalCard: {
       backgroundColor: colors.surface,
-      borderRadius: spacing.radiusLg,
+      borderRadius: spacing.radiusCard,
       padding: spacing.lg,
       gap: spacing.sm,
     },
     modalTitle: {
-      ...typography.bodyStrong,
+      ...typography.subtitle,
       color: colors.text,
     },
     modalBody: {
@@ -344,11 +316,6 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
     },
     input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusLg,
-      padding: spacing.md,
-      color: colors.text,
       minHeight: 72,
       textAlignVertical: 'top',
     },
@@ -361,26 +328,8 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       marginTop: spacing.xs,
     },
-    modalCancel: {
+    modalAction: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: spacing.md,
-      borderRadius: spacing.radiusLg,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    modalCancelText: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    modalConfirm: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: spacing.md,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
     },
   });
 }

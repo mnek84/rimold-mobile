@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
+import { Button } from '@components/ui';
 import { showToast } from '@core/feedback/toastStore';
 import { useTheme, type AppTheme } from '@theme';
 
@@ -83,26 +84,19 @@ export function FlexHandoffCard({ statusCode, externalStatus = null }: Props) {
       </View>
 
       {launchable && !closed ? (
-        <Pressable
+        <Button
+          variant={arrived ? 'primary' : 'outline'}
+          size={arrived ? 'lg' : 'md'}
+          icon="open-outline"
+          fullWidth
           accessibilityRole="link"
           accessibilityLabel="Abrir la app de Mercado Flex"
           accessibilityState={{ busy: opening }}
           disabled={opening}
           onPress={() => void onPress()}
-          style={({ pressed }) => [
-            arrived ? styles.ctaStrong : styles.ctaSoft,
-            pressed && styles.pressed,
-          ]}
         >
-          <Ionicons
-            name="open-outline"
-            size={18}
-            color={arrived ? theme.colors.primaryOn : theme.colors.primary}
-          />
-          <Text style={arrived ? styles.ctaStrongLabel : styles.ctaSoftLabel}>
-            {opening ? 'Abriendo…' : 'Abrir Mercado Flex'}
-          </Text>
-        </Pressable>
+          {opening ? 'Abriendo…' : 'Abrir Mercado Flex'}
+        </Button>
       ) : null}
 
       {!launchable && !closed ? (
@@ -116,7 +110,7 @@ export function FlexHandoffCard({ statusCode, externalStatus = null }: Props) {
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     card: {
       padding: spacing.lg,
@@ -137,7 +131,7 @@ function createStyles(t: AppTheme) {
     badge: {
       width: 36,
       height: 36,
-      borderRadius: 18,
+      borderRadius: spacing.radiusPill,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceMuted,
@@ -148,7 +142,7 @@ function createStyles(t: AppTheme) {
     headerTexts: {
       flex: 1,
       minWidth: 0,
-      gap: 2,
+      gap: spacing.xxs,
     },
     title: {
       ...typography.bodyStrong,
@@ -158,42 +152,9 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.muted,
     },
-    ctaStrong: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      minHeight: 50,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.primary,
-    },
-    ctaStrongLabel: {
-      ...typography.bodyStrong,
-      fontSize: 17,
-      color: colors.primaryOn,
-    },
-    ctaSoft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      minHeight: 44,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surfaceMuted,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    ctaSoftLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
-    },
     unsupported: {
       ...typography.caption,
       color: colors.muted,
-    },
-    pressed: {
-      opacity: motion.pressOpacitySoft,
-      transform: [{ scale: motion.pressScale }],
     },
   });
 }

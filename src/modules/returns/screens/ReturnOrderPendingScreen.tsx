@@ -1,8 +1,8 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, ScreenContainer } from '@components/ui';
+import { Button, Card, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { formatShortWeekday, formatTimeRange } from '@modules/pickups/lib/formatSchedule';
 import type { ReturnStackParamList } from '@navigation/returnStackTypes';
 import { useTheme, type AppTheme } from '@theme';
@@ -13,6 +13,7 @@ import {
   useReturnOrder,
 } from '../hooks/useReturnOrders';
 import { RETURN_ORDER_STATUS_LABEL } from '../lib/returnOrderStatus';
+import { RETURN_ORDER_STATUS_PRESENTATION } from '../lib/returnStatusTone';
 
 type Props = NativeStackScreenProps<ReturnStackParamList, 'ReturnOrderPending'>;
 
@@ -71,7 +72,7 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
   if (query.isLoading || !order) {
     return (
       <ScreenContainer>
-        <Text style={{ color: theme.colors.muted, padding: 16 }}>Cargando…</Text>
+        <Text style={styles.loading}>Cargando…</Text>
       </ScreenContainer>
     );
   }
@@ -80,9 +81,14 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Card style={{ marginBottom: 12 }}>
-          <Text style={styles.badge}>{RETURN_ORDER_STATUS_LABEL[order.status]}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Card style={styles.headerCard}>
+          <StatusBadge
+            label={RETURN_ORDER_STATUS_LABEL[order.status]}
+            tone={RETURN_ORDER_STATUS_PRESENTATION[order.status].tone}
+            icon={RETURN_ORDER_STATUS_PRESENTATION[order.status].icon}
+            style={styles.badge}
+          />
           <Text style={styles.title}>{order.business?.name ?? 'Devolución'}</Text>
           <Text style={styles.dateLabel}>{formatShortWeekday(order.scheduled_date)}</Text>
           {formatTimeRange(order.scheduled_time_from, order.scheduled_time_to) ? (
@@ -99,7 +105,7 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
 
         <Text style={styles.sectionTitle}>Paradas ({order.stops.length})</Text>
         {order.stops.map((stop) => (
-          <Card key={stop.id} style={{ marginBottom: 8 }}>
+          <Card key={stop.id} style={styles.stopCard}>
             <Text style={styles.stopTitle}>
               {stop.sequence}. {stop.warehouse?.name ?? stop.warehouse_id}
             </Text>
@@ -113,17 +119,27 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
         ))}
 
         {rejecting ? (
-          <Card style={{ marginTop: 12 }}>
+          <Card style={styles.rejectCard}>
             <Text style={styles.sectionTitle}>¿Por qué la rechazás?</Text>
-            <TextInput
+            <Input
               style={styles.input}
+              containerStyle={styles.inputContainer}
               multiline
               value={rejectReason}
               onChangeText={setRejectReason}
               placeholder="Motivo…"
-              placeholderTextColor={theme.colors.muted}
+              accessibilityLabel="Motivo del rechazo"
             />
             <View style={styles.actions}>
+              <Button
+                variant="danger"
+                size="lg"
+                icon="close-circle-outline"
+                onPress={handleReject}
+                disabled={rejectMutation.isPending}
+              >
+                {rejectMutation.isPending ? 'Enviando…' : 'Confirmar rechazo'}
+              </Button>
               <Button
                 variant="ghost"
                 onPress={() => {
@@ -133,14 +149,17 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
               >
                 Cancelar
               </Button>
-              <Button variant="danger" onPress={handleReject} disabled={rejectMutation.isPending}>
-                {rejectMutation.isPending ? 'Enviando…' : 'Confirmar rechazo'}
-              </Button>
             </View>
           </Card>
         ) : (
           <View style={styles.actions}>
-            <Button variant="primary" onPress={handleAccept} disabled={acceptMutation.isPending}>
+            <Button
+              variant="primary"
+              size="lg"
+              icon="checkmark-circle-outline"
+              onPress={handleAccept}
+              disabled={acceptMutation.isPending}
+            >
               {acceptMutation.isPending ? 'Aceptando…' : 'Aceptar'}
             </Button>
             <Button
@@ -158,46 +177,44 @@ export function ReturnOrderPendingScreen({ route, navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
-    badge: {
-      alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.text,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 8,
+    loading: { ...typography.body, color: colors.muted, padding: spacing.lg },
+    scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl + spacing.sm },
+    headerCard: { marginBottom: spacing.md },
+    stopCard: { marginBottom: spacing.sm },
+    rejectCard: { marginTop: spacing.md },
+    badge: { marginBottom: spacing.sm },
+    title: { ...typography.subtitle, fontWeight: '700', color: colors.text },
+    dateLabel: {
+      ...typography.body,
+      color: colors.muted,
+      marginTop: spacing.xs,
+      fontWeight: '500',
     },
-    title: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-    dateLabel: { fontSize: 15, color: theme.colors.muted, marginTop: 4, fontWeight: '500' },
-    muted: { fontSize: 14, color: theme.colors.muted, marginTop: 4 },
+    muted: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
     notes: {
-      marginTop: 8,
-      fontSize: 14,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      padding: 8,
-      borderRadius: 6,
+      ...typography.caption,
+      marginTop: spacing.sm,
+      color: colors.text,
+      backgroundColor: colors.surfaceMuted,
+      padding: spacing.sm,
+      borderRadius: spacing.radiusMd,
     },
     sectionTitle: {
-      fontSize: 14,
+      ...typography.captionStrong,
       fontWeight: '700',
-      color: theme.colors.text,
-      marginTop: 8,
-      marginBottom: 8,
+      color: colors.text,
+      marginTop: spacing.sm,
+      marginBottom: spacing.sm,
     },
-    stopTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    stopAddress: { fontSize: 13, color: theme.colors.muted, marginTop: 2 },
+    stopTitle: { ...typography.bodyStrong, color: colors.text },
+    stopAddress: { ...typography.caption, color: colors.muted, marginTop: spacing.xxs },
+    inputContainer: { marginTop: spacing.xs },
     input: {
-      minHeight: 80,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: 8,
-      padding: 10,
+      minHeight: 96,
       textAlignVertical: 'top',
     },
-    actions: { flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap' },
+    actions: { gap: spacing.sm, marginTop: spacing.lg },
   });
 }

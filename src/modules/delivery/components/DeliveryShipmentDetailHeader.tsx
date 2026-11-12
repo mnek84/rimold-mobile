@@ -138,7 +138,6 @@ function createStyles(t: AppTheme) {
       ...typography.captionStrong,
       color: colors.text,
       marginTop: spacing.sm,
-      opacity: 0.9,
     },
     statusBadge: {
       flexShrink: 0,
@@ -146,7 +145,7 @@ function createStyles(t: AppTheme) {
       marginTop: spacing.xs,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusSm,
       borderWidth: StyleSheet.hairlineWidth,
     },
     statusBadgeText: {

@@ -87,12 +87,16 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
         */}
         {count > 1 ? (
           <View style={styles.countBadge}>
-            <Text style={styles.countText}>{count}</Text>
+            <Text style={styles.countText} maxFontSizeMultiplier={1.3}>
+              {count}
+            </Text>
           </View>
         ) : null}
         {hasFlex ? (
           <View style={styles.flexBadge}>
-            <Text style={styles.flexText}>F</Text>
+            <Text style={styles.flexText} maxFontSizeMultiplier={1.3}>
+              F
+            </Text>
           </View>
         ) : null}
       </View>
@@ -103,12 +107,14 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
 export const StopMarker = memo(StopMarkerComponent);
 
 function createStyles(t: AppTheme) {
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     pin: {
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2.5,
-      shadowColor: '#000',
+      // Floats over the map: keeps a neutral shadow.
+      shadowColor: colors.shadow,
       shadowOpacity: 0.3,
       shadowRadius: 3,
       shadowOffset: { width: 0, height: 1 },
@@ -116,44 +122,45 @@ function createStyles(t: AppTheme) {
     },
     pinSelected: {
       borderWidth: 3.5,
-      borderColor: t.colors.text,
+      borderColor: colors.mapInk,
     },
     countBadge: {
       position: 'absolute',
       top: -6,
       right: -6,
-      minWidth: 18,
-      height: 18,
-      paddingHorizontal: 4,
-      borderRadius: 9,
-      backgroundColor: t.colors.text,
+      // 20, not 18: the `micro` line (16) has to fit inside the 1.5 border.
+      minWidth: 20,
+      height: 20,
+      paddingHorizontal: spacing.xs,
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.mapInk,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1.5,
-      borderColor: t.colors.surface,
+      borderColor: colors.mapMarkerRing,
     },
     countText: {
-      color: t.colors.surface,
-      fontSize: 11,
+      ...typography.micro,
       fontWeight: '700',
+      color: colors.mapInkOn,
     },
     flexBadge: {
       position: 'absolute',
       bottom: -6,
       left: -6,
-      width: 18,
-      height: 18,
-      borderRadius: 4,
-      backgroundColor: '#FFE600',
+      width: 20,
+      height: 20,
+      borderRadius: spacing.xs,
+      backgroundColor: colors.partnerFlex,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1.5,
-      borderColor: t.colors.surface,
+      borderColor: colors.mapMarkerRing,
     },
     flexText: {
-      color: '#1F2937',
-      fontSize: 11,
+      ...typography.micro,
       fontWeight: '800',
+      color: colors.partnerFlexOn,
     },
   });
 }

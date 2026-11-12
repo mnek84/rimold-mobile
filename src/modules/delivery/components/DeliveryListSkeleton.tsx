@@ -32,7 +32,7 @@ export function DeliveryListSkeleton() {
 
 function createStyles(t: AppTheme) {
   const { colors, spacing } = t;
-  const lineBg = `${colors.muted}35`;
+  const lineBg = colors.surfaceMuted;
   return StyleSheet.create({
     root: {
       paddingTop: spacing.sm,
@@ -61,18 +61,18 @@ function createStyles(t: AppTheme) {
     pill: {
       width: 72,
       height: 22,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusSm,
       backgroundColor: lineBg,
     },
     phaseBar: {
       flexDirection: 'row',
-      gap: 5,
+      gap: spacing.xs,
       marginBottom: spacing.md,
     },
     phaseSeg: {
       flex: 1,
-      height: 5,
-      borderRadius: 3,
+      height: 6,
+      borderRadius: spacing.radiusPill,
       backgroundColor: lineBg,
     },
     lineAddress: {

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { PhotoCaptureModal, type PhotoCaptureResult } from '@core/media/PhotoCaptureModal';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -10,10 +11,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Banner, Button, Input } from '@components/ui';
 
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
@@ -145,13 +147,9 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
         >
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Entrega fallida</Text>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-              hitSlop={12}
-            >
-              <Text style={styles.headerBtnLabel}>Cerrar</Text>
-            </Pressable>
+            <Button variant="ghost" onPress={onClose}>
+              Cerrar
+            </Button>
           </View>
 
           <ScrollView
@@ -166,20 +164,26 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
                 <Text style={styles.loadingHint}>Cargando motivos…</Text>
               </View>
             ) : reasonsQuery.isError ? (
-              <Text style={styles.errorHint}>
-                No se pudieron cargar los motivos. Cerrá y volvé a abrir, o revisá la conexión.
-              </Text>
+              <Banner
+                tone="danger"
+                style={styles.errorHint}
+                message="No se pudieron cargar los motivos. Cerrá y volvé a abrir, o revisá la conexión."
+              />
             ) : (options?.length ?? 0) === 0 ? (
-              <Text style={styles.errorHint}>
-                No hay motivos activos. Pedí a operaciones que carguen el catálogo.
-              </Text>
+              <Banner
+                tone="danger"
+                style={styles.errorHint}
+                message="No hay motivos activos. Pedí a operaciones que carguen el catálogo."
+              />
             ) : (
-              <View style={styles.reasonList}>
+              <View style={styles.reasonList} accessibilityRole="radiogroup">
                 {(options ?? []).map((opt) => {
                   const selected = selectedCode === opt.code;
                   return (
                     <Pressable
                       key={opt.code}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected, checked: selected }}
                       onPress={() => setSelectedCode(opt.code)}
                       style={({ pressed }) => [
                         styles.reasonRow,
@@ -187,6 +191,11 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
                         pressed && styles.pressed,
                       ]}
                     >
+                      <Ionicons
+                        name={selected ? 'radio-button-on' : 'radio-button-off'}
+                        size={22}
+                        color={selected ? theme.colors.danger : theme.colors.borderStrong}
+                      />
                       <Text style={[styles.reasonLabel, selected && styles.reasonLabelSelected]}>
                         {opt.label}
                       </Text>
@@ -197,12 +206,11 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
             )}
 
             <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Nota (opcional)</Text>
-            <TextInput
+            <Input
               style={styles.noteInput}
               value={note}
               onChangeText={setNote}
               placeholder="Detalles adicionales…"
-              placeholderTextColor={theme.colors.muted}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
@@ -213,21 +221,13 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
             </Text>
             <Text style={styles.hint}>Requerida como respaldo del intento de entrega.</Text>
             <View style={styles.photoRow}>
-              <Pressable
-                style={({ pressed }) => [styles.photoBtn, pressed && styles.pressed]}
-                onPress={openCamera}
-              >
-                <Text style={styles.photoBtnLabel}>
-                  {photo != null ? 'Cambiar foto' : 'Tomar foto'}
-                </Text>
-              </Pressable>
+              <Button variant="secondary" icon="camera-outline" onPress={openCamera}>
+                {photo != null ? 'Cambiar foto' : 'Tomar foto'}
+              </Button>
               {photo != null ? (
-                <Pressable
-                  style={({ pressed }) => [styles.photoBtnOutline, pressed && styles.pressed]}
-                  onPress={clearPhoto}
-                >
-                  <Text style={styles.photoBtnOutlineLabel}>Quitar</Text>
-                </Pressable>
+                <Button variant="ghost" icon="trash-outline" onPress={clearPhoto}>
+                  Quitar
+                </Button>
               ) : null}
             </View>
             {photo != null ? (
@@ -236,12 +236,15 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
               </View>
             ) : null}
 
-            <Pressable
-              style={({ pressed }) => [styles.submitBtn, pressed && styles.pressed]}
+            <Button
+              variant="danger"
+              size="lg"
+              icon="close-circle"
+              style={styles.submitBtn}
               onPress={handleSubmit}
             >
-              <Text style={styles.submitBtnLabel}>Registrar fallo</Text>
-            </Pressable>
+              Registrar fallo
+            </Button>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -255,7 +258,7 @@ export function DeliveryFailedModal({ visible, shipmentId, onClose, onQueued }: 
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography, motion, touch } = t;
   return StyleSheet.create({
     safe: {
       flex: 1,
@@ -268,23 +271,17 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
+      paddingLeft: spacing.lg,
+      paddingRight: spacing.xs,
+      paddingVertical: spacing.xs,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.surface,
     },
     headerTitle: {
       ...typography.subtitle,
       color: colors.text,
       flex: 1,
-    },
-    headerBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    headerBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
     },
     scroll: {
       flex: 1,
@@ -322,42 +319,38 @@ function createStyles(t: AppTheme) {
       color: colors.muted,
     },
     errorHint: {
-      ...typography.body,
-      color: colors.danger,
       marginBottom: spacing.sm,
     },
     reasonList: {
       gap: spacing.sm,
     },
     reasonRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      minHeight: touch.min,
       paddingVertical: spacing.md,
       paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusLg,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderStrong,
       backgroundColor: colors.surface,
     },
     reasonRowSelected: {
       borderColor: colors.danger,
+      backgroundColor: colors.dangerSoft,
       borderWidth: 2,
     },
     reasonLabel: {
       ...typography.bodyStrong,
       color: colors.text,
+      flex: 1,
     },
     reasonLabelSelected: {
       fontWeight: '700',
     },
     noteInput: {
       minHeight: 100,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md + 2,
-      paddingVertical: spacing.md,
-      ...typography.body,
-      color: colors.text,
-      backgroundColor: colors.surface,
     },
     photoRow: {
       flexDirection: 'row',
@@ -365,42 +358,11 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       marginTop: spacing.xs,
     },
-    photoBtn: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    photoBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    photoBtnOutline: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.muted,
-    },
-    photoBtnOutlineLabel: {
-      ...typography.bodyStrong,
-      color: colors.muted,
-    },
     photoPreviewWrap: {
       marginTop: spacing.sm,
     },
     submitBtn: {
       marginTop: spacing.xl + spacing.sm,
-      paddingVertical: spacing.md + 4,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.danger,
-      alignItems: 'center',
-    },
-    submitBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.background,
     },
     pressed: {
       opacity: motion.pressOpacityStrong,

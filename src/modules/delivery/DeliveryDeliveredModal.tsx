@@ -5,16 +5,15 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PhotoPreview } from '@components/PhotoPreview';
+import { Banner, Button, Input, SegmentedControl } from '@components/ui';
 import { SignaturePad, type SignaturePadHandle } from '@components/SignaturePad';
 import { TOAST_DELIVERY } from '@core/feedback/toastMessages';
 import { showToast } from '@core/feedback/toastStore';
@@ -194,13 +193,9 @@ export function DeliveryDeliveredModal({
         >
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Confirmar entrega</Text>
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.pressed]}
-              hitSlop={12}
-            >
-              <Text style={styles.headerBtnLabel}>Cerrar</Text>
-            </Pressable>
+            <Button variant="ghost" onPress={onClose}>
+              Cerrar
+            </Button>
           </View>
 
           <ScrollView
@@ -209,86 +204,62 @@ export function DeliveryDeliveredModal({
             keyboardShouldPersistTaps="handled"
           >
             {isFlex ? (
-              <View style={styles.flexNotice}>
-                <Text style={styles.flexNoticeTitle}>Envío Flex</Text>
-                <Text style={styles.flexNoticeBody}>
-                  Mercado Libre ya registra el receptor y la firma. Acá sólo confirmás que la
-                  entrega se hizo.
-                </Text>
-              </View>
+              <Banner
+                tone="neutral"
+                title="Envío Flex"
+                message="Mercado Libre ya registra el receptor y la firma. Acá sólo confirmás que la entrega se hizo."
+              />
             ) : (
               <>
               <Text style={styles.sectionTitle}>Datos del receptor</Text>
 
-              <Text style={styles.label}>DNI</Text>
-              <TextInput
-                style={styles.input}
+              <Input
+                label="DNI"
+                containerStyle={styles.field}
                 value={dni}
                 onChangeText={setDni}
                 placeholder="Número de documento"
-                placeholderTextColor={theme.colors.muted}
                 keyboardType="default"
               />
 
-              <Text style={styles.label}>Nombre</Text>
-              <TextInput
-                style={styles.input}
+              <Input
+                label="Nombre"
+                containerStyle={styles.field}
                 value={receiverName}
                 onChangeText={setReceiverName}
                 placeholder="Nombre completo"
-                placeholderTextColor={theme.colors.muted}
               />
 
               <Text style={styles.label}>Vínculo</Text>
-              <View style={styles.relationshipRow}>
-                {RELATIONSHIP_OPTIONS.map((opt) => {
-                  const selected = relationship === opt.value;
-                  return (
-                    <Pressable
-                      key={opt.value}
-                      onPress={() => setRelationship(opt.value)}
-                      style={({ pressed }) => [
-                        styles.relChip,
-                        selected && styles.relChipSelected,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={[styles.relChipLabel, selected && styles.relChipLabelSelected]}>
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <SegmentedControl
+                accessibilityLabel="Vínculo"
+                options={RELATIONSHIP_OPTIONS}
+                value={relationship}
+                onChange={setRelationship}
+              />
 
               <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Firma</Text>
               <SignaturePad ref={sigRef} onSignature={onSignature} onEmpty={onSignatureEmpty} />
-              <Pressable
-                style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+              <Button
+                variant="ghost"
+                icon="refresh-outline"
+                style={styles.secondaryBtn}
                 onPress={() => sigRef.current?.clear()}
               >
-                <Text style={styles.secondaryBtnLabel}>Limpiar firma</Text>
-              </Pressable>
+                Limpiar firma
+              </Button>
               </>
             )}
 
             <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Foto</Text>
             <View style={styles.photoRow}>
-              <Pressable
-                style={({ pressed }) => [styles.photoBtn, pressed && styles.pressed]}
-                onPress={openCamera}
-              >
-                <Text style={styles.photoBtnLabel}>
-                  {photo != null ? 'Cambiar foto' : 'Tomar foto'}
-                </Text>
-              </Pressable>
+              <Button variant="secondary" icon="camera-outline" onPress={openCamera}>
+                {photo != null ? 'Cambiar foto' : 'Tomar foto'}
+              </Button>
               {photo != null ? (
-                <Pressable
-                  style={({ pressed }) => [styles.photoBtnOutline, pressed && styles.pressed]}
-                  onPress={clearPhoto}
-                >
-                  <Text style={styles.photoBtnOutlineLabel}>Quitar</Text>
-                </Pressable>
+                <Button variant="ghost" icon="trash-outline" onPress={clearPhoto}>
+                  Quitar
+                </Button>
               ) : null}
             </View>
             {photo != null ? (
@@ -297,21 +268,16 @@ export function DeliveryDeliveredModal({
               </View>
             ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: submitting }}
+            <Button
+              variant="success"
+              size="lg"
+              icon="checkmark-circle"
               disabled={submitting}
-              style={({ pressed }) => [
-                styles.submitBtn,
-                submitting && styles.submitBtnDisabled,
-                pressed && styles.pressed,
-              ]}
+              style={styles.submitBtn}
               onPress={handleSubmit}
             >
-              <Text style={styles.submitBtnLabel}>
-                {submitting ? 'Registrando…' : 'Registrar entrega'}
-              </Text>
-            </Pressable>
+              {submitting ? 'Registrando…' : 'Registrar entrega'}
+            </Button>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -325,32 +291,11 @@ export function DeliveryDeliveredModal({
 }
 
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
     safe: {
       flex: 1,
       backgroundColor: colors.background,
-    },
-    flexNotice: {
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.surfaceMuted,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: spacing.lg,
-      gap: spacing.xs,
-    },
-    flexNoticeTitle: {
-      ...typography.captionStrong,
-      color: colors.text,
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-    },
-    flexNoticeBody: {
-      ...typography.caption,
-      color: colors.muted,
-    },
-    submitBtnDisabled: {
-      opacity: 0.5,
     },
     flex: {
       flex: 1,
@@ -359,23 +304,17 @@ function createStyles(t: AppTheme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
+      paddingLeft: spacing.lg,
+      paddingRight: spacing.xs,
+      paddingVertical: spacing.xs,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.surface,
     },
     headerTitle: {
       ...typography.subtitle,
       color: colors.text,
       flex: 1,
-    },
-    headerBtn: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    headerBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
     },
     scroll: {
       flex: 1,
@@ -394,56 +333,18 @@ function createStyles(t: AppTheme) {
     sectionSpaced: {
       marginTop: spacing.xl,
     },
+    field: {
+      marginTop: spacing.md,
+    },
     label: {
       ...typography.captionStrong,
-      color: colors.muted,
-      marginBottom: spacing.xs,
-      marginTop: spacing.md,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: spacing.radiusMd,
-      paddingHorizontal: spacing.md + 2,
-      paddingVertical: spacing.md,
-      ...typography.body,
       color: colors.text,
-      backgroundColor: colors.surface,
-    },
-    relationshipRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-      marginTop: spacing.xs,
-    },
-    relChip: {
-      paddingVertical: spacing.sm + 2,
-      paddingHorizontal: spacing.md,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface,
-    },
-    relChipSelected: {
-      borderColor: colors.success,
-      borderWidth: 2,
-    },
-    relChipLabel: {
-      ...typography.bodyStrong,
-      color: colors.muted,
-    },
-    relChipLabelSelected: {
-      color: colors.success,
+      marginBottom: spacing.sm,
+      marginTop: spacing.md,
     },
     secondaryBtn: {
-      marginTop: spacing.md,
+      marginTop: spacing.sm,
       alignSelf: 'flex-start',
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    secondaryBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.primary,
     },
     photoRow: {
       flexDirection: 'row',
@@ -451,46 +352,11 @@ function createStyles(t: AppTheme) {
       gap: spacing.sm,
       marginTop: spacing.xs,
     },
-    photoBtn: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    photoBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.text,
-    },
-    photoBtnOutline: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
-      borderRadius: spacing.radiusMd,
-      borderWidth: 1,
-      borderColor: colors.muted,
-    },
-    photoBtnOutlineLabel: {
-      ...typography.bodyStrong,
-      color: colors.muted,
-    },
     photoPreviewWrap: {
       marginTop: spacing.sm,
     },
     submitBtn: {
       marginTop: spacing.xl + spacing.sm,
-      paddingVertical: spacing.md + 4,
-      borderRadius: spacing.radiusLg,
-      backgroundColor: colors.success,
-      alignItems: 'center',
-    },
-    submitBtnLabel: {
-      ...typography.bodyStrong,
-      color: colors.background,
-    },
-    pressed: {
-      opacity: motion.pressOpacityStrong,
-      transform: [{ scale: motion.pressScale }],
     },
   });
 }

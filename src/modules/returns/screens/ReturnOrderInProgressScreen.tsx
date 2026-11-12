@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Card, ScreenContainer } from '@components/ui';
+import { Button, Card, Input, ScreenContainer, StatusBadge } from '@components/ui';
 import { PhotoCaptureModal, type PhotoCaptureResult } from '@core/media/PhotoCaptureModal';
 import { formatShortWeekday } from '@modules/pickups/lib/formatSchedule';
 import type { ReturnStackParamList } from '@navigation/returnStackTypes';
@@ -24,6 +25,10 @@ import {
   nextStopAction,
   type StopAction,
 } from '../lib/returnOrderStatus';
+import {
+  RETURN_ORDER_STATUS_PRESENTATION,
+  RETURN_STOP_STATUS_PRESENTATION,
+} from '../lib/returnStatusTone';
 import type { ReturnStop } from '../types';
 
 type Props = NativeStackScreenProps<ReturnStackParamList, 'ReturnOrderInProgress'>;
@@ -127,16 +132,21 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
   if (query.isLoading || !order) {
     return (
       <ScreenContainer>
-        <Text style={{ color: theme.colors.muted, padding: 16 }}>Cargando…</Text>
+        <Text style={styles.loading}>Cargando…</Text>
       </ScreenContainer>
     );
   }
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Card style={{ marginBottom: 12 }}>
-          <Text style={styles.badge}>{RETURN_ORDER_STATUS_LABEL[order.status]}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Card style={styles.headerCard}>
+          <StatusBadge
+            label={RETURN_ORDER_STATUS_LABEL[order.status]}
+            tone={RETURN_ORDER_STATUS_PRESENTATION[order.status].tone}
+            icon={RETURN_ORDER_STATUS_PRESENTATION[order.status].icon}
+            style={styles.badge}
+          />
           <Text style={styles.title}>{order.business?.name ?? 'Devolución'}</Text>
           <Text style={styles.muted}>{formatShortWeekday(order.scheduled_date)}</Text>
           <Text style={styles.muted}>Salís de: {order.crossdocking_location?.name ?? '—'}</Text>
@@ -145,6 +155,8 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
         {order.status === 'accepted' ? (
           <Button
             variant="primary"
+            size="lg"
+            icon="navigate-outline"
             disabled={busy}
             onPress={async () => {
               try {
@@ -161,6 +173,8 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
         {order.status === 'returning_to_warehouse' ? (
           <Button
             variant="primary"
+            size="lg"
+            icon="checkmark-circle-outline"
             disabled={busy}
             onPress={async () => {
               try {
@@ -183,12 +197,17 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
           const isSkipping = skippingStopId === stop.id;
 
           return (
-            <Card key={stop.id} style={{ marginBottom: 10 }}>
+            <Card key={stop.id} style={styles.stopCard}>
               <View style={styles.stopHeader}>
                 <Text style={styles.stopTitle}>
                   {stop.sequence}. {stop.warehouse?.name ?? stop.warehouse_id}
                 </Text>
-                <Text style={styles.stopStatus}>{RETURN_STOP_STATUS_LABEL[stop.status]}</Text>
+                <StatusBadge
+                  size="sm"
+                  label={RETURN_STOP_STATUS_LABEL[stop.status]}
+                  tone={RETURN_STOP_STATUS_PRESENTATION[stop.status].tone}
+                  icon={RETURN_STOP_STATUS_PRESENTATION[stop.status].icon}
+                />
               </View>
 
               {stop.warehouse?.address ? (
@@ -210,19 +229,22 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
               ) : null}
 
               {stop.conforme_path ? (
-                <Text style={styles.conformeOk}>
-                  Conforme adjunto
-                  {stop.conforme_receiver_name ? ` — recibió ${stop.conforme_receiver_name}` : ''}
-                </Text>
+                <View style={styles.conformeRow}>
+                  <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
+                  <Text style={styles.conformeOk}>
+                    Conforme adjunto
+                    {stop.conforme_receiver_name ? ` — recibió ${stop.conforme_receiver_name}` : ''}
+                  </Text>
+                </View>
               ) : stop.status === 'scanning' ? (
-                <View style={{ marginTop: 10 }}>
+                <View style={styles.block}>
                   <Text style={styles.stopAddress}>¿Quién recibe? (opcional)</Text>
-                  <TextInput
-                    style={styles.inputSingle}
+                  <Input
+                    containerStyle={styles.inputContainer}
                     value={receiverName}
                     onChangeText={setReceiverName}
                     placeholder="Nombre de quien firma"
-                    placeholderTextColor={theme.colors.muted}
+                    accessibilityLabel="¿Quién recibe? (opcional)"
                   />
                   <Text style={styles.hint}>
                     Sacá la foto del remito firmado para poder cerrar la entrega.
@@ -235,16 +257,24 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
               ) : null}
 
               {isSkipping ? (
-                <View style={{ marginTop: 10 }}>
-                  <TextInput
+                <View style={styles.block}>
+                  <Input
                     style={styles.input}
                     multiline
                     value={skipReason}
                     onChangeText={setSkipReason}
                     placeholder="¿Por qué no pudiste entregar?"
-                    placeholderTextColor={theme.colors.muted}
+                    accessibilityLabel="Motivo de la omisión"
                   />
                   <View style={styles.actions}>
+                    <Button
+                      variant="danger"
+                      disabled={busy}
+                      onPress={() => void handleSkip(stop)}
+                      fullWidth
+                    >
+                      {skipStop.isPending ? 'Enviando…' : 'Confirmar'}
+                    </Button>
                     <Button
                       variant="ghost"
                       onPress={() => {
@@ -254,15 +284,13 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
                     >
                       Cancelar
                     </Button>
-                    <Button variant="danger" disabled={busy} onPress={() => void handleSkip(stop)}>
-                      {skipStop.isPending ? 'Enviando…' : 'Confirmar'}
-                    </Button>
                   </View>
                 </View>
               ) : action ? (
                 <View style={styles.actions}>
                   <Button
                     variant="primary"
+                    size="lg"
                     disabled={busy}
                     onPress={() => void handleStopAction(stop, action.action)}
                   >
@@ -288,63 +316,62 @@ export function ReturnOrderInProgressScreen({ route, navigation }: Props) {
 }
 
 function createStyles(theme: AppTheme) {
+  const { colors, spacing, typography } = theme;
   return StyleSheet.create({
-    badge: {
-      alignSelf: 'flex-start',
-      backgroundColor: theme.colors.surfaceMuted,
-      color: theme.colors.text,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 12,
-      fontSize: 12,
-      fontWeight: '600',
-      marginBottom: 8,
-    },
-    title: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-    muted: { fontSize: 14, color: theme.colors.muted, marginTop: 4 },
+    loading: { ...typography.body, color: colors.muted, padding: spacing.lg },
+    scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl + spacing.sm },
+    headerCard: { marginBottom: spacing.md },
+    stopCard: { marginBottom: spacing.md },
+    block: { marginTop: spacing.md },
+    badge: { marginBottom: spacing.sm },
+    title: { ...typography.subtitle, fontWeight: '700', color: colors.text },
+    muted: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
     sectionTitle: {
-      fontSize: 14,
+      ...typography.captionStrong,
       fontWeight: '700',
-      color: theme.colors.text,
-      marginTop: 16,
-      marginBottom: 8,
+      color: colors.text,
+      marginTop: spacing.lg,
+      marginBottom: spacing.sm,
     },
-    stopHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
-    stopTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: theme.colors.text },
-    stopStatus: { fontSize: 12, color: theme.colors.muted, fontWeight: '600' },
-    stopAddress: { fontSize: 13, color: theme.colors.muted, marginTop: 2 },
+    stopHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    stopTitle: { ...typography.bodyStrong, flex: 1, color: colors.text },
+    stopAddress: { ...typography.caption, color: colors.muted, marginTop: spacing.xxs },
     trackingList: {
-      marginTop: 8,
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: 6,
-      padding: 8,
-      gap: 2,
+      marginTop: spacing.sm,
+      backgroundColor: colors.surfaceMuted,
+      borderRadius: spacing.radiusMd,
+      padding: spacing.sm,
+      gap: spacing.xxs,
     },
-    tracking: { fontSize: 13, color: theme.colors.text, fontVariant: ['tabular-nums'] },
-    skipReason: { marginTop: 6, fontSize: 13, color: theme.colors.muted, fontStyle: 'italic' },
+    tracking: { ...typography.caption, color: colors.text, fontVariant: ['tabular-nums'] },
+    skipReason: {
+      ...typography.caption,
+      marginTop: spacing.sm,
+      color: colors.muted,
+      fontStyle: 'italic',
+    },
+    conformeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: spacing.sm,
+    },
     conformeOk: {
-      marginTop: 6,
-      fontSize: 13,
-      fontWeight: '600',
-      color: theme.colors.text,
+      ...typography.captionStrong,
+      flex: 1,
+      color: colors.text,
     },
-    hint: { marginTop: 6, fontSize: 12, color: theme.colors.muted },
-    inputSingle: {
-      marginTop: 6,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
-    },
+    hint: { ...typography.caption, marginTop: spacing.sm, color: colors.muted },
+    inputContainer: { marginTop: spacing.xs },
     input: {
-      minHeight: 70,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceMuted,
-      borderRadius: 8,
-      padding: 10,
+      minHeight: 88,
       textAlignVertical: 'top',
     },
-    actions: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+    actions: { gap: spacing.sm, marginTop: spacing.md },
   });
 }

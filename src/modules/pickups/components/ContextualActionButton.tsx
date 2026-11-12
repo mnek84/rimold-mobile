@@ -1,4 +1,5 @@
 import { Button } from '@components/ui';
+import { useTheme } from '@theme';
 import { View } from 'react-native';
 
 import type { ContextualAction } from '../lib/contextualAction';
@@ -20,10 +21,11 @@ export function ContextualActionButton({
   secondaryLabel,
   onSecondaryPress,
 }: ContextualActionButtonProps) {
+  const { spacing } = useTheme();
   if (action.kind === 'none') return null;
 
   return (
-    <View style={{ padding: 16, gap: 8 }}>
+    <View style={{ padding: spacing.lg, gap: spacing.sm }}>
       <Button variant="primary" size="lg" onPress={onPress} disabled={loading}>
         {loading ? 'Enviando…' : label}
       </Button>

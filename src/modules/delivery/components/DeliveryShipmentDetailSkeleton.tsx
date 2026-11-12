@@ -37,7 +37,7 @@ export function DeliveryShipmentDetailSkeleton() {
 
 function createStyles(t: AppTheme) {
   const { colors, spacing } = t;
-  const lineBg = `${colors.muted}38`;
+  const lineBg = colors.surfaceMuted;
   return StyleSheet.create({
     root: {
       gap: spacing.lg,
@@ -64,7 +64,7 @@ function createStyles(t: AppTheme) {
     badge: {
       width: 64,
       height: 22,
-      borderRadius: spacing.radiusMd,
+      borderRadius: spacing.radiusSm,
       backgroundColor: lineBg,
     },
     addrLine: {
@@ -97,9 +97,9 @@ function createStyles(t: AppTheme) {
       marginBottom: spacing.md,
     },
     dot: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
+      width: 16,
+      height: 16,
+      borderRadius: spacing.radiusPill,
       backgroundColor: lineBg,
       marginRight: spacing.md,
     },
@@ -120,8 +120,8 @@ function createStyles(t: AppTheme) {
       backgroundColor: lineBg,
     },
     actionBtn: {
-      height: 56,
-      borderRadius: spacing.radiusCard,
+      height: 68,
+      borderRadius: spacing.radiusLg,
       backgroundColor: lineBg,
     },
   });
