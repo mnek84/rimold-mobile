@@ -149,6 +149,7 @@ function row(partial: Partial<TodayShipmentRow> & Pick<TodayShipmentRow, 'id'>):
     latitude: -34.6,
     longitude: -58.4,
     coords_assessment: 'valid',
+    workday_state: null,
     ...partial,
   };
 }
@@ -265,27 +266,22 @@ function renderScene(
         <View style={[styles.flex, styles.screenPad, { paddingTop: insetTop + theme.spacing.md }]}>
           <DeliveryListView
             sections={[
-              { title: 'En ruta', data: ROWS.slice(0, 2) },
-              { title: 'Pendientes', data: ROWS.slice(2, 3) },
-              { title: 'Fallidos', data: ROWS.slice(3, 4) },
-              { title: 'Entregados', data: ROWS.slice(4) },
+              { title: 'En camino', data: ROWS.slice(0, 2) },
+              { title: 'Por salir', data: ROWS.slice(2, 3) },
             ]}
             loading={false}
             showInitialLoader={false}
             refreshing={false}
             error={null}
             nextShipmentId="1"
-            flexBatchId={null}
-            pendingCount={3}
-            failedCount={1}
-            deliveredTodayCount={1}
+            counts={{ total: 5, pending: 3, delivered: 1, incident: 1, own: 4, flex: 1, ownPending: 2, flexPending: 1 }}
+            filter="pending"
+            onChangeFilter={noop}
             onRefresh={noop}
             onPressScan={noop}
             onPressReportFailure={noop}
             onPressShipment={noop}
-            channelFilter="all"
-            onChangeChannelFilter={noop}
-            channelCounts={{ all: 5, own: 4, flex: 1 }}
+            onPressFinishWorkday={noop}
           />
         </View>
       );

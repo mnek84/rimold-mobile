@@ -1,13 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useMemo, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '@components/ui';
-import { showToast } from '@core/feedback/toastStore';
 import { useTheme, type AppTheme } from '@theme';
 
-import { canOpenFlexApp, openMercadoFlexApp } from '../flexApp';
 import { shipmentDriverPhaseIndex } from '../deliveryStatus';
+import { OpenFlexAppButton } from './OpenFlexAppButton';
 
 type Props = {
   /** `status_code` efectivo del envío (incluye el optimista de la cola offline). */
@@ -30,36 +28,20 @@ type Props = {
 export function FlexHandoffCard({ statusCode, externalStatus = null }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [opening, setOpening] = useState(false);
 
   const phase = shipmentDriverPhaseIndex(statusCode);
   const arrived = phase === 2;
   const closed = phase === 3;
-  const launchable = canOpenFlexApp();
 
-  const onPress = useCallback(async () => {
-    setOpening(true);
-    try {
-      const outcome = await openMercadoFlexApp();
-      if (outcome === 'store') {
-        showToast('Mercado Flex no está instalada. Te llevamos a la tienda.');
-      } else if (outcome === 'unavailable') {
-        showToast('No pudimos abrir Mercado Flex desde acá.');
-      } else if (outcome === 'unsupported') {
-        showToast('Abrí Mercado Flex desde la pantalla de inicio para cerrar esta entrega.');
-      }
-    } finally {
-      setOpening(false);
-    }
-  }, []);
-
-  const title = arrived ? 'Llegaste: cerrá la entrega en Flex' : 'Entrega de Mercado Flex';
+  const title = closed
+    ? 'Entrega registrada por Mercado Libre'
+    : arrived
+      ? 'Llegaste: confirmá la entrega en Mercado Libre Flex'
+      : 'Envío de Mercado Libre Flex';
 
   const body = closed
-    ? 'La constancia de entrega de este envío la registró Mercado Flex.'
-    : arrived
-      ? 'La firma y el DNI del comprador se cargan en la app de Mercado Flex, no en ésta.'
-      : 'Al llegar al domicilio, la constancia se registra en la app de Mercado Flex.';
+    ? 'Mercado Libre informó el resultado de este envío.'
+    : 'La entrega se confirma en la app Mercado Libre Flex, no en ésta. Cuando Mercado Libre la informe, el estado se actualiza solo acá.';
 
   return (
     <View style={[styles.card, arrived && styles.cardArrived]}>
@@ -77,34 +59,13 @@ export function FlexHandoffCard({ statusCode, externalStatus = null }: Props) {
           {/* El estado que informó ML, tal cual: es la fuente de verdad de un Flex. */}
           <Text style={styles.body}>
             {externalStatus !== null
-              ? `Estado en Mercado Libre: ${externalStatus}`
+              ? `Último estado informado por Mercado Libre: ${externalStatus}`
               : 'Mercado Libre todavía no informó un estado.'}
           </Text>
         </View>
       </View>
 
-      {launchable && !closed ? (
-        <Button
-          variant={arrived ? 'primary' : 'outline'}
-          size={arrived ? 'lg' : 'md'}
-          icon="open-outline"
-          fullWidth
-          accessibilityRole="link"
-          accessibilityLabel="Abrir la app de Mercado Flex"
-          accessibilityState={{ busy: opening }}
-          disabled={opening}
-          onPress={() => void onPress()}
-        >
-          {opening ? 'Abriendo…' : 'Abrir Mercado Flex'}
-        </Button>
-      ) : null}
-
-      {!launchable && !closed ? (
-        <Text style={styles.unsupported}>
-          En {Platform.OS === 'ios' ? 'iOS' : 'esta plataforma'} abrí Mercado Flex desde la pantalla
-          de inicio: no tenemos un enlace directo verificado.
-        </Text>
-      ) : null}
+      {!closed ? <OpenFlexAppButton variant={arrived ? 'primary' : 'outline'} size={arrived ? 'lg' : 'md'} /> : null}
     </View>
   );
 }
@@ -149,10 +110,6 @@ function createStyles(t: AppTheme) {
       color: colors.text,
     },
     body: {
-      ...typography.caption,
-      color: colors.muted,
-    },
-    unsupported: {
       ...typography.caption,
       color: colors.muted,
     },

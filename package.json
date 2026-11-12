@@ -12,7 +12,8 @@
     "build:android:release-dev": "node scripts/build-android-release-dev.mjs --download",
     "build:android:release-dev:local": "node scripts/build-android-release-dev.mjs --local",
     "lint:tokens": "node scripts/check-design-tokens.mjs",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "test:unit": "node --no-warnings=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/**/*.test.mjs\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

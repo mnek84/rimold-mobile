@@ -3,9 +3,16 @@ import NetInfo from '@react-native-community/netinfo';
 import { showToast } from '@core/feedback/toastStore';
 
 import {
+  classifySyncFailure,
+  drainInOrder,
+  httpStatusOf,
+  isPermanentlyFailed,
+  orderingKey,
+  pendingShipmentEvents,
+} from './drainPlan';
+import {
   addEvent,
   getQueue,
-  QUEUE_MAX_RETRIES,
   QueuePersistenceError,
   recordFailure,
   removeEvent,
@@ -36,22 +43,19 @@ async function drainOnce(): Promise<void> {
       throw e;
     }
 
-    for (const event of queue) {
-      if (event.retries >= QUEUE_MAX_RETRIES) {
-        continue;
-      }
-      if (event.nextRetryAt != null && Date.now() < event.nextRetryAt) {
-        continue;
-      }
-
+    // Orden estricto por envío y sin abandono por fallas de red: ver drainPlan.ts.
+    await drainInOrder(queue, Date.now, async (event) => {
       try {
         await handleEvent(event);
-        await removeEvent(event.id);
-        successCount += 1;
-      } catch {
-        await recordFailure(event.id);
+      } catch (err) {
+        const kind = classifySyncFailure(err);
+        await recordFailure(event.id, kind, httpStatusOf(err));
+        return kind;
       }
-    }
+      await removeEvent(event.id);
+      successCount += 1;
+      return null;
+    });
   } finally {
     status.setSyncing(false);
     try {
@@ -123,4 +127,27 @@ export async function enqueueEvent(input: QueueEventInput): Promise<QueueEvent> 
   }
   void processQueueIfOnline();
   return event;
+}
+
+export type UnsyncedShipmentWork = {
+  /** Eventos de envío que todavía no llegaron al servidor. */
+  pending: number;
+  /** Eventos de envío que el servidor rechazó como inválidos. */
+  failed: number;
+};
+
+/**
+ * Intenta vaciar la cola y devuelve lo que quedó sin llegar al servidor.
+ *
+ * Se usa antes de finalizar la jornada: si una entrega confirmada sin señal
+ * sigue en la cola, el cierre de ruta la registraría como "no entregada" y el
+ * evento de entrega llegaría tarde a un envío ya fallido.
+ */
+export async function flushAndCountUnsyncedShipmentWork(): Promise<UnsyncedShipmentWork> {
+  await processQueueIfOnline();
+  const queue = await getQueue();
+  return {
+    pending: pendingShipmentEvents(queue).length,
+    failed: queue.filter((e) => orderingKey(e) !== null && isPermanentlyFailed(e)).length,
+  };
 }

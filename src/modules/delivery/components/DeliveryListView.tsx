@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useMemo } from 'react';
 import {
-  Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -11,8 +10,6 @@ import {
 
 import { Banner, Button, Card, SegmentedControl } from '@components/ui';
 import type { TodayShipmentRow } from '@core/api/shipments';
-import type { ChannelFilter } from '../hooks/useDeliveryList';
-import { ChannelBadge } from './ChannelBadge';
 import { useTheme, withAlpha, type AppTheme } from '@theme';
 
 import {
@@ -23,7 +20,18 @@ import {
   type ShipmentListBadgeKind,
 } from '../deliveryStatus';
 import type { DeliveryListSection } from '../hooks/useDeliveryList';
+import {
+  channelLines,
+  FILTER_LABEL,
+  isFlexRow,
+  plural,
+  rowState,
+  type RowCounts,
+  type WorkdayFilter,
+} from '../workdayView';
+import { ChannelBadge } from './ChannelBadge';
 import { DeliveryListSkeleton } from './DeliveryListSkeleton';
+import { OpenFlexAppButton } from './OpenFlexAppButton';
 
 const PHASE_BAR_KEYS = ['p0', 'p1', 'p2', 'p3'] as const;
 
@@ -53,26 +61,30 @@ type Props = {
   refreshing: boolean;
   error: string | null;
   nextShipmentId: string | null;
-  flexBatchId: string | null;
-  pendingCount: number;
-  failedCount: number;
-  deliveredTodayCount: number;
-  onPressFlexMap?: () => void;
+  /** Conteos de la jornada completa (no del filtro): propios + Flex. */
+  counts: RowCounts;
+  filter: WorkdayFilter;
+  onChangeFilter: (next: WorkdayFilter) => void;
   onRefresh: () => void;
   onPressScan: () => void;
   onPressReportFailure: () => void;
   onPressShipment: (shipmentId: string) => void;
-  channelFilter?: ChannelFilter;
-  onChangeChannelFilter?: (next: ChannelFilter) => void;
-  channelCounts?: { all: number; own: number; flex: number };
+  /** Abre "Finalizar jornada". Sin él, no se muestra el botón. */
+  onPressFinishWorkday?: () => void;
+  /** Eventos que el servidor rechazó como inválidos (cola offline). */
+  permanentSyncFailures?: number;
 };
 
-const CHANNEL_FILTERS: { key: ChannelFilter; label: string }[] = [
-  { key: 'all', label: 'Todos' },
-  { key: 'own', label: 'Propios' },
-  { key: 'flex', label: 'Flex' },
-];
+const FILTERS: WorkdayFilter[] = ['pending', 'delivered', 'incident'];
 
+/**
+ * La jornada en una sola lista: propios y Flex juntos.
+ *
+ * Arriba, el resumen (cuántos, cuántos de cada tipo y quién los confirma) y
+ * el único filtro que sirve para decidir: Pendientes · Entregados ·
+ * Incidencias. Reemplaza "Todos / Propios / Flex", que partía la jornada por
+ * un eje que ya se ve en cada tarjeta y contaba envíos de todo el año.
+ */
 export function DeliveryListView({
   sections,
   loading,
@@ -80,31 +92,54 @@ export function DeliveryListView({
   refreshing,
   error,
   nextShipmentId,
-  flexBatchId,
-  pendingCount,
-  failedCount,
-  deliveredTodayCount,
-  onPressFlexMap,
+  counts,
+  filter,
+  onChangeFilter,
   onRefresh,
   onPressScan,
   onPressReportFailure,
   onPressShipment,
-  channelFilter = 'all',
-  onChangeChannelFilter,
-  channelCounts,
+  onPressFinishWorkday,
+  permanentSyncFailures = 0,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const scanDisabled = loading || refreshing;
-  const showFlexMap = flexBatchId != null && onPressFlexMap != null;
-  const showCount = pendingCount > 0 || deliveredTodayCount > 0 || failedCount > 0;
-  const countLabel = buildCountLabel(pendingCount, deliveredTodayCount, failedCount);
+  const closed = counts.delivered + counts.incident;
+  const progressPct = counts.total > 0 ? Math.round((closed / counts.total) * 100) : 0;
 
   const listChrome = useMemo(
     () => (
       <View style={styles.listHeader}>
-        {showCount && <Text style={styles.countLabel}>{countLabel}</Text>}
+        {counts.total > 0 ? (
+          <View
+            style={styles.summaryCard}
+            accessible
+            accessibilityLabel={`Tu jornada: ${plural(counts.total, 'envío', 'envíos')}. ${counts.pending} pendientes, ${counts.delivered} entregados, ${counts.incident} con incidencia.`}
+          >
+            <View style={styles.summaryTitleRow}>
+              <Text style={styles.summaryTitle}>Tu jornada · {plural(counts.total, 'envío', 'envíos')}</Text>
+              <Text style={styles.summaryProgressLabel}>
+                {closed}/{counts.total} cerrados
+              </Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+            </View>
+            {channelLines(counts).map((line) => (
+              <Text key={line} style={styles.summaryLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+        {permanentSyncFailures > 0 ? (
+          <Banner
+            tone="danger"
+            message={`${plural(permanentSyncFailures, 'cambio no se pudo registrar', 'cambios no se pudieron registrar')} en el servidor. Avisale a tu supervisor.`}
+          />
+        ) : null}
         <Button
           variant="primary"
           size="lg"
@@ -122,42 +157,34 @@ export function DeliveryListView({
         >
           Reportar paquete fallido
         </Button>
-        {onChangeChannelFilter != null && channelCounts != null && channelCounts.flex > 0 ? (
+        {onPressFinishWorkday != null && counts.total > 0 ? (
+          <Button variant="outline" icon="flag-outline" onPress={onPressFinishWorkday}>
+            Finalizar jornada
+          </Button>
+        ) : null}
+        {counts.total > 0 ? (
           <SegmentedControl
-            style={styles.channelFilterRow}
-            options={CHANNEL_FILTERS.map((f) => ({
-              value: f.key,
-              label: `${f.label} (${channelCounts[f.key]})`,
-            }))}
-            value={channelFilter}
-            onChange={onChangeChannelFilter}
+            style={styles.filterRow}
+            accessibilityLabel="Filtrar envíos de la jornada"
+            options={FILTERS.map((f) => ({ value: f, label: `${FILTER_LABEL[f]} (${counts[f]})` }))}
+            value={filter}
+            onChange={onChangeFilter}
           />
         ) : null}
-        {showFlexMap && (
-          <Button
-            variant="outline"
-            icon="map-outline"
-            onPress={onPressFlexMap}
-            style={styles.flexMapBtn}
-          >
-            Mapa flex
-          </Button>
-        )}
       </View>
     ),
     [
       scanDisabled,
-      showFlexMap,
       onPressScan,
       onPressReportFailure,
-      onPressFlexMap,
-      showCount,
-      countLabel,
-      channelFilter,
-      onChangeChannelFilter,
-      channelCounts,
+      onPressFinishWorkday,
+      counts,
+      closed,
+      progressPct,
+      filter,
+      onChangeFilter,
+      permanentSyncFailures,
       styles,
-      theme.colors.danger,
     ],
   );
 
@@ -167,6 +194,7 @@ export function DeliveryListView({
     const badgeColors = shipmentListBadgeColors(theme, badgeKind);
     const statusLabel = formatDriverShipmentStatusLabel(item.status);
     const phase = shipmentDriverPhaseIndex(item.status);
+    const flex = isFlexRow(item);
 
     return (
       <Card
@@ -203,11 +231,9 @@ export function DeliveryListView({
 
             <View style={styles.channelRow}>
               <ChannelBadge channel={item.channel} compact />
-              {!item.channel.driverActionsAllowed ? (
-                <Text style={styles.channelHint} numberOfLines={1}>
-                  Se entrega con la app de Mercado Libre
-                </Text>
-              ) : null}
+              <Text style={styles.channelHint} numberOfLines={1}>
+                {flex ? 'Se confirma en Mercado Libre Flex' : 'Se confirma en esta app'}
+              </Text>
             </View>
 
             <View style={styles.phaseBar} importantForAccessibility="no-hide-descendants">
@@ -227,6 +253,11 @@ export function DeliveryListView({
                 Visita de reparto: {item.delivery_visit_count}
               </Text>
             ) : null}
+            {flex && rowState(item) === 'pending' ? (
+              <View style={styles.flexAction}>
+                <OpenFlexAppButton variant="outline" size="sm" fullWidth={false} />
+              </View>
+            ) : null}
           </View>
         </View>
       </Card>
@@ -242,13 +273,24 @@ export function DeliveryListView({
     </View>
   );
 
+  const emptyTitle =
+    counts.total === 0
+      ? 'Sin envíos asignados'
+      : filter === 'pending'
+        ? 'No te quedan entregas pendientes'
+        : filter === 'delivered'
+          ? 'Todavía no hay entregas hoy'
+          : 'Sin incidencias hoy';
+
   const listEmpty = (
     <View style={styles.emptyState}>
       <View style={styles.emptyIconCircle}>
         <Ionicons name="cube-outline" size={48} color={theme.colors.muted} />
       </View>
-      <Text style={styles.emptyTitle}>Sin envíos asignados</Text>
-      <Text style={styles.emptyHint}>Escaneá un paquete para comenzar</Text>
+      <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+      <Text style={styles.emptyHint}>
+        {counts.total === 0 ? 'Escaneá un paquete para comenzar' : 'Cambiá el filtro para ver el resto de la jornada'}
+      </Text>
     </View>
   );
 
@@ -272,7 +314,7 @@ export function DeliveryListView({
           ItemSeparatorComponent={renderItemSeparator}
           stickySectionHeadersEnabled={false}
           ListHeaderComponent={listChrome}
-          extraData={{ nextShipmentId, loading, refreshing }}
+          extraData={{ nextShipmentId, loading, refreshing, filter }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -291,29 +333,53 @@ export function DeliveryListView({
   );
 }
 
-function buildCountLabel(pending: number, deliveredToday: number, failed: number): string {
-  const parts: string[] = [];
-  if (pending > 0) {
-    parts.push(`${pending} ${pending === 1 ? 'envío por entregar' : 'envíos por entregar'}`);
-  }
-  if (deliveredToday > 0) {
-    parts.push(
-      `${deliveredToday} ${deliveredToday === 1 ? 'entregado hoy' : 'entregados hoy'}`,
-    );
-  }
-  // `failed` no entra en `pending`: son dos cuentas disjuntas (ver
-  // statusDeliveryGroup), así que los tres fragmentos suman la lista completa.
-  if (failed > 0) {
-    parts.push(`${failed} ${failed === 1 ? 'fallida' : 'fallidas'}`);
-  }
-  return parts.join(' · ');
-}
-
 function createStyles(t: AppTheme) {
-  const { colors, spacing, typography, motion, touch } = t;
+  const { colors, spacing, typography } = t;
   return StyleSheet.create({
-    channelFilterRow: {
+    filterRow: {
       marginTop: spacing.xs,
+    },
+    summaryCard: {
+      gap: spacing.xs,
+      padding: spacing.md,
+      borderRadius: spacing.radiusCard,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    summaryTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    summaryTitle: {
+      ...typography.bodyStrong,
+      color: colors.text,
+      flexShrink: 1,
+    },
+    summaryProgressLabel: {
+      ...typography.captionStrong,
+      color: colors.muted,
+    },
+    progressTrack: {
+      height: 6,
+      borderRadius: spacing.radiusPill,
+      backgroundColor: withAlpha(colors.muted, 0.18),
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: 6,
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.brand,
+    },
+    summaryLine: {
+      ...typography.caption,
+      color: colors.muted,
+    },
+    flexAction: {
+      marginTop: spacing.sm,
+      alignSelf: 'flex-start',
     },
     channelRow: {
       flexDirection: 'row',
@@ -334,15 +400,6 @@ function createStyles(t: AppTheme) {
       paddingTop: spacing.sm,
       paddingBottom: spacing.md,
       gap: spacing.sm,
-    },
-    countLabel: {
-      ...typography.captionStrong,
-      color: colors.muted,
-      letterSpacing: 0.4,
-      paddingBottom: spacing.xs,
-    },
-    flexMapBtn: {
-      alignSelf: 'flex-start',
     },
     banner: {
       marginBottom: spacing.sm,

@@ -16,7 +16,10 @@ import { create } from 'zustand';
 export type SyncRejection = {
   eventId: string;
   shipmentId: string;
-  /** `rejected_external_authority` | `rejected_not_owner` | otro motivo futuro. */
+  /**
+   * `rejected_external_authority` | `rejected_not_owner` | `rejected_transition`
+   * (el grafo de estados no admitía el cambio desde el estado real) | otro futuro.
+   */
   reason: string;
   /** Estado real del envío según el servidor, si lo informó. */
   statusCode: string | null;
@@ -43,6 +46,9 @@ export function rejectionMessage(reason: string): string {
   }
   if (reason === 'rejected_not_owner') {
     return 'Este envío ya no está asignado a vos. El cambio no se aplicó.';
+  }
+  if (reason === 'rejected_transition') {
+    return 'El envío ya no estaba en un estado que permita ese cambio. Revisá su estado actual.';
   }
   return 'El servidor no aplicó el cambio.';
 }

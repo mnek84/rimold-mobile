@@ -24,7 +24,15 @@ export type TodayShipmentRow = {
   longitude: number | null;
   /** `valid` | `missing` | `invalid` | `out_of_service_area` | `suspected_swap`; null en backends viejos. */
   coords_assessment: string | null;
+  /**
+   * `pending` | `delivered` | `incident` | `cancelled`, decidido en el backend
+   * (misma regla que el resumen de jornada). null en backends viejos.
+   */
+  workday_state: RowWorkdayState | null;
 };
+
+export type RowWorkdayState = 'pending' | 'delivered' | 'incident' | 'cancelled';
+const ROW_WORKDAY_STATES: ReadonlySet<string> = new Set(['pending', 'delivered', 'incident', 'cancelled']);
 
 function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
   if (raw === null || typeof raw !== 'object') {
@@ -58,6 +66,10 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
     latitude: toFiniteNumber(r.latitude),
     longitude: toFiniteNumber(r.longitude),
     coords_assessment: typeof r.coords_assessment === 'string' ? r.coords_assessment : null,
+    workday_state:
+      typeof r.workday_state === 'string' && ROW_WORKDAY_STATES.has(r.workday_state)
+        ? (r.workday_state as RowWorkdayState)
+        : null,
   };
 }
 

@@ -4,7 +4,6 @@ import type { RouteProp } from '@react-navigation/native';
 export type DeliveryStackParamList = {
   DeliveryList: undefined;
   DeliveryDetail: { shipmentId: string };
-  FlexBatchMap: { batchId: string };
   DeliveryHistory: undefined;
 };
 

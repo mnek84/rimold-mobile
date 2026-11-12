@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   dispatchDriverDay,
-  finishDriverRoute,
   optimizeRoute,
   type DispatchDayResult,
   type DriverDayTotals,
@@ -24,6 +23,7 @@ import { Button } from '@components/ui';
 import type { MainTabNav } from '@navigation/types';
 import { useTheme, type AppTheme } from '@theme';
 
+import { WorkdayFinishSheet } from './components/WorkdayFinishSheet';
 import {
   navigableStopCount,
   openRouteInGoogleMaps,
@@ -104,17 +104,6 @@ function formatStartedAt(iso: string | null): string | null {
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function pendingStopsCountFrom(err: unknown): number | null {
-  if (!axios.isAxiosError(err)) return null;
-  if (err.response?.status !== 422) return null;
-  const errors = err.response.data?.errors;
-  const arr = errors?.pending_stops;
-  if (!Array.isArray(arr) || arr.length === 0) return null;
-  const first = typeof arr[0] === 'string' ? arr[0] : '';
-  const match = first.match(/(\d+)/);
-  return match !== null ? Number(match[1]) : null;
-}
-
 /**
  * El reparto del día en un mapa a pantalla completa.
  *
@@ -148,6 +137,7 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [finishOpen, setFinishOpen] = useState(false);
 
   // El cache visual (polilínea / ETA) pertenece a una ruta concreta. Agregar
   // paradas a la misma ruta no lo invalida: el estado start/finish lo lleva el
@@ -332,50 +322,15 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
     }
   }, [route.id, hasInternalRoute, applyOptimizeResult]);
 
-  const finishNow = useCallback(
-    async (force: boolean) => {
-      if (!hasInternalRoute || route.id === '') {
-        setActionError('No hay ruta propia para finalizar: los envíos Flex se cierran en la app de Mercado Libre.');
-        return;
-      }
-      setBusy('finish');
-      setActionError(null);
-      try {
-        await finishDriverRoute(route.id, { force });
-        await onRefresh();
-        setActionsOpen(false);
-      } catch (e) {
-        const pending = pendingStopsCountFrom(e);
-        if (pending !== null) {
-          // El texto nombra la consecuencia, no sólo la cantidad: finalizar
-          // registra esas paradas como entregas fallidas y manda los paquetes a
-          // la cola de reingreso del depósito. Es la acción menos reversible de
-          // la jornada y antes se confirmaba con un "¿de todos modos?".
-          Alert.alert(
-            'Finalizar ruta',
-            pending === 1
-              ? 'Queda 1 parada sin entregar. Al finalizar se registra como entrega fallida y el paquete vuelve al depósito.'
-              : `Quedan ${pending} paradas sin entregar. Al finalizar se registran como entregas fallidas y esos paquetes vuelven al depósito.`,
-            [
-              { text: 'Cancelar', style: 'cancel' },
-              {
-                text: 'Finalizar y devolver',
-                style: 'destructive',
-                onPress: () => {
-                  void finishNow(true);
-                },
-              },
-            ],
-          );
-          return;
-        }
-        setActionError(messageForShipmentListError(e));
-      } finally {
-        setBusy(null);
-      }
-    },
-    [route.id, hasInternalRoute, onRefresh],
-  );
+  /**
+   * "Finalizar jornada": propios con las reglas de la ruta interna, Flex
+   * explicados (se cierran en Mercado Libre). Antes era "Finalizar ruta" y un
+   * chofer con sólo Flex recibía "No hay ruta propia para finalizar".
+   */
+  const openFinishWorkday = useCallback(() => {
+    setActionsOpen(false);
+    setFinishOpen(true);
+  }, []);
 
   const unlocatableCount = useMemo(
     () => route.stops.filter((s) => !hasCoordinates(s)).length,
@@ -639,7 +594,14 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
         error={actionError}
         onStart={() => void onStartRoute()}
         onReoptimize={() => void onReoptimize()}
-        onFinish={() => void finishNow(false)}
+        onFinish={openFinishWorkday}
+        insetBottom={insets.bottom}
+      />
+
+      <WorkdayFinishSheet
+        visible={finishOpen}
+        onClose={() => setFinishOpen(false)}
+        onFinished={() => void onRefresh()}
         insetBottom={insets.bottom}
       />
     </View>

@@ -47,7 +47,7 @@ export function RouteActionsSheet({
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const stateLine = finished
-    ? 'Ruta finalizada'
+    ? 'Ruta propia finalizada'
     : started
       ? startedAtLabel !== null
         ? `En curso desde las ${startedAtLabel}`
@@ -98,33 +98,38 @@ export function RouteActionsSheet({
             ) : null}
 
             {started && !finished ? (
-              <>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  loading={busy === 'reoptimize'}
-                  disabled={busy !== null}
-                  onPress={onReoptimize}
-                >
-                  Re-optimizar recorrido
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  loading={busy === 'finish'}
-                  disabled={busy !== null}
-                  onPress={onFinish}
-                >
-                  Finalizar ruta
-                </Button>
-              </>
+              <Button
+                variant="primary"
+                size="lg"
+                loading={busy === 'reoptimize'}
+                disabled={busy !== null}
+                onPress={onReoptimize}
+              >
+                Re-optimizar recorrido
+              </Button>
             ) : null}
 
             {finished ? (
               <Text style={styles.finishedHint}>
-                Esta ruta ya está cerrada. Las entregas nuevas van a armar una ruta nueva.
+                Tu ruta propia ya está cerrada. Las entregas nuevas van a armar una ruta nueva.
               </Text>
             ) : null}
+
+            {/*
+              Siempre disponible: la jornada incluye propios y Flex, y un chofer
+              con sólo Flex también tiene que poder cerrarla (antes veía "No hay
+              ruta propia para finalizar"). La hoja explica qué cierra y qué no.
+            */}
+            <Button
+              variant="outline"
+              size="lg"
+              icon="flag-outline"
+              loading={busy === 'finish'}
+              disabled={busy !== null}
+              onPress={onFinish}
+            >
+              Finalizar jornada
+            </Button>
           </View>
         </Pressable>
       </Pressable>

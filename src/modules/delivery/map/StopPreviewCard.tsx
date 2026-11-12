@@ -7,6 +7,7 @@ import type { RouteStopView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
 import { ChannelBadge } from '../components/ChannelBadge';
+import { OpenFlexAppButton } from '../components/OpenFlexAppButton';
 import { formatDriverShipmentStatusLabel } from '../deliveryStatus';
 import {
   addressTypeLabel,
@@ -81,6 +82,11 @@ export function StopPreviewCard({
   const locality = formatStopLocality(stop);
   const typeLabel = addressTypeLabel(stop.addressTypeCode);
   const tracking = stop.tracking;
+  // Envíos Flex todavía abiertos en este punto: su entrega se confirma en
+  // Mercado Libre Flex, así que la acción contextual es abrir esa app.
+  const openFlexCount = (stop.groupShipments ?? []).filter(
+    (g) => g.channel.operator === 'mercadolibre_flex' && !g.isFinal,
+  ).length;
 
   return (
     <View style={[styles.card, { paddingBottom: theme.spacing.lg + insetBottom }]}>
@@ -199,6 +205,17 @@ export function StopPreviewCard({
           Detalle
         </Button>
       </View>
+
+      {openFlexCount > 0 ? (
+        <View style={styles.flexAction}>
+          <Text style={styles.flexHint}>
+            {openFlexCount === 1
+              ? 'Hay 1 envío Flex en este punto: su entrega se confirma en Mercado Libre Flex.'
+              : `Hay ${openFlexCount} envíos Flex en este punto: su entrega se confirma en Mercado Libre Flex.`}
+          </Text>
+          <OpenFlexAppButton variant="outline" />
+        </View>
+      ) : null}
 
       {!canNavigate ? (
         <Text style={styles.noCoords}>
@@ -344,6 +361,14 @@ function createStyles(t: AppTheme) {
     },
     primaryBtn: {
       flex: 1,
+    },
+    flexAction: {
+      marginTop: spacing.md,
+      gap: spacing.xs,
+    },
+    flexHint: {
+      ...typography.caption,
+      color: colors.muted,
     },
     noCoords: {
       ...typography.caption,

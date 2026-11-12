@@ -4,29 +4,26 @@ import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
 import { useSyncRejectionStore } from '@core/sync';
 
-import {
-  groupShipmentsForSections,
-  pickNextShipmentId,
-  statusDeliveryGroup,
-  type DeliveryGroup,
-} from '../deliveryStatus';
+import { pickNextShipmentId, shipmentDriverPhaseIndex } from '../deliveryStatus';
+import { countRows, FILTER_LABEL, rowsForFilter, type WorkdayFilter } from '../workdayView';
 
 export type DeliveryListSection = { title: string; data: TodayShipmentRow[] };
 
 /**
- * Filtro por modalidad. `own` = lo opera nuestra app (propios + Tiendanube);
- * `flex` = lo entrega la app de Mercado Libre. Es un filtro de VISTA: los
- * contadores de arriba siempre muestran el total, para que filtrar nunca haga
- * parecer más chica la jornada.
+ * El listado de la jornada: TODOS los envíos del chofer (propios y Flex) en una
+ * sola vista, filtrada por lo que le falta: Pendientes · Entregados ·
+ * Incidencias. El tipo de envío se ve en cada tarjeta, con su acción.
+ *
+ * Los envíos y su estado de jornada (`workday_state`) vienen del backend con la
+ * misma regla que `GET /driver/workday`, así que los números del listado y del
+ * resumen de cierre coinciden.
  */
-export type ChannelFilter = 'all' | 'own' | 'flex';
-
 export function useDeliveryList() {
   const [shipments, setShipments] = useState<TodayShipmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
+  const [filter, setFilter] = useState<WorkdayFilter>('pending');
 
   const load = useCallback(async (mode: 'initial' | 'refresh' | 'silent') => {
     if (mode === 'initial') {
@@ -72,50 +69,23 @@ export function useDeliveryList() {
     }
   }, [rejectionSeq, load]);
 
-  const channelCounts = useMemo(() => {
-    let flex = 0;
-    for (const r of shipments) {
-      if (r.channel.operator === 'mercadolibre_flex') flex++;
-    }
-    return { all: shipments.length, flex, own: shipments.length - flex };
-  }, [shipments]);
-
-  const visibleShipments = useMemo(() => {
-    if (channelFilter === 'all') return shipments;
-    const wantFlex = channelFilter === 'flex';
-    return shipments.filter((r) => (r.channel.operator === 'mercadolibre_flex') === wantFlex);
-  }, [shipments, channelFilter]);
+  const counts = useMemo(() => countRows(shipments), [shipments]);
 
   const nextShipmentId = useMemo(() => pickNextShipmentId(shipments), [shipments]);
 
-  const flexBatchId = useMemo(() => {
-    for (const r of shipments) {
-      if (typeof r.flex_batch_id === 'string' && r.flex_batch_id !== '') {
-        return r.flex_batch_id;
-      }
+  const sections = useMemo<DeliveryListSection[]>(() => {
+    const rows = rowsForFilter(shipments, filter);
+    if (filter !== 'pending') {
+      return rows.length > 0 ? [{ title: FILTER_LABEL[filter], data: rows }] : [];
     }
-    return null;
-  }, [shipments]);
-
-  const sections = useMemo<DeliveryListSection[]>(
-    () => groupShipmentsForSections(visibleShipments),
-    [visibleShipments],
-  );
-
-  const pendingCount = useMemo(
-    () => shipments.filter((r) => isPendingDeliveryGroup(statusDeliveryGroup(r.status))).length,
-    [shipments],
-  );
-
-  const failedCount = useMemo(
-    () => shipments.filter((r) => statusDeliveryGroup(r.status) === 'fallidos').length,
-    [shipments],
-  );
-
-  const deliveredTodayCount = useMemo(
-    () => countDeliveredToday(shipments),
-    [shipments],
-  );
+    // Pendientes: primero lo que ya salió a reparto, después lo que falta salir.
+    const onTheWay = rows.filter((r) => shipmentDriverPhaseIndex(r.status) >= 1);
+    const notYet = rows.filter((r) => shipmentDriverPhaseIndex(r.status) < 1);
+    return [
+      { title: 'En camino', data: onTheWay },
+      { title: 'Por salir', data: notYet },
+    ].filter((sec) => sec.data.length > 0);
+  }, [shipments, filter]);
 
   const showInitialLoader = loading && shipments.length === 0;
 
@@ -125,52 +95,11 @@ export function useDeliveryList() {
     error,
     sections,
     nextShipmentId,
-    flexBatchId,
-    pendingCount,
-    failedCount,
-    deliveredTodayCount,
+    counts,
     onRefresh,
     reloadSilent,
     showInitialLoader,
-    channelFilter,
-    setChannelFilter,
-    channelCounts,
+    filter,
+    setFilter,
   };
-}
-
-/** Still owed on this pass: everything that is neither closed nor failed. */
-function isPendingDeliveryGroup(group: DeliveryGroup): boolean {
-  return group === 'pendientes' || group === 'en_ruta';
-}
-
-/** Counts shipments delivered/returned today (local timezone), based on `delivered_at`. */
-function countDeliveredToday(rows: TodayShipmentRow[]): number {
-  const today = localDateKey(new Date());
-  let count = 0;
-  for (const row of rows) {
-    if (statusDeliveryGroup(row.status) !== 'entregados') {
-      continue;
-    }
-    if (row.status !== 'delivered' && row.status !== 'returned') {
-      continue;
-    }
-    if (row.delivered_at === null || row.delivered_at === '') {
-      continue;
-    }
-    const parsed = new Date(row.delivered_at);
-    if (Number.isNaN(parsed.getTime())) {
-      continue;
-    }
-    if (localDateKey(parsed) === today) {
-      count++;
-    }
-  }
-  return count;
-}
-
-function localDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }

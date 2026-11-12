@@ -116,7 +116,7 @@ async function postDomainEvent(
     },
     idempotencyHeaders(eventId),
   );
-  reportProjectionRejection(eventId, aggregateId, data);
+  reportProjectionRejection(eventId, aggregateId, type, data);
 }
 
 /**
@@ -126,13 +126,18 @@ async function postDomainEvent(
  * en el momento, no en el próximo refresh. Un backend viejo no manda
  * `projection` y esto es no-op.
  */
-function reportProjectionRejection(eventId: string, aggregateId: string, data: unknown): void {
+function reportProjectionRejection(eventId: string, aggregateId: string, type: string, data: unknown): void {
   if (data === null || typeof data !== 'object') {
     return;
   }
   const o = data as Record<string, unknown>;
   const projection = typeof o.projection === 'string' ? o.projection : null;
   if (projection === null || !projection.startsWith('rejected_')) {
+    return;
+  }
+  // "Cerca" lo dispara el geofence solo, sin que el chofer toque nada: que
+  // llegue tarde a un envío ya entregado es normal y avisarlo sólo confunde.
+  if (projection === 'rejected_transition' && type === EventType.SHIPMENT_NEAR_DESTINATION) {
     return;
   }
   const shipmentId = typeof o.shipment_id === 'string' && o.shipment_id !== '' ? o.shipment_id : aggregateId;

@@ -13,9 +13,12 @@ export {
 export type { KnownEventType } from './eventTypes';
 export { EventType } from './eventTypes';
 export { handleEvent } from './handleEvent';
+export type { UnsyncedShipmentWork } from './syncEngine';
+export { classifySyncFailure, pendingShipmentEvents } from './drainPlan';
 export { SyncBootstrap } from './SyncBootstrap';
 export {
   enqueueEvent,
+  flushAndCountUnsyncedShipmentWork,
   isOnline,
   processQueue,
   processQueueIfOnline,

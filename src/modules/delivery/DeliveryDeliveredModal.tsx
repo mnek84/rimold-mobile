@@ -21,6 +21,8 @@ import { captureEventGeo } from '@core/location/captureEventGeo';
 import { enqueueEvent, EventType } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
+import { OpenFlexAppButton } from './components/OpenFlexAppButton';
+
 const RELATIONSHIP_OPTIONS = [
   { value: 'titular', label: 'Titular' },
   { value: 'vecino', label: 'Vecino' },
@@ -33,11 +35,12 @@ type Props = {
   visible: boolean;
   shipmentId: string;
   /**
-   * Mercado Libre Flex. En Flex, el nombre del receptor, el DNI y la firma los
-   * toma la app de Mercado Libre: volver a pedirlos acá es hacerle al chofer el
-   * mismo trámite dos veces en la puerta del comprador, con el paquete en la
-   * mano y diez entregas más esperando. Lo que nuestra plataforma necesita
-   * registrar es el resultado operativo de la parada, y eso es un botón.
+   * Mercado Libre Flex. Un envío Flex NO se confirma desde esta app: la
+   * entrega se registra en Mercado Libre Flex y su estado llega por webhook.
+   * Antes este modal tenía una variante Flex que encolaba `SHIPMENT_DELIVERED`;
+   * el servidor la rechazaba (`rejected_external_authority`) y el envío seguía
+   * "en camino" mientras el chofer creía haberlo entregado. Ahora, si llega a
+   * abrirse para un Flex, sólo explica dónde se confirma y no encola nada.
    */
   isFlex?: boolean;
   onClose: () => void;
@@ -103,7 +106,7 @@ export function DeliveryDeliveredModal({
       if (sid === '') {
         return;
       }
-      if (submittingRef.current) {
+      if (submittingRef.current || isFlex) {
         return;
       }
       submittingRef.current = true;
@@ -114,13 +117,9 @@ export function DeliveryDeliveredModal({
           const signature = signatureDataUrl.trim();
           const payload = {
             shipmentId: sid,
-            ...(isFlex
-              ? {}
-              : {
-                  dni: dni.trim(),
-                  receiver_name: receiverName.trim(),
-                  relationship,
-                }),
+            dni: dni.trim(),
+            receiver_name: receiverName.trim(),
+            relationship,
             ...(signature !== '' ? { signature } : {}),
             ...(photo != null ? { photo: photo.dataUrl } : {}),
             ...(geo != null ? { geo } : {}),
@@ -168,8 +167,6 @@ export function DeliveryDeliveredModal({
 
   const handleSubmit = useCallback(() => {
     if (isFlex) {
-      // Sin firma que leer: se encola directo.
-      finalizeSubmit('');
       return;
     }
     if (dni.trim() === '') {
@@ -182,7 +179,7 @@ export function DeliveryDeliveredModal({
     }
     submitIntentRef.current = true;
     sigRef.current?.readSignature();
-  }, [dni, finalizeSubmit, isFlex, receiverName]);
+  }, [dni, isFlex, receiverName]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -204,11 +201,16 @@ export function DeliveryDeliveredModal({
             keyboardShouldPersistTaps="handled"
           >
             {isFlex ? (
-              <Banner
-                tone="neutral"
-                title="Envío Flex"
-                message="Mercado Libre ya registra el receptor y la firma. Acá sólo confirmás que la entrega se hizo."
-              />
+              <>
+                <Banner
+                  tone="neutral"
+                  title="Envío Mercado Libre Flex"
+                  message="Esta entrega se confirma en la app Mercado Libre Flex. Cuando Mercado Libre la informe, el estado se actualiza solo en esta app."
+                />
+                <View style={styles.flexAction}>
+                  <OpenFlexAppButton />
+                </View>
+              </>
             ) : (
               <>
               <Text style={styles.sectionTitle}>Datos del receptor</Text>
@@ -251,6 +253,8 @@ export function DeliveryDeliveredModal({
               </>
             )}
 
+            {isFlex ? null : (
+            <>
             <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Foto</Text>
             <View style={styles.photoRow}>
               <Button variant="secondary" icon="camera-outline" onPress={openCamera}>
@@ -278,6 +282,8 @@ export function DeliveryDeliveredModal({
             >
               {submitting ? 'Registrando…' : 'Registrar entrega'}
             </Button>
+            </>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -354,6 +360,9 @@ function createStyles(t: AppTheme) {
     },
     photoPreviewWrap: {
       marginTop: spacing.sm,
+    },
+    flexAction: {
+      marginTop: spacing.lg,
     },
     submitBtn: {
       marginTop: spacing.xl + spacing.sm,

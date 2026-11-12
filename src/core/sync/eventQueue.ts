@@ -5,6 +5,7 @@
  */
 import { getItem, getJSON, setJSON } from '@core/storage';
 
+import { backoffMsFor, type SyncFailureKind } from './drainPlan';
 import { normalizeEventId } from './eventId';
 
 export type QueueEvent = {
@@ -16,12 +17,18 @@ export type QueueEvent = {
   retries: number;
   /** When set, `processQueue` skips this event until this timestamp (ms since epoch). */
   nextRetryAt?: number;
+  /**
+   * El servidor rechazó el pedido como inválido (4xx no transitorio). No se
+   * reenvía más y se le muestra al chofer. Una falla de red NUNCA llega acá.
+   */
+  permanentFailure?: { at: number; status: number | null };
 };
 
+/**
+ * Umbral histórico de reintentos. Ya NO descarta eventos: una falla de red se
+ * reintenta siempre (ver `drainPlan.ts`). Queda para la advertencia de la UI.
+ */
 export const QUEUE_MAX_RETRIES = 5;
-
-const BASE_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 30_000;
 
 const STORAGE_KEY = 'event_queue';
 const QUARANTINE_KEY = 'event_queue_quarantine';
@@ -57,6 +64,9 @@ function isValidQueueEvent(value: unknown): value is QueueEvent {
   ) {
     return false;
   }
+  if (e.permanentFailure !== undefined && (e.permanentFailure === null || typeof e.permanentFailure !== 'object')) {
+    return false;
+  }
   return true;
 }
 
@@ -71,6 +81,15 @@ function coerceQueueEvent(e: QueueEvent): QueueEvent {
       e.nextRetryAt !== undefined && Number.isFinite(e.nextRetryAt)
         ? Math.trunc(e.nextRetryAt as number)
         : undefined,
+    // Se conserva: sin esto, cada lectura de la cola "revivía" una falla permanente.
+    ...(e.permanentFailure != null
+      ? {
+          permanentFailure: {
+            at: Number(e.permanentFailure.at) || 0,
+            status: typeof e.permanentFailure.status === 'number' ? e.permanentFailure.status : null,
+          },
+        }
+      : {}),
   };
 }
 
@@ -192,21 +211,28 @@ export async function incrementRetries(id: string): Promise<void> {
 }
 
 /**
- * After a failed sync: bump retries, schedule exponential backoff, cap at {@link QUEUE_MAX_RETRIES}.
- * No-op if event missing or already at max retries.
+ * Registra una falla de envío.
+ *
+ * - `transient` (red, 5xx, sesión vencida): reintento con backoff acotado, sin
+ *   tope de intentos. Antes, a los 5 intentos el evento quedaba abandonado.
+ * - `permanent` (4xx no transitorio): se marca y no se reenvía.
  */
-export async function recordFailure(id: string): Promise<void> {
+export async function recordFailure(
+  id: string,
+  kind: SyncFailureKind = 'transient',
+  httpStatus: number | null = null,
+): Promise<void> {
   return runExclusive(async () => {
     const queue = await loadQueue();
     let changed = false;
+    const now = Date.now();
     const next = queue.map((e) => {
       if (e.id !== id) return e;
-      if (e.retries >= QUEUE_MAX_RETRIES) return e;
       changed = true;
-      const newRetries = e.retries + 1;
-      const backoffMs = Math.min(MAX_BACKOFF_MS, BASE_BACKOFF_MS * 2 ** e.retries);
-      const nextRetryAt = newRetries >= QUEUE_MAX_RETRIES ? undefined : Date.now() + backoffMs;
-      return { ...e, retries: newRetries, nextRetryAt };
+      if (kind === 'permanent') {
+        return { ...e, retries: e.retries + 1, nextRetryAt: undefined, permanentFailure: { at: now, status: httpStatus } };
+      }
+      return { ...e, retries: e.retries + 1, nextRetryAt: now + backoffMsFor(e.retries) };
     });
     if (!changed) {
       return;

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { getJSON, setJSON } from '@core/storage';
 
+import { isPermanentlyFailed } from './drainPlan';
 import { getQueue } from './eventQueue';
 
 const LAST_SYNC_KEY = 'last_sync_at_ms';
@@ -15,6 +16,8 @@ type SyncStatusState = {
   lastSyncAt: number | null;
   /** Queue events with `retries >= RETRY_WARNING_THRESHOLD`. */
   warningRetryCount: number;
+  /** Eventos que el servidor rechazó como inválidos: no se van a reenviar. */
+  permanentFailureCount: number;
 
   hydrateFromStorage: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -27,6 +30,7 @@ export const useSyncStatusStore = create<SyncStatusState>((set, get) => ({
   isSyncing: false,
   lastSyncAt: null,
   warningRetryCount: 0,
+  permanentFailureCount: 0,
 
   hydrateFromStorage: async () => {
     const t = await getJSON<number>(LAST_SYNC_KEY);
@@ -39,9 +43,11 @@ export const useSyncStatusStore = create<SyncStatusState>((set, get) => ({
   refresh: async () => {
     try {
       const q = await getQueue();
+      const failed = q.filter(isPermanentlyFailed).length;
       set({
-        pendingCount: q.length,
-        warningRetryCount: q.filter((e) => e.retries >= RETRY_WARNING_THRESHOLD).length,
+        pendingCount: q.length - failed,
+        warningRetryCount: q.filter((e) => !isPermanentlyFailed(e) && e.retries >= RETRY_WARNING_THRESHOLD).length,
+        permanentFailureCount: failed,
       });
     } catch {
       /* Keep previous counts; do not assume an empty queue on read failure. */

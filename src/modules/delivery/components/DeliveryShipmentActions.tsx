@@ -91,8 +91,9 @@ export function DeliveryShipmentActions({ effectiveStatusCode, onAction, driverA
       <View accessibilityRole="text">
         <Text style={styles.sectionLabel}>ACCIONES DEL ENVÍO</Text>
         <Text style={styles.readOnlyNote}>
-          Este envío se entrega con la app de Mercado Libre Flex. El estado se actualiza solo cuando Mercado
-          Libre lo informa: desde esta app no se puede marcar en camino, entregado ni fallido.
+          Este envío se confirma en la app Mercado Libre Flex (usá «Abrir Mercado Libre Flex» de arriba). El
+          estado se actualiza solo cuando Mercado Libre lo informa: desde esta app no se puede marcar en
+          camino, entregado ni fallido.
         </Text>
       </View>
     );
