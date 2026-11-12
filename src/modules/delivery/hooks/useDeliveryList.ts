@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { messageForShipmentListError } from '@core/api/userFacingErrors';
 import { fetchShipmentsToday, type TodayShipmentRow } from '@core/api/shipments';
-import { useSyncRejectionStore } from '@core/sync';
+import { useDriverDayStore, useSyncRejectionStore } from '@core/sync';
 
 import { pickNextShipmentId, shipmentDriverPhaseIndex } from '../deliveryStatus';
 import { countRows, FILTER_LABEL, rowsForFilter, type WorkdayFilter } from '../workdayView';
@@ -68,6 +68,14 @@ export function useDeliveryList() {
       void load('silent');
     }
   }, [rejectionSeq, load]);
+
+  // Una entrega sincronizada en segundo plano (o un escaneo) cambia la jornada.
+  const dayChangedSeq = useDriverDayStore((s) => s.seq);
+  useEffect(() => {
+    if (dayChangedSeq > 0) {
+      void load('silent');
+    }
+  }, [dayChangedSeq, load]);
 
   const counts = useMemo(() => countRows(shipments), [shipments]);
 

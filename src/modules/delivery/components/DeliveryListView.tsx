@@ -29,6 +29,7 @@ import {
   type RowCounts,
   type WorkdayFilter,
 } from '../workdayView';
+import { formatLastUpdate } from '../lastUpdate';
 import { ChannelBadge } from './ChannelBadge';
 import { DeliveryListSkeleton } from './DeliveryListSkeleton';
 import { OpenFlexAppButton } from './OpenFlexAppButton';
@@ -248,6 +249,11 @@ export function DeliveryListView({
             <Text style={styles.addressText} numberOfLines={2}>
               {item.address.trim() !== '' ? item.address : 'Sin dirección'}
             </Text>
+            {formatLastUpdate(item.last_status_at) !== null ? (
+              <Text style={styles.visitHint} numberOfLines={1}>
+                {formatLastUpdate(item.last_status_at)}
+              </Text>
+            ) : null}
             {item.delivery_visit_count > 0 ? (
               <Text style={styles.visitHint} numberOfLines={1}>
                 Visita de reparto: {item.delivery_visit_count}

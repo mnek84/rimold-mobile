@@ -1,6 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ import {
   type DriverDayTotals,
   type DriverRouteView,
 } from '@core/api/routes';
-import { useSyncRejectionStore } from '@core/sync';
+import { useDriverDayStore, useSyncRejectionStore } from '@core/sync';
 import { useTheme, type AppTheme } from '@theme';
 
 import { InternalRouteContent } from './InternalRouteContent';
@@ -33,6 +33,9 @@ import { InternalRouteContent } from './InternalRouteContent';
  * The tab renders without a navigation header so the map reaches the top of the
  * screen; every state below therefore pads for the status bar itself.
  */
+/** Mismo ritmo que el listado de Entregas mientras haya Flex abiertos. */
+const FLEX_POLL_MS = 60_000;
+
 export function RouteMapTabScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -54,7 +57,12 @@ export function RouteMapTabScreen() {
     }
     setError(null);
     try {
-      const [routeRes, stopsRes] = await Promise.allSettled([createDriverRoute(), fetchDriverStops()]);
+      // EN ORDEN, no en paralelo: armar la ruta del día puede mover a hoy un
+      // envío que estaba anclado a una ruta vieja (y cerrar su parada vieja).
+      // Leídas en paralelo, las paradas podían llegar ANTES de ese cambio y el
+      // mapa mostraba la foto anterior hasta el próximo foco.
+      const [routeRes] = await Promise.allSettled([createDriverRoute()]);
+      const [stopsRes] = await Promise.allSettled([fetchDriverStops()]);
 
       const internal = routeRes.status === 'fulfilled' ? routeRes.value : null;
       if (routeRes.status === 'rejected' && !isNoShipmentsError(routeRes.reason)) {
@@ -113,10 +121,33 @@ export function RouteMapTabScreen() {
   // Un evento rechazado (Flex) cambia lo que el mapa debería mostrar.
   const rejectionSeq = useSyncRejectionStore((s) => s.seq);
   const lastSeq = useRef(rejectionSeq);
-  if (lastSeq.current !== rejectionSeq) {
+  // Un escaneo o una entrega aplicada también: con el mapa ya abierto no hay
+  // un nuevo foco que lo dispare.
+  const dayChangedSeq = useDriverDayStore((s) => s.seq);
+  const lastDaySeq = useRef(dayChangedSeq);
+  useEffect(() => {
+    if (lastSeq.current === rejectionSeq && lastDaySeq.current === dayChangedSeq) {
+      return;
+    }
     lastSeq.current = rejectionSeq;
+    lastDaySeq.current = dayChangedSeq;
     void sync('refresh');
-  }
+  }, [rejectionSeq, dayChangedSeq, sync]);
+
+  // Los Flex los cierra Mercado Libre por webhook, sin que la app haga nada:
+  // mientras quede alguno abierto y la pestaña esté a la vista, se relee cada
+  // minuto (mismo ritmo que Entregas).
+  const hasOpenFlex = useMemo(
+    () => (route?.stops ?? []).some((s) => (s.groupShipments ?? []).some((g) => g.channel.operator === 'mercadolibre_flex' && !g.isFinal)),
+    [route],
+  );
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasOpenFlex) return undefined;
+      const t = setInterval(() => void sync('refresh'), FLEX_POLL_MS);
+      return () => clearInterval(t);
+    }, [hasOpenFlex, sync]),
+  );
 
   const emptyPadding = { paddingTop: insets.top + theme.spacing.xxl };
 

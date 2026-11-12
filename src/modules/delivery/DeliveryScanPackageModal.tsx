@@ -15,6 +15,7 @@ import { Banner, Button } from '@components/ui';
 import { AssignScanError, assignShipmentByTracking } from '@core/api/shipments';
 import { playScanFeedback } from '@core/feedback/scanFeedback';
 import { showToast } from '@core/feedback/toastStore';
+import { notifyDriverDayChanged } from '@core/sync';
 import {
   type AssignScanPackageInfo,
   resolveTrackingIdForAssign,
@@ -133,6 +134,9 @@ export function DeliveryScanPackageModal({ visible, onClose, onAssigned }: Props
         }
         successKeysRef.current.add(trackingKey);
         didAnyMutationRef.current = true;
+        // Paradas (si ya está montada) relee la jornada: el paquete nuevo es
+        // una parada más, o un Flex más, desde este momento.
+        notifyDriverDayChanged();
         pushItem({
           trackingKey,
           status: result.reassigned ? 'reassigned' : 'assigned',

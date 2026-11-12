@@ -6,6 +6,7 @@ import type { RouteStopView } from '@core/api/routes';
 import { useTheme, type AppTheme } from '@theme';
 
 import { ChannelBadge } from '../components/ChannelBadge';
+import { OpenFlexAppButton } from '../components/OpenFlexAppButton';
 import { stopPositionLabel } from './StopPreviewCard';
 
 import {
@@ -112,6 +113,14 @@ export function StopListSheet({
                 {Array.from(new Map(item.groupShipments.map((g) => [g.channel.label, g.channel])).values()).map((c) => (
                   <ChannelBadge key={c.label} channel={c} compact />
                 ))}
+              </View>
+            ) : null}
+            {/* Tarea Flex abierta: la entrega se confirma en Mercado Libre Flex.
+                Mercado Libre no documenta un enlace a un envío puntual, así que
+                se abre la app (o su ficha en Google Play si no está). */}
+            {(item.groupShipments ?? []).some((g) => g.channel.operator === 'mercadolibre_flex' && !g.isFinal) ? (
+              <View style={styles.rowBadges}>
+                <OpenFlexAppButton variant="outline" size="sm" fullWidth={false} />
               </View>
             ) : null}
           </View>

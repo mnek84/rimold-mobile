@@ -8,6 +8,7 @@ import { useTheme, type AppTheme } from '@theme';
 
 import { ChannelBadge } from '../components/ChannelBadge';
 import { OpenFlexAppButton } from '../components/OpenFlexAppButton';
+import { formatLastUpdate } from '../lastUpdate';
 import { formatDriverShipmentStatusLabel } from '../deliveryStatus';
 import {
   addressTypeLabel,
@@ -152,7 +153,7 @@ export function StopPreviewCard({
         </Text>
       ) : null}
 
-      {stop.groupShipments !== undefined && stop.groupShipments.length > 1 ? (
+      {stop.groupShipments !== undefined && stop.groupShipments.length > 0 ? (
         <View style={styles.groupList} accessibilityLabel={`${stop.groupShipments.length} envíos en este punto`}>
           {stop.groupShipments.map((g) => {
             const flex = g.channel.operator === 'mercadolibre_flex';
@@ -173,6 +174,12 @@ export function StopPreviewCard({
                     {g.addressLine2 !== null ? ` · ${g.addressLine2}` : ''}
                   </Text>
                   <Text style={styles.groupStatus} numberOfLines={1}>{status}</Text>
+                  {/* Tipo de tarea, quién recibe y desde cuándo está así. */}
+                  <Text style={styles.groupStatus} numberOfLines={2}>
+                    {[g.taskKindLabel, g.recipientName != null ? `Recibe: ${g.recipientName}` : null, formatLastUpdate(g.lastStatusAt)]
+                      .filter((part): part is string => part != null && part !== '')
+                      .join(' · ')}
+                  </Text>
                 </View>
                 <ChannelBadge channel={g.channel} compact />
               </Pressable>

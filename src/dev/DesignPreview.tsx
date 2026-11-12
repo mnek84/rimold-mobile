@@ -83,6 +83,8 @@ const OWN: ShipmentChannel = {
   statusAuthority: 'internal',
   driverActionsAllowed: true,
   label: 'Propio',
+  flexAssignment: null,
+  flexAssignmentLabel: null,
 };
 
 const FLEX: ShipmentChannel = {
@@ -94,6 +96,8 @@ const FLEX: ShipmentChannel = {
   statusAuthority: 'external_provider',
   driverActionsAllowed: false,
   label: 'Flex · Comercial',
+  flexAssignment: 'driver_only',
+  flexAssignmentLabel: 'Asignado sin lote',
 };
 
 function stop(partial: Partial<RouteStopView> & Pick<RouteStopView, 'id' | 'sequence'>): RouteStopView {
@@ -150,6 +154,8 @@ function row(partial: Partial<TodayShipmentRow> & Pick<TodayShipmentRow, 'id'>):
     longitude: -58.4,
     coords_assessment: 'valid',
     workday_state: null,
+    task_kind_label: null,
+    last_status_at: null,
     ...partial,
   };
 }

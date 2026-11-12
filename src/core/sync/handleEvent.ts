@@ -3,6 +3,7 @@ import { normalizeShipmentScanToLookupKey } from '@core/scanner/normalizeShipmen
 
 import type { QueueEvent } from './eventQueue';
 import { EventType } from './eventTypes';
+import { notifyDriverDayChanged } from './driverDayStore';
 import { useSyncRejectionStore } from './syncRejectionStore';
 
 async function normalizeCollectionItem(entry: string): Promise<string> {
@@ -117,6 +118,33 @@ async function postDomainEvent(
     idempotencyHeaders(eventId),
   );
   reportProjectionRejection(eventId, aggregateId, type, data);
+  reportProjectionApplied(type, data);
+}
+
+/** Eventos de la pierna de entrega: cambian lo que muestran Entregas y Paradas. */
+const DELIVERY_LEG_EVENTS: ReadonlySet<string> = new Set([
+  EventType.SHIPMENT_IN_TRANSIT,
+  EventType.SHIPMENT_DELIVERED,
+  EventType.SHIPMENT_FAILED,
+]);
+
+/**
+ * Un evento de entrega que el servidor aplicó cambia la jornada: el mapa que
+ * ya estaba abierto tiene que releerla (la parada cerrada, el contador). Un
+ * backend viejo no manda `projection`: se asume aplicado si no dice rechazo.
+ */
+function reportProjectionApplied(type: string, data: unknown): void {
+  if (!DELIVERY_LEG_EVENTS.has(type)) {
+    return;
+  }
+  const projection =
+    data !== null && typeof data === 'object' && typeof (data as Record<string, unknown>).projection === 'string'
+      ? ((data as Record<string, unknown>).projection as string)
+      : null;
+  if (projection !== null && projection.startsWith('rejected_')) {
+    return;
+  }
+  notifyDriverDayChanged();
 }
 
 /**

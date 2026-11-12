@@ -19,12 +19,15 @@ export function ChannelBadge({ channel, compact = false }: { channel: ShipmentCh
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const flex = channel.operator === 'mercadolibre_flex';
+  // "Flex · Residencial · Asignado sin lote": un Flex escaneado sin lote
+  // abierto no es lo mismo que uno de un lote, y el chofer tiene que verlo.
+  const text = channel.flexAssignmentLabel !== null ? `${channel.label} · ${channel.flexAssignmentLabel}` : channel.label;
 
   return (
     <View
       style={[styles.pill, flex ? styles.pillFlex : styles.pillOwn, compact && styles.pillCompact]}
       accessibilityRole="text"
-      accessibilityLabel={`Canal: ${channel.label}`}
+      accessibilityLabel={`Canal: ${text}`}
     >
       <Ionicons
         name={flex ? 'swap-horizontal' : 'cube-outline'}
@@ -35,7 +38,7 @@ export function ChannelBadge({ channel, compact = false }: { channel: ShipmentCh
         style={[styles.label, flex ? styles.labelFlex : styles.labelOwn, compact && styles.labelCompact]}
         maxFontSizeMultiplier={1.3}
       >
-        {channel.label}
+        {text}
       </Text>
     </View>
   );

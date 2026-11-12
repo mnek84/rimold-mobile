@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 
+import { useDriverWorkloadRealtime } from '@modules/delivery/hooks/useDriverWorkloadRealtime';
 import { pickupOrderKeys } from '@modules/pickups/hooks/usePickupOrders';
 import { useAuthStore } from '@store/useAuthStore';
 
@@ -59,6 +60,9 @@ export function useNotificationListener(): void {
   const handleAdminMessage = useAdminMessagesStore((s) => s.handleMessage);
 
   useAdminMessageChannel();
+  // Entregas y Paradas se refrescan cuando el backend cambia la jornada
+  // (webhook de ML, panel, entrega sincronizada) sin esperar al sondeo.
+  useDriverWorkloadRealtime();
 
   useEffect(() => {
     if (!isAuthenticated) return;

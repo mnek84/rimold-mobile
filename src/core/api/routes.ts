@@ -74,9 +74,21 @@ export type GroupShipmentView = {
   /** Último estado que informó Mercado Libre (sólo Flex). */
   externalStatus: string | null;
   addressLine2: string | null;
+  /** `route_stop` | `internal_unrouted` | `flex_task` (backend: DriverWorkload). */
+  taskKind: string | null;
+  /** "Parada de ruta propia", "Entrega Flex (en lote)"… */
+  taskKindLabel: string | null;
+  /** pending | delivered | incident | cancelled */
+  workdayState: string | null;
+  /** Cuándo entró al estado actual (hito real). */
+  lastStatusAt: string | null;
+  /** Quien recibe (sólo el nombre). */
+  recipientName: string | null;
 };
 
 export type DriverDayTotals = {
+  /** Asignaciones abiertas sin actividad reciente: no son trabajo de hoy. */
+  stale: number;
   eligible: number;
   mapped: number;
   unlocatable: number;
@@ -312,6 +324,11 @@ function parseGroupShipment(raw: unknown): GroupShipmentView | null {
     stopStatus: stop !== null ? str(stop.status) : null,
     externalStatus: ext !== null ? str(ext.external_status) : null,
     addressLine2: address !== null ? str(address.line2) : null,
+    taskKind: str(o.task_kind),
+    taskKindLabel: str(o.task_kind_label),
+    workdayState: str(o.workday_state),
+    lastStatusAt: str(o.last_status_at),
+    recipientName: str(o.recipient_name),
   };
 }
 
@@ -418,6 +435,7 @@ export function parseDriverStops(data: unknown): DriverStopsView {
   return {
     serviceDate: str(o.service_date) ?? '',
     totals: {
+      stale: toFiniteNumber(addressOf(t.workload).stale) ?? 0,
       eligible: toFiniteNumber(t.eligible) ?? 0,
       mapped: toFiniteNumber(t.mapped) ?? 0,
       unlocatable: toFiniteNumber(t.unlocatable) ?? 0,

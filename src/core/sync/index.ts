@@ -27,3 +27,4 @@ export {
 } from './syncEngine';
 export { RETRY_WARNING_THRESHOLD, useSyncStatusStore } from './syncStatusStore';
 export { useSyncRejectionStore, rejectionMessage, type SyncRejection } from './syncRejectionStore';
+export { useDriverDayStore, notifyDriverDayChanged } from './driverDayStore';

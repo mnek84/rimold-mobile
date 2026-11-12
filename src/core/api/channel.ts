@@ -21,6 +21,14 @@ export type ShipmentChannel = {
   driverActionsAllowed: boolean;
   /** "Propio", "Flex · Residencial", "Flex · Comercial", "Tiendanube"… */
   label: string;
+  /**
+   * Sólo Flex: `flex_batch` = pertenece a un lote (cierre de jaula);
+   * `driver_only` = asignado al chofer por escaneo, sin lote. Ninguno es una
+   * parada de ruta interna. `null` en propios o con un backend anterior.
+   */
+  flexAssignment: 'flex_batch' | 'driver_only' | null;
+  /** "En lote Flex" / "Asignado sin lote". */
+  flexAssignmentLabel: string | null;
 };
 
 const OPERATORS: ReadonlySet<string> = new Set(['internal', 'mercadolibre_flex', 'tiendanube']);
@@ -57,6 +65,9 @@ export function parseShipmentChannel(raw: unknown, fallbackExecutionType?: unkno
           ? o.driver_actions_allowed
           : statusAuthority === 'internal',
       label: str(o.label, operator === 'mercadolibre_flex' ? 'Flex' : 'Propio'),
+      flexAssignment:
+        o.flex_assignment === 'flex_batch' || o.flex_assignment === 'driver_only' ? o.flex_assignment : null,
+      flexAssignmentLabel: str(o.flex_assignment_label) || null,
     };
   }
 
@@ -71,6 +82,8 @@ export function parseShipmentChannel(raw: unknown, fallbackExecutionType?: unkno
     statusAuthority: isFlex ? 'external_provider' : 'internal',
     driverActionsAllowed: !isFlex,
     label: isFlex ? 'Flex' : 'Propio',
+    flexAssignment: null,
+    flexAssignmentLabel: null,
   };
 }
 

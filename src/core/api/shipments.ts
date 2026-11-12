@@ -29,6 +29,10 @@ export type TodayShipmentRow = {
    * (misma regla que el resumen de jornada). null en backends viejos.
    */
   workday_state: RowWorkdayState | null;
+  /** "Parada de ruta propia", "Entrega Flex (asignada sin lote)"… (backend: DriverWorkload). */
+  task_kind_label: string | null;
+  /** Cuándo entró al estado actual (hito real). */
+  last_status_at: string | null;
 };
 
 export type RowWorkdayState = 'pending' | 'delivered' | 'incident' | 'cancelled';
@@ -70,6 +74,8 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
       typeof r.workday_state === 'string' && ROW_WORKDAY_STATES.has(r.workday_state)
         ? (r.workday_state as RowWorkdayState)
         : null,
+    task_kind_label: typeof r.task_kind_label === 'string' && r.task_kind_label !== '' ? r.task_kind_label : null,
+    last_status_at: typeof r.last_status_at === 'string' && r.last_status_at !== '' ? r.last_status_at : null,
   };
 }
 
