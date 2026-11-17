@@ -4,6 +4,7 @@ import { messageForShipmentDetailError } from '@core/api/userFacingErrors';
 import {
   fetchShipment,
   formatShipmentAddress,
+  formatShipmentDeliveryWindow,
   isFlexShipment,
   shipmentChannelOf,
   type ShipmentDetailJson,
@@ -158,6 +159,8 @@ export function useDeliveryShipmentDetail(shipmentIdRaw: string) {
     /** Último estado que informó Mercado Libre (sólo Flex). */
     externalStatus: shipment?.integration_state?.external_status ?? null,
     addressTypeCode: shipment?.destination?.address_type_code ?? null,
+    /** Ventana horaria de entrega del destino (no la promesa del canal). */
+    deliveryWindow: formatShipmentDeliveryWindow(shipment?.destination),
     effectiveStatusCode,
     timelineSteps,
     trackingLabel,

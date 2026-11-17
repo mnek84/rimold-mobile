@@ -135,7 +135,15 @@ const STOPS: RouteStopView[] = [
     shipmentCount: 2,
     openCount: 2,
   }),
-  stop({ id: '4', sequence: 4, label: 'Bv. Prueba 77', addressTypeCode: 'commercial', hasFlex: true, channel: FLEX }),
+  stop({
+    id: '4',
+    sequence: 4,
+    label: 'Bv. Prueba 77',
+    addressTypeCode: 'commercial',
+    hasFlex: true,
+    channel: FLEX,
+    deliveryWindow: { from: '09:00', to: '13:00', description: null, label: 'De 09:00 a 13:00', source: 'ml_webhook' },
+  }),
   stop({ id: '5', sequence: 5, label: 'Diagonal Ejemplo 910', addressTypeCode: 'store' }),
 ];
 
@@ -156,13 +164,20 @@ function row(partial: Partial<TodayShipmentRow> & Pick<TodayShipmentRow, 'id'>):
     workday_state: null,
     task_kind_label: null,
     last_status_at: null,
+    deliveryWindow: null,
     ...partial,
   };
 }
 
 const ROWS: TodayShipmentRow[] = [
   row({ id: '1', address: 'Calle Muestra 3480, Ciudad Demo' }),
-  row({ id: '2', address: 'Bv. Prueba 77, Ciudad Demo', channel: FLEX, execution_type: 'flex' }),
+  row({
+    id: '2',
+    address: 'Bv. Prueba 77, Ciudad Demo',
+    channel: FLEX,
+    execution_type: 'flex',
+    deliveryWindow: { from: '09:00', to: '13:00', description: null, label: 'De 09:00 a 13:00', source: 'ml_webhook' },
+  }),
   row({ id: '3', address: 'Diagonal Ejemplo 910, Ciudad Demo', status: 'assigned', delivery_visit_count: 0 }),
   row({ id: '4', address: 'Pasaje Ficticio 45, Ciudad Demo', status: 'failed', delivery_visit_count: 2 }),
   row({

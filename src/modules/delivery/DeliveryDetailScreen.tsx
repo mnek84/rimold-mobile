@@ -47,6 +47,7 @@ export function DeliveryDetailScreen({ route, navigation }: Props) {
               statusCode={detail.effectiveStatusCode}
               deliveryVisitCount={detail.deliveryVisitCount}
               addressTypeCode={detail.addressTypeCode}
+              deliveryWindow={detail.deliveryWindow}
             />
             <View style={shell.headerDivider} />
             {detail.channel !== null ? (

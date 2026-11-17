@@ -1,4 +1,6 @@
-import { parseShipmentChannel, type ShipmentChannel } from './channel';
+import { parseDeliveryWindow, parseShipmentChannel, type ShipmentChannel, type StopDeliveryWindow } from './channel';
+
+export type { StopDeliveryWindow } from './channel';
 import { apiClient } from './client';
 
 /**
@@ -40,6 +42,8 @@ export type RouteStopView = {
   addressLine2: string | null;
   reference: string | null;
   addressTypeCode: StopAddressTypeCode;
+  /** Ventana horaria de entrega del destino (no la promesa del canal). */
+  deliveryWindow?: StopDeliveryWindow | null;
   city: string | null;
   state: string | null;
   postalCode: string | null;
@@ -84,6 +88,8 @@ export type GroupShipmentView = {
   lastStatusAt: string | null;
   /** Quien recibe (sólo el nombre). */
   recipientName: string | null;
+  /** Ventana horaria de entrega del destino de este envío puntual. */
+  deliveryWindow: StopDeliveryWindow | null;
 };
 
 export type DriverDayTotals = {
@@ -324,6 +330,7 @@ function parseGroupShipment(raw: unknown): GroupShipmentView | null {
     stopStatus: stop !== null ? str(stop.status) : null,
     externalStatus: ext !== null ? str(ext.external_status) : null,
     addressLine2: address !== null ? str(address.line2) : null,
+    deliveryWindow: address !== null ? parseDeliveryWindow(address.delivery_window) : null,
     taskKind: str(o.task_kind),
     taskKindLabel: str(o.task_kind_label),
     workdayState: str(o.workday_state),
@@ -383,6 +390,7 @@ export function parseDriverStops(data: unknown): DriverStopsView {
       addressLine2: count === 1 ? (primary?.addressLine2 ?? null) : null,
       reference: str(addr.reference),
       addressTypeCode: toAddressTypeCode(g.address_type),
+      deliveryWindow: parseDeliveryWindow(addr.delivery_window),
       city: str(addr.city),
       state: null,
       postalCode: str(addr.postal_code),
@@ -416,6 +424,7 @@ export function parseDriverStops(data: unknown): DriverStopsView {
       addressLine2: str(addr.line2),
       reference: str(addr.reference),
       addressTypeCode: toAddressTypeCode(member.channel.addressType),
+      deliveryWindow: parseDeliveryWindow(addr.delivery_window),
       city: str(addr.city),
       state: null,
       postalCode: str(addr.postal_code),

@@ -90,3 +90,32 @@ export function parseShipmentChannel(raw: unknown, fallbackExecutionType?: unkno
 export function isFlexChannel(channel: ShipmentChannel | null | undefined): boolean {
   return channel?.operator === 'mercadolibre_flex';
 }
+
+/**
+ * Ventana horaria de entrega del destino, ya resuelta por el backend
+ * (ver `DeliveryTimeWindow::toPayload()`). `null` cuando no hay nada que
+ * mostrar — ni horas ni texto —, igual que en el backend. No confundir con
+ * `channel_promised_at` del envío (un instante del canal, no una franja del
+ * domicilio).
+ */
+export type StopDeliveryWindow = {
+  from: string | null;
+  to: string | null;
+  description: string | null;
+  label: string;
+  source: string;
+};
+
+export function parseDeliveryWindow(raw: unknown): StopDeliveryWindow | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const label = typeof o.label === 'string' ? o.label : null;
+  if (label === null) return null;
+  return {
+    from: typeof o.from === 'string' ? o.from : null,
+    to: typeof o.to === 'string' ? o.to : null,
+    description: typeof o.description === 'string' ? o.description : null,
+    label,
+    source: typeof o.source === 'string' ? o.source : 'unknown',
+  };
+}

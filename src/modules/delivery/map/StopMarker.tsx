@@ -47,7 +47,8 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
   // Clave de contenido: cambia sólo cuando el pin realmente se ve distinto.
   const count = stop.shipmentCount ?? 1;
   const hasFlex = stop.hasFlex === true;
-  const contentKey = `${kind}|${stop.addressTypeCode}|${selected ? 's' : 'u'}|${count}|${hasFlex ? 'f' : ''}|${theme.scheme}`;
+  const hasWindow = stop.deliveryWindow != null;
+  const contentKey = `${kind}|${stop.addressTypeCode}|${selected ? 's' : 'u'}|${count}|${hasFlex ? 'f' : ''}|${hasWindow ? 'w' : ''}|${theme.scheme}`;
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
 
   useEffect(() => {
@@ -97,6 +98,12 @@ function StopMarkerComponent({ stop, selected, onPress }: Props) {
             <Text style={styles.flexText} maxFontSizeMultiplier={1.3}>
               F
             </Text>
+          </View>
+        ) : null}
+        {/* Tercera marca, arriba a la izquierda: ventana horaria cargada. */}
+        {hasWindow ? (
+          <View style={styles.windowBadge}>
+            <Ionicons name="time" size={11} color={styles.windowIconColor.color} />
           </View>
         ) : null}
       </View>
@@ -161,6 +168,22 @@ function createStyles(t: AppTheme) {
       ...typography.micro,
       fontWeight: '800',
       color: colors.partnerFlexOn,
+    },
+    windowBadge: {
+      position: 'absolute',
+      top: -6,
+      left: -6,
+      width: 18,
+      height: 18,
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.mapMarkerRing,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.mapInk,
+    },
+    windowIconColor: {
+      color: colors.mapInk,
     },
   });
 }

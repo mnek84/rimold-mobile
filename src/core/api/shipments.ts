@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { isValidLatLng, toFiniteNumber } from '@core/geo/coordinates';
 
-import { parseShipmentChannel, type ShipmentChannel } from './channel';
+import { parseDeliveryWindow, parseShipmentChannel, type ShipmentChannel, type StopDeliveryWindow } from './channel';
 import { apiClient } from './client';
 
 export type TodayShipmentRow = {
@@ -33,6 +33,8 @@ export type TodayShipmentRow = {
   task_kind_label: string | null;
   /** Cuándo entró al estado actual (hito real). */
   last_status_at: string | null;
+  /** Ventana horaria de entrega del destino (no la promesa del canal). */
+  deliveryWindow: StopDeliveryWindow | null;
 };
 
 export type RowWorkdayState = 'pending' | 'delivered' | 'incident' | 'cancelled';
@@ -76,6 +78,7 @@ function normalizeTodayShipmentRow(raw: unknown): TodayShipmentRow | null {
         : null,
     task_kind_label: typeof r.task_kind_label === 'string' && r.task_kind_label !== '' ? r.task_kind_label : null,
     last_status_at: typeof r.last_status_at === 'string' && r.last_status_at !== '' ? r.last_status_at : null,
+    deliveryWindow: parseDeliveryWindow(r.delivery_window),
   };
 }
 
@@ -388,6 +391,15 @@ export type ShipmentDestinationJson = {
    * y nunca se asume residencial.
    */
   address_type_code?: 'residential' | 'commercial' | 'store' | 'unknown' | null;
+  /**
+   * Ventana horaria de entrega (hora de pared, "HH:MM:SS", sin zona). No
+   * confundir con `channel_promised_at` del envío, que es un instante límite
+   * del canal, no una franja del domicilio.
+   */
+  delivery_time_from?: string | null;
+  delivery_time_to?: string | null;
+  /** Texto original del canal, incluso cuando no se pudo estructurar en from/to. */
+  delivery_time_description?: string | null;
 };
 
 export type ShipmentDetailJson = {
@@ -455,6 +467,43 @@ export function formatShipmentAddress(destination: ShipmentDestinationJson | nul
   );
   const parts = [...lines, ...tail];
   return parts.join(' · ');
+}
+
+/** "HH:MM:SS" (lo que manda el backend) → "HH:MM". */
+function toMinutePrecision(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const t = value.trim();
+  return t === '' ? null : t.slice(0, 5);
+}
+
+/**
+ * Ventana horaria de entrega del destino, calculada acá porque
+ * `GET /shipments/{id}` devuelve las columnas crudas de
+ * `shipment_destinations` (como admin y el portal del cliente), no la forma
+ * compacta `{from, to, label, source}` que ya arma `GET /driver/stops`.
+ *
+ * `null` cuando no hay nada que mostrar —ni horas ni texto—, igual que en el
+ * backend ({@see DeliveryTimeWindow::isEmpty}).
+ */
+export function formatShipmentDeliveryWindow(
+  destination: ShipmentDestinationJson | null | undefined,
+): StopDeliveryWindow | null {
+  if (destination == null) return null;
+  const from = toMinutePrecision(destination.delivery_time_from);
+  const to = toMinutePrecision(destination.delivery_time_to);
+  const description = destination.delivery_time_description?.trim() || null;
+  if (from === null && to === null && description === null) return null;
+
+  const label =
+    from !== null && to !== null
+      ? `De ${from} a ${to}`
+      : from === null && to !== null
+        ? `Antes de las ${to}`
+        : from !== null && to === null
+          ? `Desde las ${from}`
+          : (description ?? 'Sin ventana');
+
+  return { from, to, description, label, source: 'unknown' };
 }
 
 export async function fetchShipment(shipmentId: string): Promise<ShipmentDetailJson> {

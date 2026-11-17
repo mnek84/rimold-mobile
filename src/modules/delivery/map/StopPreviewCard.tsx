@@ -133,6 +133,14 @@ export function StopPreviewCard({
               </Text>
             ) : null}
           </View>
+          {stop.deliveryWindow != null ? (
+            <View style={styles.windowRow}>
+              <Ionicons name="time-outline" size={14} color={theme.colors.primary} />
+              <Text style={styles.windowText} numberOfLines={1}>
+                {stop.deliveryWindow.label}
+              </Text>
+            </View>
+          ) : null}
           {stop.reference !== null ? (
             <Text style={styles.reference} numberOfLines={2}>
               {stop.reference}
@@ -355,6 +363,16 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.text,
       marginTop: spacing.xs,
+    },
+    windowRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xxs,
+      marginTop: spacing.xs,
+    },
+    windowText: {
+      ...typography.captionStrong,
+      color: colors.primary,
     },
     tracking: {
       ...typography.caption,

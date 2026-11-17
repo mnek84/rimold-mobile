@@ -102,6 +102,14 @@ export function StopListSheet({
               {stopPositionLabel(item)} · {stopStatusLabel(item)}
               {(item.shipmentCount ?? 1) > 1 ? ` · ${item.shipmentCount} envíos` : ''}
             </Text>
+            {item.deliveryWindow != null ? (
+              <View style={styles.rowWindow}>
+                <Ionicons name="time-outline" size={12} color={theme.colors.primary} />
+                <Text style={styles.rowWindowText} numberOfLines={1}>
+                  {item.deliveryWindow.label}
+                </Text>
+              </View>
+            ) : null}
             {item.unlocatableLabel != null ? (
               <Text style={styles.rowWarning} numberOfLines={2}>
                 {item.unlocatableLabel}
@@ -309,6 +317,17 @@ function createStyles(t: AppTheme) {
       ...typography.caption,
       color: colors.muted,
       marginTop: spacing.xxs,
+    },
+    rowWindow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xxs,
+      marginTop: spacing.xxs,
+    },
+    rowWindowText: {
+      ...typography.caption,
+      color: colors.primary,
+      fontWeight: '600',
     },
     rowGo: {
       width: touch.min,

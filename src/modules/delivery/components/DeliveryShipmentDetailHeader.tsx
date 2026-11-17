@@ -20,6 +20,8 @@ type Props = {
   deliveryVisitCount: number;
   /** Clase de domicilio del destino; `null` cuando el backend no la informa. */
   addressTypeCode?: AddressTypeCode | null;
+  /** Ventana horaria de entrega del destino (no la promesa del canal). */
+  deliveryWindow?: { label: string } | null;
 };
 
 /**
@@ -50,6 +52,7 @@ export function DeliveryShipmentDetailHeader({
   statusCode,
   deliveryVisitCount,
   addressTypeCode = null,
+  deliveryWindow = null,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -92,6 +95,14 @@ export function DeliveryShipmentDetailHeader({
           </Text>
         </View>
       ) : null}
+      {deliveryWindow != null ? (
+        <View style={styles.windowRow}>
+          <Ionicons name="time-outline" size={14} color={theme.colors.primary} />
+          <Text style={styles.windowLabel} numberOfLines={1}>
+            {deliveryWindow.label}
+          </Text>
+        </View>
+      ) : null}
       {deliveryVisitCount > 0 ? (
         <Text style={styles.visitLine} numberOfLines={1}>
           Visita de reparto: {deliveryVisitCount}
@@ -116,6 +127,16 @@ function createStyles(t: AppTheme) {
     addressTypeLabel: {
       ...typography.caption,
       color: colors.muted,
+    },
+    windowRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: spacing.xs,
+    },
+    windowLabel: {
+      ...typography.captionStrong,
+      color: colors.primary,
     },
     topRow: {
       flexDirection: 'row',
