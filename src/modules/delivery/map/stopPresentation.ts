@@ -60,14 +60,20 @@ export function stopStatusLabel(stop: RouteStopView): string {
 }
 
 /**
- * Casa, comercio o tienda — el dato que le cambia la parada al chofer antes de
- * bajarse del auto. `unknown` dibuja un paquete: no se finge que es una casa.
+ * Casa o maletín — el dato que le cambia la parada al chofer antes de bajarse
+ * del auto: ¿toca un timbre o entra a un local?
+ *
+ * Dos iconos, no cuatro: a 34 px sobre el mapa la diferencia entre un maletín y
+ * una persiana de local no se lee, y la decisión que habilita es la misma.
+ * `unknown` cae en casa porque es el caso mayoritario del padrón; la ficha, en
+ * cambio, no pone etiqueta ahí (`addressTypeLabel`), así que el texto nunca
+ * afirma un tipo que el canal no informó.
  */
 const ADDRESS_TYPE_ICON: Record<StopAddressTypeCode, IoniconName> = {
   residential: 'home',
   commercial: 'briefcase',
-  store: 'storefront',
-  unknown: 'cube',
+  store: 'briefcase',
+  unknown: 'home',
 };
 
 const ADDRESS_TYPE_LABEL: Record<StopAddressTypeCode, string> = {

@@ -135,6 +135,8 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
   const [actionError, setActionError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  /** Parada que el chofer eligió a mano como siguiente, por sobre el orden optimizado. */
+  const [pinnedStopId, setPinnedStopId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
@@ -147,6 +149,8 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
     setDurationSec(null);
     setDistanceM(null);
     setActionError(null);
+    // Otra ruta, otra elección: la parada fijada a mano no sobrevive al cambio.
+    setPinnedStopId(null);
   }, [route.id]);
 
   // Aviso cuando entran paradas nuevas con la ruta ya en curso.
@@ -174,8 +178,26 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
 
   const visitedCount = route.stops.length - pendingStops.length;
 
-  /** Primera parada abierta por secuencia: la que el chofer está haciendo ahora. */
-  const nextStop: RouteStopView | null = pendingStops[0] ?? null;
+  /**
+   * La elección del chofer se agota sola.
+   *
+   * Es derivada, no sincronizada: si la parada fijada se cierra o deja de venir
+   * en la ruta, esto devuelve `null` y la píldora vuelve al orden optimizado sin
+   * que nadie tenga que acordarse de limpiar el estado.
+   */
+  const pinnedStop = useMemo(() => {
+    if (pinnedStopId === null) {
+      return null;
+    }
+    const stop = route.stops.find((s) => s.id === pinnedStopId);
+    return stop !== undefined && !isVisitedKind(stopVisualKind(stop)) ? stop : null;
+  }, [route.stops, pinnedStopId]);
+
+  /**
+   * A dónde va ahora: lo que el chofer eligió a mano, y si no eligió nada, la
+   * primera parada abierta por secuencia.
+   */
+  const nextStop: RouteStopView | null = pinnedStop ?? pendingStops[0] ?? null;
 
   const selectedStop = useMemo(
     () => route.stops.find((s) => s.id === selectedStopId) ?? null,
@@ -233,6 +255,14 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
     },
     [route.stops],
   );
+
+  const pinStopAsNext = useCallback((stopId: string) => {
+    setPinnedStopId(stopId);
+    // Cerrar la ficha es parte de la acción, no un efecto secundario: mientras
+    // está abierta tapa a la píldora, que es donde se ve el resultado.
+    setSelectedStopId(null);
+    showToast('Lo pusimos como tu siguiente parada');
+  }, []);
 
   const navigateToStop = useCallback(
     (stopId: string) => {
@@ -532,6 +562,8 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
           onPressNavigate={() => navigateToStop(selectedStop.id)}
           onPressDetail={() => openShipmentDetail(selectedStop.shipmentId)}
           onPressShipment={(id) => openShipmentDetail(id)}
+          onPressSetNext={() => pinStopAsNext(selectedStop.id)}
+          isNext={nextStop?.id === selectedStop.id}
           onClose={() => setSelectedStopId(null)}
           insetBottom={insets.bottom}
         />
@@ -557,14 +589,37 @@ export function InternalRouteContent({ route, onRefresh, hasInternalRoute = true
         <View style={[styles.nextBar, { paddingBottom: theme.spacing.md + insets.bottom }]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Siguiente parada: ${formatStopAddress(nextStop)}`}
+            accessibilityLabel={
+              pinnedStop !== null
+                ? `Siguiente parada elegida por vos: ${formatStopAddress(nextStop)}`
+                : `Siguiente parada: ${formatStopAddress(nextStop)}`
+            }
             onPress={() => focusStop(nextStop.id)}
             style={({ pressed }) => [styles.nextPill, pressed && styles.pressed]}
           >
-            <Ionicons name="navigate" size={22} color={theme.colors.primary} />
+            <Ionicons
+              name={pinnedStop !== null ? 'pin' : 'navigate'}
+              size={22}
+              color={theme.colors.primary}
+            />
             <Text style={styles.nextPillText} numberOfLines={1}>
               Siguiente: {formatStopAddress(nextStop)}
             </Text>
+            {/*
+              Salida de la elección manual. Sin esto, un toque equivocado deja al
+              chofer sin forma de volver al orden que calculó la optimización.
+            */}
+            {pinnedStop !== null ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Volver al orden de la ruta"
+                hitSlop={theme.touch.hitSlop}
+                onPress={() => setPinnedStopId(null)}
+                style={({ pressed }) => [styles.nextPillClear, pressed && styles.pressed]}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.muted} />
+              </Pressable>
+            ) : null}
           </Pressable>
         </View>
       ) : null}
@@ -729,6 +784,16 @@ function createStyles(t: AppTheme) {
       color: colors.text,
       flex: 1,
       minWidth: 0,
+    },
+    nextPillClear: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: spacing.radiusPill,
+      backgroundColor: colors.surfaceMuted,
+      // Compensa el padding de la píldora: el aro queda alineado con el borde.
+      marginRight: -spacing.sm,
     },
     pressed: {
       opacity: motion.pressOpacitySoft,

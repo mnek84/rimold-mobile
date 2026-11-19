@@ -364,6 +364,8 @@ function RouteScene({
           canNavigate
           onPressNavigate={noop}
           onPressDetail={noop}
+          onPressSetNext={noop}
+          isNext={false}
           onClose={noop}
           insetBottom={0}
         />

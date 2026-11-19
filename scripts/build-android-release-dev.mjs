@@ -264,12 +264,63 @@ function buildApk() {
   run('npx', buildArgs);
 }
 
+function latestFinishedBuildId() {
+  const result = spawnSync(
+    'npx',
+    [
+      'eas',
+      'build:list',
+      '--platform',
+      'android',
+      '--build-profile',
+      EAS_PROFILE,
+      '--status',
+      'finished',
+      '--limit',
+      '1',
+      '--non-interactive',
+      '--json',
+    ],
+    { cwd: ROOT, encoding: 'utf8', shell: process.platform === 'win32' },
+  );
+
+  if (result.status !== 0) {
+    fail('Could not list EAS builds to resolve the build id to download.');
+  }
+
+  // --json still lets the CLI upgrade notice through on some versions.
+  const stdout = result.stdout ?? '';
+  const jsonStart = stdout.indexOf('[');
+
+  if (jsonStart === -1) {
+    fail('Unexpected output from eas build:list; could not resolve a build id.');
+  }
+
+  let builds;
+  try {
+    builds = JSON.parse(stdout.slice(jsonStart));
+  } catch {
+    fail('Could not parse the build list returned by EAS.');
+  }
+
+  const buildId = builds?.[0]?.id;
+
+  if (!buildId) {
+    fail(`No finished Android build found for profile ${EAS_PROFILE}.`);
+  }
+
+  return buildId;
+}
+
 function downloadApk() {
+  // build:download requires --build-id (or --fingerprint) in non-interactive
+  // mode, and `eas build` does not expose the id it just created, so resolve
+  // the most recent finished build for this profile.
   run('npx', [
     'eas',
     'build:download',
-    '--platform',
-    'android',
+    '--build-id',
+    latestFinishedBuildId(),
     '--non-interactive',
   ]);
 }

@@ -31,6 +31,10 @@ type Props = {
   insetBottom: number;
   /** Abre el detalle de un envío puntual del grupo (vista unificada). */
   onPressShipment?: (shipmentId: string) => void;
+  /** Fija esta parada como la siguiente, por sobre el orden optimizado. */
+  onPressSetNext: () => void;
+  /** Ya es la siguiente parada: no hay nada que fijar. */
+  isNext: boolean;
 };
 
 /**
@@ -60,7 +64,7 @@ function statusColor(t: AppTheme, kind: StopVisualKind): string {
 }
 
 /**
- * La ficha que sube al tocar una chincheta: dirección, estado y "Ir".
+ * La ficha que sube al tocar una chincheta: dirección, estado y "Ir aquí".
  *
  * Es la pantalla completa de la parada reducida a lo que se decide con el auto
  * en marcha. Todo lo demás (timeline, acciones de entrega, fotos) queda a un
@@ -74,6 +78,8 @@ export function StopPreviewCard({
   onClose,
   insetBottom,
   onPressShipment,
+  onPressSetNext,
+  isNext,
 }: Props) {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -196,26 +202,50 @@ export function StopPreviewCard({
         </View>
       ) : null}
 
+      {/*
+        Dos filas, no tres botones en una: a 360 dp los tres no entran y
+        `Button` trunca a una línea, así que "Es tu siguiente" quedaba en "Es…".
+        Que la acción principal ocupe el ancho también dice cuál es.
+      */}
       <View style={styles.actions}>
+        {/*
+          "Ir aquí" no abre el navegador: cambia a dónde va el chofer. La
+          píldora de abajo pasa a apuntar a esta parada.
+        */}
         <Button
           variant="primary"
           size="lg"
+          icon={isNext ? 'checkmark' : 'flag'}
+          accessibilityLabel={
+            isNext ? 'Ya es tu siguiente parada' : 'Fijar esta parada como la siguiente'
+          }
+          disabled={isNext}
+          onPress={onPressSetNext}
+        >
+          {isNext ? 'Es tu siguiente' : 'Ir aquí'}
+        </Button>
+      </View>
+
+      <View style={styles.actionsSecondary}>
+        <Button
+          variant="secondary"
+          size="lg"
           icon="navigate"
-          accessibilityLabel="Ir con Google Maps"
+          accessibilityLabel="Abrir en Google Maps"
           disabled={!canNavigate}
           onPress={onPressNavigate}
-          style={styles.primaryBtn}
+          style={styles.secondaryBtn}
         >
-          Ir
+          Navegar
         </Button>
 
         <Button
           variant="secondary"
           size="lg"
           icon="document-text-outline"
-          fullWidth={false}
           accessibilityLabel="Abrir detalle del envío"
           onPress={onPressDetail}
+          style={styles.secondaryBtn}
         >
           Detalle
         </Button>
@@ -380,12 +410,18 @@ function createStyles(t: AppTheme) {
       marginTop: spacing.xs,
     },
     actions: {
-      flexDirection: 'row',
-      gap: spacing.sm,
       marginTop: spacing.lg,
     },
-    primaryBtn: {
+    actionsSecondary: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    secondaryBtn: {
       flex: 1,
+      // `Button` trunca a una línea: sin esto el más largo se lleva el ancho y
+      // deja al otro con la etiqueta cortada.
+      minWidth: 0,
     },
     flexAction: {
       marginTop: spacing.md,
